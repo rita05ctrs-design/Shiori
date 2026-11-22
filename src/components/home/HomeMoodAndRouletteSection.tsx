@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
+import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import { MOOD_PRESETS } from "@/lib/discover-taxonomy";
 import {
   cn,
@@ -162,9 +163,11 @@ export function HomeMoodAndRouletteSection({
               </div>
 
               {picked.description && (
-                <p className="text-xs text-[#A6AAB8] line-clamp-2 leading-relaxed">
-                  {stripHtml(picked.description)}
-                </p>
+                <TranslatedSynopsis
+                  mediaId={picked.id}
+                  description={picked.description}
+                  variant="compact"
+                />
               )}
 
               <div className="flex flex-wrap items-center gap-2 pt-1">

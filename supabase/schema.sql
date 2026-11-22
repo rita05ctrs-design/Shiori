@@ -84,6 +84,7 @@ alter table public.profiles add column if not exists is_activity_public boolean 
 alter table public.profiles add column if not exists favorite_staff jsonb not null default '[]'::jsonb;
 alter table public.profiles add column if not exists favorite_media jsonb not null default '[]'::jsonb;
 alter table public.profiles add column if not exists stats_summary jsonb not null default '{}'::jsonb;
+alter table public.profiles add column if not exists preferred_language text default 'fr';
 alter table public.profiles add column if not exists unlocked_badges jsonb not null default '[]'::jsonb;
 alter table public.profiles add column if not exists pinned_badges text[] not null default '{}';
 
@@ -524,6 +525,37 @@ exception when duplicate_object then null;
 end $$;
 
 -- ----------------------------------------------------------------------------
+-- 5F. TRADUCTIONS DE SYNOPSIS EN CACHE (media_translations)
+-- Cache partagé pour la traduction automatique à la volée des animés & mangas.
+-- ----------------------------------------------------------------------------
+create table if not exists public.media_translations (
+  media_id integer not null,
+  lang text not null check (lang in ('fr', 'es', 'it')),
+  translated_description text not null check (char_length(translated_description) between 1 and 20000),
+  updated_at timestamptz not null default now(),
+  primary key (media_id, lang)
+);
+
+create index if not exists idx_media_translations_lang on public.media_translations(lang, updated_at desc);
+
+alter table public.media_translations enable row level security;
+
+drop policy if exists "Anyone can read cached media translations" on public.media_translations;
+create policy "Anyone can read cached media translations"
+  on public.media_translations for select using (true);
+
+drop policy if exists "Anyone can cache media translations" on public.media_translations;
+create policy "Anyone can cache media translations"
+  on public.media_translations for insert
+  with check (lang in ('fr', 'es', 'it') and char_length(translated_description) between 1 and 20000);
+
+drop policy if exists "Anyone can refresh cached media translations" on public.media_translations;
+create policy "Anyone can refresh cached media translations"
+  on public.media_translations for update
+  using (lang in ('fr', 'es', 'it'))
+  with check (lang in ('fr', 'es', 'it') and char_length(translated_description) between 1 and 20000);
+
+-- ----------------------------------------------------------------------------
 -- 6. TRIGGERS (auto-creation du profil + updated_at)
 -- ----------------------------------------------------------------------------
 create or replace function public.handle_updated_at()
@@ -552,6 +584,11 @@ create trigger set_anilist_stats_updated_at
 drop trigger if exists set_friendships_updated_at on public.friendships;
 create trigger set_friendships_updated_at
   before update on public.friendships
+  for each row execute function public.handle_updated_at();
+
+drop trigger if exists set_media_translations_updated_at on public.media_translations;
+create trigger set_media_translations_updated_at
+  before update on public.media_translations
   for each row execute function public.handle_updated_at();
 
 create or replace function public.handle_new_user()

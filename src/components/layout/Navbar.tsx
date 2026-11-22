@@ -29,6 +29,7 @@ import { useShiori } from "@/context/ShioriContext";
 import { AMBIANCE_OPTIONS } from "@/components/settings/AmbianceSettingsCard";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
+import { LanguageQuickPopover } from "@/components/layout/LanguageQuickPopover";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { cn } from "@/lib/utils";
 
@@ -90,7 +91,7 @@ export function Navbar() {
             : "bg-gradient-to-b from-obsidian/90 via-obsidian/45 to-transparent border-b border-transparent"
         )}
       >
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-[1400px] mx-auto px-3 sm:px-5 lg:px-6 h-16 flex items-center justify-between gap-2 lg:gap-3">
           {/* Brand Logo: Shiori 栞 */}
           <Link href="/" className="flex items-center gap-3 group shrink-0">
             <motion.div
@@ -166,7 +167,7 @@ export function Navbar() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "relative px-2 xl:px-3 py-1.5 rounded-full text-[12px] lg:text-[12.5px] font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap",
+                    "relative px-2 xl:px-2.5 py-1.5 rounded-full text-[12px] font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap",
                     isActive
                       ? "text-white"
                       : "text-[#9A9EAE] hover:text-[#F4F3EE]"
@@ -198,7 +199,7 @@ export function Navbar() {
           </nav>
 
           {/* Right Controls */}
-          <div className="flex items-center gap-1.5 lg:gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Search Command Trigger */}
             <button
               type="button"
@@ -208,13 +209,16 @@ export function Navbar() {
             >
               <Search className="w-3.5 h-3.5 text-[#9A9EAE] group-hover:text-white transition-colors" />
               <span className="hidden 2xl:inline">Rechercher...</span>
-              <kbd className="hidden xl:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white/[0.07] text-[10px] font-mono text-[#A6AAB8] border border-white/[0.08]">
+              <kbd className="hidden 2xl:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white/[0.07] text-[10px] font-mono text-[#A6AAB8] border border-white/[0.08]">
                 ⌘K
               </kbd>
             </button>
 
             {/* Quick Theme & Color Customizer Popover */}
             <ThemeQuickPopover />
+
+            {/* Synopsis Content Language Selector (FR / EN / ES / IT) */}
+            <LanguageQuickPopover />
 
             {/* Private Direct Messages Indicator */}
             <Link
@@ -244,7 +248,7 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={() => setProfileMenuOpen((v) => !v)}
-                className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.18] transition-all cursor-pointer"
+                className="flex items-center gap-2 h-9 px-1.5 xl:pr-2.5 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.18] transition-all cursor-pointer"
               >
                 <UserAvatar
                   avatarUrl={profile.avatarUrl}
@@ -254,7 +258,7 @@ export function Navbar() {
                   size="sm"
                   className="w-6.5 h-6.5"
                 />
-                <span className="hidden lg:inline text-[13px] font-medium text-[#ECEBE6] max-w-[82px] truncate">
+                <span className="hidden xl:inline text-[13px] font-medium text-[#ECEBE6] max-w-[78px] truncate">
                   {profile.displayName}
                 </span>
               </button>

@@ -4,6 +4,7 @@ import type {
   AniListUserStatsSnapshot,
   BadgeRarity,
   CommunityActivityKind,
+  ContentLanguage,
   FavoriteVoiceActor,
   LibraryEntry,
   MediaType,
@@ -11,6 +12,7 @@ import type {
   PublicProfileStatsSummary,
   UnlockedBadgeRecord,
 } from "@/types/media";
+import { normalizeContentLanguage } from "@/lib/i18n";
 
 function entryToRow(userId: string, entry: LibraryEntry) {
   const safeScore =
@@ -49,6 +51,7 @@ export interface CloudProfileSnapshot {
   bio: string;
   accentColor: string;
   isActivityPublic: boolean;
+  preferredLanguage: ContentLanguage;
   favoriteStaff: FavoriteVoiceActor[];
   unlockedBadges: UnlockedBadgeRecord[];
   pinnedBadges: string[];
@@ -77,7 +80,7 @@ export async function ensureSupabaseProfile(
       .slice(0, 24) || `user_${user.id.slice(0, 6)}`;
 
   const selectCols =
-    "id, username, display_name, avatar_url, bio, accent_color, is_activity_public, favorite_staff, unlocked_badges, pinned_badges, created_at";
+    "id, username, display_name, avatar_url, bio, accent_color, is_activity_public, preferred_language, favorite_staff, unlocked_badges, pinned_badges, created_at";
 
   const { data: existing } = await supabase
     .from("profiles")
@@ -94,6 +97,7 @@ export async function ensureSupabaseProfile(
     bio: String(row.bio ?? ""),
     accentColor: String(row.accent_color || "#E5484D"),
     isActivityPublic: row.is_activity_public !== false,
+    preferredLanguage: normalizeContentLanguage(row.preferred_language),
     favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
     unlockedBadges: Array.isArray(row.unlocked_badges) ? row.unlocked_badges : [],
     pinnedBadges: Array.isArray(row.pinned_badges) ? row.pinned_badges.slice(0, 3) : [],
@@ -151,6 +155,7 @@ export async function syncPublicProfileToCloud(
     bio: string;
     accentColor: string;
     isActivityPublic: boolean;
+    preferredLanguage?: ContentLanguage;
     favoriteStaff: FavoriteVoiceActor[];
     favoriteMedia: PublicProfileMediaSummary[];
     stats: PublicProfileStatsSummary;
@@ -176,6 +181,7 @@ export async function syncPublicProfileToCloud(
     bio: payload.bio ?? "",
     accent_color: payload.accentColor || "#E5484D",
     is_activity_public: payload.isActivityPublic,
+    preferred_language: payload.preferredLanguage ?? "fr",
     favorite_staff: payload.favoriteStaff.slice(0, 30),
     favorite_media: payload.favoriteMedia.slice(0, 40),
     stats_summary: payload.stats,

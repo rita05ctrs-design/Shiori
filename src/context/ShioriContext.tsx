@@ -47,6 +47,11 @@ import {
   THEME_PRESETS,
   THEME_STORAGE_KEY,
 } from "@/lib/theme";
+import {
+  CONTENT_LANGUAGE_MAP,
+  DEFAULT_CONTENT_LANGUAGE,
+  normalizeContentLanguage,
+} from "@/lib/i18n";
 import type {
   ActivityEvent,
   AmbianceSettings,
@@ -56,6 +61,7 @@ import type {
   AniListUserStatsSnapshot,
   BadgeRarity,
   CommunityActivityKind,
+  ContentLanguage,
   EvaluatedBadge,
   FavoriteVoiceActor,
   FriendRelationState,
@@ -81,6 +87,7 @@ const STORAGE_KEYS = {
   anilistStats: "shiori_anilist_stats_v1",
   ambiance: "shiori_ambiance_v1",
   theme: THEME_STORAGE_KEY,
+  contentLanguage: "shiori_content_lang_v1",
   anilistAutoSync: "shiori_anilist_autosync_v1",
   favoriteStaff: "shiori_favorite_staff_v1",
   favoriteOrder: "shiori_favorite_order_v1",
@@ -225,6 +232,10 @@ interface ShioriContextValue {
   applyThemePreset: (presetId: string, options?: { syncParticles?: boolean }) => void;
   resetTheme: () => void;
 
+  // Synopsis Content Language (FR Auto default, EN Original, ES Auto, IT Auto)
+  contentLanguage: ContentLanguage;
+  setContentLanguage: (lang: ContentLanguage, options?: { silent?: boolean }) => void;
+
   // Modals & UI Overlays
   commandOpen: boolean;
   setCommandOpen: (open: boolean) => void;
@@ -287,6 +298,9 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   const backfilledActivityKeyRef = useRef<string | null>(null);
   const [ambiance, setAmbiance] = useState<AmbianceSettings>(DEFAULT_AMBIANCE);
   const [theme, setTheme] = useState<ThemeSettings>(DEFAULT_THEME);
+  const [contentLanguage, setContentLanguageState] = useState<ContentLanguage>(
+    DEFAULT_CONTENT_LANGUAGE
+  );
 
   // Overlays
   const [commandOpen, setCommandOpen] = useState(false);
@@ -327,7 +341,15 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       }
       const savedProfile = localStorage.getItem(STORAGE_KEYS.profile);
       if (savedProfile) {
-        setProfile((prev) => ({ ...prev, ...JSON.parse(savedProfile) }));
+        const parsedProfile = JSON.parse(savedProfile);
+        setProfile((prev) => ({ ...prev, ...parsedProfile }));
+        if (parsedProfile?.preferredLanguage) {
+          setContentLanguageState(normalizeContentLanguage(parsedProfile.preferredLanguage));
+        }
+      }
+      const savedLang = localStorage.getItem(STORAGE_KEYS.contentLanguage);
+      if (savedLang) {
+        setContentLanguageState(normalizeContentLanguage(savedLang));
       }
       const savedNotifs = localStorage.getItem(STORAGE_KEYS.notifications);
       if (savedNotifs) {
@@ -440,10 +462,21 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             cloudProf?.isActivityPublic !== undefined
               ? cloudProf.isActivityPublic
               : prev.isActivityPublic ?? true,
+          preferredLanguage:
+            cloudProf?.preferredLanguage ?? prev.preferredLanguage ?? DEFAULT_CONTENT_LANGUAGE,
           joinedAt: cloudProf?.joinedAt || prev.joinedAt,
           avatarInitials: finalDisplayName.slice(0, 2).toUpperCase(),
           mode: "supabase",
         }));
+
+        if (cloudProf?.preferredLanguage) {
+          setContentLanguageState(cloudProf.preferredLanguage);
+          try {
+            localStorage.setItem(STORAGE_KEYS.contentLanguage, cloudProf.preferredLanguage);
+          } catch {
+            // ignore
+          }
+        }
 
         if (cloudProf?.favoriteStaff && cloudProf.favoriteStaff.length > 0) {
           setFavoriteStaff(cloudProf.favoriteStaff);
@@ -542,6 +575,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             accentColor: profile.accentColor,
             avatarUrl: profile.avatarUrl ?? null,
             isActivityPublic: profile.isActivityPublic ?? true,
+            preferredLanguage: contentLanguage,
             notificationPrefs: profile.notificationPrefs,
           },
           favoriteStaff,
@@ -721,6 +755,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           bio: profile.bio,
           accentColor: profile.accentColor,
           isActivityPublic: profile.isActivityPublic ?? true,
+          preferredLanguage: contentLanguage,
           favoriteStaff,
           favoriteMedia: favoriteMediaPayload,
           stats: statsPayload,
@@ -1022,6 +1057,41 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     applyThemeToDocument(DEFAULT_THEME);
     setProfile((prev) => ({ ...prev, accentColor: DEFAULT_THEME.accentColor }));
   }, []);
+
+  const setContentLanguage = useCallback(
+    (lang: ContentLanguage, options?: { silent?: boolean }) => {
+      const normalized = normalizeContentLanguage(lang);
+      setContentLanguageState(normalized);
+      setProfile((prev) =>
+        prev.preferredLanguage === normalized ? prev : { ...prev, preferredLanguage: normalized }
+      );
+      try {
+        localStorage.setItem(STORAGE_KEYS.contentLanguage, normalized);
+      } catch {
+        // ignore
+      }
+      if (profile.mode === "supabase") {
+        const supabase = getSupabaseBrowserClient();
+        if (supabase) {
+          void supabase
+            .from("profiles")
+            .update({ preferred_language: normalized })
+            .eq("id", profile.id);
+        }
+      }
+      if (!options?.silent) {
+        const meta = CONTENT_LANGUAGE_MAP.get(normalized);
+        toast({
+          title: `Langue des synopsis : ${meta?.label ?? normalized.toUpperCase()}`,
+          description: meta?.isAutoTranslated
+            ? "Les synopsis sont traduits automatiquement à la volée."
+            : "Affichage du texte anglais original d'AniList.",
+          variant: "info",
+        });
+      }
+    },
+    [profile.id, profile.mode, toast]
+  );
 
   // AniList OAuth status & bidirectional write-back helpers
   const setAniListAutoSync = useCallback((enabled: boolean) => {
@@ -2613,6 +2683,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     updateTheme,
     applyThemePreset,
     resetTheme,
+    contentLanguage,
+    setContentLanguage,
     commandOpen,
     setCommandOpen,
     authModalOpen,

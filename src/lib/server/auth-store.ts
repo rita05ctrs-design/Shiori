@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import type {
   ActivityEvent,
+  ContentLanguage,
   FavoriteVoiceActor,
   LibraryEntry,
   NotificationPrefs,
@@ -28,6 +29,7 @@ export interface StoredAccount {
   avatarUrl?: string | null;
   accentColor: string;
   isActivityPublic?: boolean;
+  preferredLanguage?: ContentLanguage;
   favoriteStaff?: FavoriteVoiceActor[];
   favoriteOrder?: number[];
   unlockedBadges?: UnlockedBadgeRecord[];
@@ -166,6 +168,7 @@ export function toPublicProfile(account: StoredAccount): UserProfile {
     avatarUrl: account.avatarUrl ?? null,
     accentColor: account.accentColor,
     isActivityPublic: account.isActivityPublic ?? true,
+    preferredLanguage: account.preferredLanguage ?? "fr",
     mode: "account",
     notificationPrefs: account.notificationPrefs,
     joinedAt: account.joinedAt,

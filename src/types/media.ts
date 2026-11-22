@@ -195,6 +195,8 @@ export interface FavoriteVoiceActor {
   notableRoles?: { name: string; mediaTitle?: string | null }[];
 }
 
+export type ContentLanguage = "fr" | "en" | "es" | "it";
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -205,6 +207,7 @@ export interface UserProfile {
   avatarUrl?: string | null;
   accentColor: string;
   isActivityPublic?: boolean;
+  preferredLanguage?: ContentLanguage;
   mode: "local" | "account" | "supabase";
   notificationPrefs: NotificationPrefs;
   joinedAt: string;

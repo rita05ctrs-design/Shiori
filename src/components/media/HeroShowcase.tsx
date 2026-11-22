@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import {
   cn,
@@ -77,7 +78,6 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
 
   const entry = getEntry(active.id);
   const title = getDisplayTitle(active);
-  const synopsis = stripHtml(active.description);
 
   const prevSlide = () => setIndex((i) => (i - 1 + slides.length) % slides.length);
   const nextSlide = () => setIndex((i) => (i + 1) % slides.length);
@@ -286,16 +286,20 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                   ))}
                 </motion.div>
 
-                {/* Synopsis */}
-                <motion.p
+                {/* Synopsis (auto-translated in chosen content language) */}
+                <motion.div
                   variants={{
                     hidden: { opacity: 0, y: 14 },
                     visible: { opacity: 1, y: 0, transition: { duration: 0.48, ease: CINEMA_EASE } },
                   }}
-                  className="mt-4 text-sm sm:text-[15px] text-[#B9BDCC] leading-relaxed max-w-2xl line-clamp-3"
+                  className="mt-4"
                 >
-                  {synopsis}
-                </motion.p>
+                  <TranslatedSynopsis
+                    mediaId={active.id}
+                    description={active.description}
+                    variant="hero"
+                  />
+                </motion.div>
 
                 {/* Actions */}
                 <motion.div

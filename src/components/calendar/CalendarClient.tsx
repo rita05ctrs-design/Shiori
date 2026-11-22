@@ -26,6 +26,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import {
   cn,
   formatCompactNumber,
@@ -760,7 +761,6 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               const title = getDisplayTitle(media);
               const rel = formatReleaseDate(media);
               const entry = getEntry(media.id);
-              const synopsis = stripHtml(media.description);
 
               return (
                 <article
@@ -862,10 +862,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                           </div>
                         )}
 
-                        {/* Readable MAL-style Synopsis */}
-                        <p className="text-xs text-[#9FA4B8] leading-relaxed line-clamp-4">
-                          {synopsis}
-                        </p>
+                        {/* Readable MAL-style Auto-Translated Synopsis (lazy on viewport) */}
+                        <TranslatedSynopsis
+                          mediaId={media.id}
+                          description={media.description}
+                          variant="compact"
+                          lazy
+                        />
                       </div>
 
                       {/* Card Footer Actions */}

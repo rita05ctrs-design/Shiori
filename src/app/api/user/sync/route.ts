@@ -56,6 +56,14 @@ export async function PUT(request: NextRequest) {
       if (typeof body.profile.isActivityPublic === "boolean") {
         current.isActivityPublic = body.profile.isActivityPublic;
       }
+      if (
+        body.profile.preferredLanguage === "fr" ||
+        body.profile.preferredLanguage === "en" ||
+        body.profile.preferredLanguage === "es" ||
+        body.profile.preferredLanguage === "it"
+      ) {
+        current.preferredLanguage = body.profile.preferredLanguage;
+      }
       if (Array.isArray(body.favoriteStaff)) {
         current.favoriteStaff = body.favoriteStaff;
       }

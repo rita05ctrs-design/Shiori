@@ -17,6 +17,7 @@ import {
 import { useShiori } from "@/context/ShioriContext";
 import { MediaCard } from "@/components/media/MediaCard";
 import { LibraryTrackerCard } from "@/components/media/LibraryTrackerCard";
+import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import {
   CINEMA_EASE,
   ParallaxBanner,
@@ -57,8 +58,6 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
 
   const entry = getEntry(media.id);
   const title = getDisplayTitle(media);
-  const synopsis = stripHtml(media.description);
-  const [expandedSynopsis, setExpandedSynopsis] = useState(false);
 
   const totalUnits = media.type === "MANGA" ? media.chapters : media.episodes;
   const unitLabel = media.type === "MANGA" ? "Chapitre" : "Épisode";
@@ -289,28 +288,14 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
               </div>
             </div>
 
-            {/* Synopsis */}
+            {/* Synopsis (with On-the-Fly Auto Translation & 1-Click Original Toggle) */}
             <section className="rounded-2xl card-surface p-6">
-              <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent mb-3">
-                Synopsis
-              </h2>
-              <p
-                className={cn(
-                  "text-sm sm:text-[15px] text-[#C6CAD8] leading-[1.75] whitespace-pre-line",
-                  !expandedSynopsis && "line-clamp-5"
-                )}
-              >
-                {synopsis}
-              </p>
-              {synopsis.length > 360 && (
-                <button
-                  type="button"
-                  onClick={() => setExpandedSynopsis((v) => !v)}
-                  className="mt-3 text-xs font-semibold text-accent-hover hover:text-[#FF858A] cursor-pointer"
-                >
-                  {expandedSynopsis ? "Réduire" : "Lire le synopsis complet"}
-                </button>
-              )}
+              <TranslatedSynopsis
+                mediaId={media.id}
+                description={media.description}
+                variant="detail"
+                expandable
+              />
 
               {/* Personal Note Display if present */}
               {entry?.notes && (

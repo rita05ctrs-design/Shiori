@@ -23,8 +23,10 @@ import {
   Lock,
   ExternalLink,
   Loader2,
+  Languages,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { CONTENT_LANGUAGES } from "@/lib/i18n";
 import { AniListImportCard } from "@/components/settings/AniListImportCard";
 import { AmbianceSettingsCard } from "@/components/settings/AmbianceSettingsCard";
 import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
@@ -61,6 +63,8 @@ export default function SettingsPage() {
     pinnedBadges,
     togglePinBadge,
     previewBadgeUnlock,
+    contentLanguage,
+    setContentLanguage,
     toast,
   } = useShiori();
 
@@ -186,6 +190,66 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=votre-cle-anon-publique`;
 
       {/* App-Wide Color, Surface & Visual Personalization Studio */}
       <ThemeSettingsCard />
+
+      {/* Content Language Selector for Automatic Synopsis Translation */}
+      <section
+        id="langue"
+        className="rounded-2xl card-surface p-6 space-y-4 scroll-mt-24"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-base font-semibold text-white flex items-center gap-2">
+              <Languages className="w-4 h-4 text-accent" />
+              <span>Langue des synopsis (Traduction automatique)</span>
+            </h2>
+            <p className="text-xs text-[#858A9E] mt-0.5">
+              Traduit automatiquement à la volée tous les animés et mangas (actuels et futurs) avec mise en cache partagée sur Supabase.
+            </p>
+          </div>
+          <span className="px-2.5 py-1 rounded-full bg-accent/15 border border-accent/35 font-mono text-[10.5px] font-bold text-accent-soft self-start sm:self-auto shrink-0">
+            Actif : {contentLanguage.toUpperCase()}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {CONTENT_LANGUAGES.map((lang) => {
+            const active = contentLanguage === lang.id;
+            return (
+              <button
+                key={lang.id}
+                type="button"
+                onClick={() => setContentLanguage(lang.id)}
+                className={cn(
+                  "p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2",
+                  active
+                    ? "bg-accent/16 border-accent/55 shadow-[0_8px_24px_rgb(var(--shiori-accent-rgb)/0.22)]"
+                    : "bg-obsidian/70 hover:bg-white/[0.06] border-white/[0.08] hover:border-white/[0.16]"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-md font-mono text-[11px] font-bold border",
+                      active
+                        ? "bg-accent text-accent-fg border-accent"
+                        : "bg-white/[0.06] text-[#C8CCE0] border-white/[0.1]"
+                    )}
+                  >
+                    {lang.code}
+                  </span>
+                  {active && <Check className="w-4 h-4 text-accent-soft" />}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">{lang.label}</p>
+                  <p className="text-[11px] text-[#8E93A6] mt-0.5 leading-snug">
+                    {lang.description}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {/* Atmospheric Ambiance & Continuous Particle Effects */}
       <AmbianceSettingsCard />
