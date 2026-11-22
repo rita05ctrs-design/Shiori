@@ -27,7 +27,7 @@ export function ToastContainer() {
   const { toasts, dismissToast } = useShiori();
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-[95] flex flex-col gap-3 pointer-events-none max-w-[380px] w-[calc(100vw-2rem)]">
+    <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-6 right-3 sm:right-6 z-[95] flex flex-col gap-3 pointer-events-none max-w-[380px] w-[calc(100vw-1.5rem)]">
       <AnimatePresence mode="popLayout">
         {toasts.map((t) => {
           const statusCfg = t.status ? STATUS_CONFIG[t.status] : null;

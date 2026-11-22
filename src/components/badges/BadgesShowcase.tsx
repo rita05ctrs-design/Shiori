@@ -101,7 +101,7 @@ export function BadgesShowcase({
       id="badges"
       className={cn(
         "rounded-3xl card-surface border border-white/[0.08] scroll-mt-24 space-y-5",
-        compact ? "p-5 sm:p-6" : "p-6 sm:p-7"
+        compact ? "p-4 sm:p-6" : "p-4 sm:p-6 md:p-7"
       )}
     >
       {/* Header + Progress Summary */}
@@ -171,14 +171,14 @@ export function BadgesShowcase({
 
       {/* Category Filters + Status Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 max-w-full">
           {CATEGORY_TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setCategory(t.id)}
               className={cn(
-                "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer",
+                "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap shrink-0",
                 category === t.id
                   ? "bg-white text-[#090A0F] border-white"
                   : "bg-obsidian/70 border-white/[0.08] text-[#9A9EAE] hover:text-white"
@@ -189,7 +189,7 @@ export function BadgesShowcase({
           ))}
         </div>
 
-        <div className="inline-flex items-center p-0.5 rounded-full bg-obsidian/80 border border-white/[0.08] self-start sm:self-auto shrink-0">
+        <div className="inline-flex items-center p-0.5 rounded-full bg-obsidian/80 border border-white/[0.08] self-start sm:self-auto shrink-0 max-w-full overflow-x-auto no-scrollbar">
           {(
             [
               { id: "all", label: "Tous" },

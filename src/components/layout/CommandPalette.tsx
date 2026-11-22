@@ -104,7 +104,7 @@ export function CommandPalette() {
   return (
     <AnimatePresence>
       {commandOpen && (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[10vh] px-4">
+        <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[calc(4.25rem+env(safe-area-inset-top))] sm:pt-[10vh] pb-[max(1rem,env(safe-area-inset-bottom))] px-3 sm:px-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -121,14 +121,14 @@ export function CommandPalette() {
             className="relative w-full max-w-2xl rounded-2xl bg-[#10121B] border border-white/[0.11] shadow-[0_32px_90px_rgba(0,0,0,0.85)] overflow-hidden"
           >
             {/* Input Bar */}
-            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/[0.08]">
-              <Search className="w-4.5 h-4.5 text-accent shrink-0" />
+            <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 border-b border-white/[0.08]">
+              <Search className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-accent shrink-0" />
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher un anime, un manga, un studio..."
-                className="w-full bg-transparent text-[15px] text-white placeholder:text-[#6E7387] focus:outline-none"
+                placeholder="Rechercher un anime ou manga..."
+                className="min-w-0 flex-1 bg-transparent text-sm sm:text-[15px] text-white placeholder:text-[#6E7387] focus:outline-none"
               />
               {/* Type toggle */}
               <div className="flex items-center rounded-lg bg-white/[0.05] p-0.5 border border-white/[0.07] shrink-0">

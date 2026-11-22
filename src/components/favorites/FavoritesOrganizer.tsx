@@ -181,7 +181,7 @@ function RankPopoverPicker({
             transition={{ type: "spring", stiffness: 420, damping: 28 }}
             onClick={(e) => e.stopPropagation()}
             className={cn(
-              "absolute z-50 w-[272px] rounded-2xl bg-[#0D101A]/98 border border-white/[0.14] shadow-[0_24px_60px_rgba(0,0,0,0.82)] p-3.5 space-y-3",
+              "absolute z-50 w-[min(calc(100vw-2rem),272px)] rounded-2xl bg-[#0D101A]/98 border border-white/[0.14] shadow-[0_24px_60px_rgba(0,0,0,0.82)] p-3.5 space-y-3",
               compactTrigger ? "left-0" : "right-0",
               openUpward ? "bottom-full mb-2" : "top-full mt-2"
             )}

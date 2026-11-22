@@ -169,8 +169,8 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
       )}
     >
       {/* Top Author Row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <Link
             href={`/profile/${encodeURIComponent(item.actorUsername)}`}
             className="shrink-0"

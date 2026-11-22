@@ -387,7 +387,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   };
 
   return (
-    <div className="pt-24 pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-14">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-12 sm:space-y-14">
       {/* Page Header with Quick Section Jump Links */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
         <div>
@@ -463,8 +463,8 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           </button>
         </div>
 
-        {/* 7-Day Selector Bar */}
-        <div className="grid grid-cols-7 gap-2 sm:gap-2.5">
+        {/* 7-Day Selector Bar (horizontally scrollable on mobile so day labels never truncate) */}
+        <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 sm:grid sm:grid-cols-7 sm:gap-2.5 sm:overflow-visible sm:pb-0">
           {rollingDays.map((day) => {
             const isSelected = selectedDayKey === day.key;
             const list = byDay[day.key] ?? [];
@@ -477,7 +477,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                 type="button"
                 onClick={() => setSelectedDayKey(day.key)}
                 className={cn(
-                  "relative rounded-2xl p-2.5 sm:p-3.5 text-left border transition-all cursor-pointer overflow-hidden",
+                  "relative rounded-2xl p-2.5 sm:p-3.5 text-left border transition-all cursor-pointer overflow-hidden min-w-[88px] shrink-0 sm:min-w-0",
                   isSelected
                     ? "border-accent/65 shadow-[0_10px_26px_rgb(var(--shiori-accent-rgb)/0.2)]"
                     : "bg-surface border-white/[0.07] hover:border-white/[0.16] hover:bg-[#141722]"
@@ -504,12 +504,12 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                     <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
                   )}
                 </div>
-                <p className="relative z-10 mt-1 font-mono text-[11px] text-[#9A9EAE]">
+                <p className="relative z-10 mt-1 font-mono text-[11px] text-[#9A9EAE] whitespace-nowrap">
                   {day.dayNum} {day.monthLabel}
                 </p>
                 <div className="relative z-10 mt-1.5 flex items-center gap-1.5 text-[10px] font-mono">
                   {upCount > 0 && (
-                    <span className="text-[#F0B95B]">{upCount} à venir</span>
+                    <span className="text-[#F0B95B] whitespace-nowrap">{upCount} à venir</span>
                   )}
                   {upCount > 0 && doneCount > 0 && (
                     <span className="text-white/25 hidden xl:inline">·</span>

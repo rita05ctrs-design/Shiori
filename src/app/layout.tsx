@@ -11,6 +11,7 @@ import { BadgeUnlockToast } from "@/components/badges/BadgeUnlockToast";
 import { QuickEditModal } from "@/components/media/QuickEditModal";
 import { TrailerModal } from "@/components/media/TrailerModal";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { PwaRegistrar } from "@/components/pwa/PwaRegistrar";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -141,16 +142,16 @@ export default function RootLayout({
     <html
       lang="fr"
       suppressHydrationWarning
-      className={`${plusJakarta.variable} ${cormorant.variable} ${jetbrainsMono.variable} dark`}
+      className={`${plusJakarta.variable} ${cormorant.variable} ${jetbrainsMono.variable} dark overflow-x-hidden`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
-      <body className="font-sans antialiased bg-obsidian text-[#F4F3EE] min-h-screen flex flex-col">
+      <body className="font-sans antialiased bg-obsidian text-[#F4F3EE] min-h-screen flex flex-col overflow-x-hidden">
         <ShioriProvider>
           <MotionRoot>
             <Navbar />
-            <main className="flex-1">{children}</main>
+            <main className="flex-1 min-w-0">{children}</main>
             <Footer />
             <CommandPalette />
             <QuickEditModal />
@@ -158,6 +159,7 @@ export default function RootLayout({
             <AuthModal />
             <ToastContainer />
             <BadgeUnlockToast />
+            <PwaRegistrar />
           </MotionRoot>
         </ShioriProvider>
       </body>

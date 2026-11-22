@@ -161,7 +161,7 @@ export function QuickEditModal() {
   return (
     <AnimatePresence>
       {editingMedia && info && (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[85] flex items-center justify-center px-3 sm:px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -177,7 +177,7 @@ export function QuickEditModal() {
             animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: 16, scale: 0.95, filter: "blur(6px)" }}
             transition={{ type: "spring", stiffness: 320, damping: 28 }}
-            className="relative w-full max-w-xl rounded-3xl bg-[#0F111B] border border-white/[0.12] shadow-[0_36px_110px_rgba(0,0,0,0.9),0_0_60px_rgb(var(--shiori-accent-rgb)/0.12)] overflow-hidden"
+            className="relative w-full max-w-xl max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex flex-col rounded-3xl bg-[#0F111B] border border-white/[0.12] shadow-[0_36px_110px_rgba(0,0,0,0.9),0_0_60px_rgb(var(--shiori-accent-rgb)/0.12)] overflow-hidden"
           >
             {/* Header Banner */}
             <div className="relative h-36 overflow-hidden bg-[#161926]">
@@ -429,7 +429,7 @@ export function QuickEditModal() {
 
                 <div
                   onMouseLeave={() => setHoverScore(null)}
-                  className="grid grid-cols-10 gap-1.5"
+                  className="grid grid-cols-5 sm:grid-cols-10 gap-1.5"
                 >
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => {
                     const active = previewInt !== null && val <= previewInt;

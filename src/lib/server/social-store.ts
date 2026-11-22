@@ -112,6 +112,102 @@ function createSeedSocialDb(): SocialDatabase {
           score: 9.5,
         },
       ],
+      libraryPreview: [
+        {
+          mediaId: 154587,
+          type: "ANIME",
+          title: "Frieren: Beyond Journey's End",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-qQTzQnEJJ3oB.jpg",
+          score: 10,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Adventure", "Drama", "Fantasy"],
+        },
+        {
+          mediaId: 457,
+          type: "ANIME",
+          title: "MUSHI-SHI",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx457-l6cTtNgI9Bi6.png",
+          score: 9.5,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Adventure", "Fantasy", "Mystery", "Slice of Life"],
+        },
+        {
+          mediaId: 9253,
+          type: "ANIME",
+          title: "Steins;Gate",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx9253-tIUXF2gfU8Sg.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Drama", "Psychological", "Sci-Fi", "Thriller"],
+        },
+        {
+          mediaId: 5114,
+          type: "ANIME",
+          title: "Fullmetal Alchemist: Brotherhood",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx5114-nSWCgQlmOMtj.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          genres: ["Action", "Adventure", "Drama", "Fantasy"],
+        },
+        {
+          mediaId: 19,
+          type: "ANIME",
+          title: "Monster",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx19-gtMC64182sm4.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          genres: ["Drama", "Mystery", "Psychological", "Thriller"],
+        },
+        {
+          mediaId: 30104,
+          type: "MANGA",
+          title: "Yotsuba&!",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30104-sUVzNlTWZ5cu.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Comedy", "Slice of Life"],
+        },
+        {
+          mediaId: 13601,
+          type: "ANIME",
+          title: "PSYCHO-PASS",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx13601-i42VFuHpqEOJ.jpg",
+          score: 9,
+          status: "COMPLETED",
+          genres: ["Action", "Psychological", "Sci-Fi", "Thriller"],
+        },
+        {
+          mediaId: 16498,
+          type: "ANIME",
+          title: "Attack on Titan",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-buvcRTBx4NSm.jpg",
+          score: 9,
+          status: "COMPLETED",
+          genres: ["Action", "Drama", "Fantasy", "Mystery"],
+        },
+        {
+          mediaId: 108632,
+          type: "ANIME",
+          title: "Re:ZERO -Starting Life in Another World- Season 2",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx108632-lQWnmw7XaNOK.jpg",
+          score: 9,
+          status: "COMPLETED",
+          genres: ["Action", "Drama", "Fantasy", "Psychological"],
+        },
+        {
+          mediaId: 30001,
+          type: "MANGA",
+          title: "Monster",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30001-Knby7l1jevE7.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          genres: ["Drama", "Mystery", "Psychological", "Thriller"],
+        },
+      ],
       stats: {
         totalEntries: 184,
         animeCount: 142,
@@ -191,6 +287,93 @@ function createSeedSocialDb(): SocialDatabase {
           score: 9.5,
         },
       ],
+      libraryPreview: [
+        {
+          mediaId: 30002,
+          type: "MANGA",
+          title: "Berserk",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30002-Cul4OeN7bYtn.jpg",
+          score: 10,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Action", "Adventure", "Drama", "Fantasy", "Horror", "Psychological"],
+        },
+        {
+          mediaId: 30656,
+          type: "MANGA",
+          title: "Vagabond",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30656-9mW113O7rDnA.png",
+          score: 10,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Action", "Adventure", "Drama"],
+        },
+        {
+          mediaId: 31706,
+          type: "MANGA",
+          title: "JoJo's Bizarre Adventure: Part 7–Steel Ball Run",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx31706-lRncu9VbcBB7.png",
+          score: 9.5,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Action", "Adventure", "Drama", "Mystery", "Supernatural"],
+        },
+        {
+          mediaId: 30642,
+          type: "MANGA",
+          title: "Vinland Saga",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30642-0mjRDkf4THpo.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          genres: ["Action", "Adventure", "Drama"],
+        },
+        {
+          mediaId: 21,
+          type: "ANIME",
+          title: "ONE PIECE",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21-ELSYx3yMPcKM.jpg",
+          score: 9.5,
+          status: "WATCHING",
+          isFavorite: true,
+          genres: ["Action", "Adventure", "Comedy", "Drama", "Fantasy"],
+        },
+        {
+          mediaId: 113415,
+          type: "ANIME",
+          title: "JUJUTSU KAISEN",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx113415-LHBAeoZDIsnF.jpg",
+          score: 9,
+          status: "COMPLETED",
+          genres: ["Action", "Drama", "Supernatural"],
+        },
+        {
+          mediaId: 127230,
+          type: "ANIME",
+          title: "Chainsaw Man",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx127230-DdP4vAdssLoz.png",
+          score: 9,
+          status: "COMPLETED",
+          genres: ["Action", "Drama", "Horror", "Supernatural"],
+        },
+        {
+          mediaId: 16498,
+          type: "ANIME",
+          title: "Attack on Titan",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-buvcRTBx4NSm.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          genres: ["Action", "Drama", "Fantasy", "Mystery"],
+        },
+        {
+          mediaId: 19,
+          type: "ANIME",
+          title: "Monster",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx19-gtMC64182sm4.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          genres: ["Drama", "Horror", "Mystery", "Psychological", "Thriller"],
+        },
+      ],
       stats: {
         totalEntries: 268,
         animeCount: 175,
@@ -248,6 +431,65 @@ function createSeedSocialDb(): SocialDatabase {
           coverImage:
             "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-qQTzQnEJJ3oB.jpg",
           score: 9.5,
+        },
+      ],
+      libraryPreview: [
+        {
+          mediaId: 21519,
+          type: "ANIME",
+          title: "Your Name.",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21519-SUo3ZQuCbYhJ.png",
+          score: 10,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Drama", "Romance", "Supernatural"],
+        },
+        {
+          mediaId: 154587,
+          type: "ANIME",
+          title: "Frieren: Beyond Journey's End",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-qQTzQnEJJ3oB.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Adventure", "Drama", "Fantasy"],
+        },
+        {
+          mediaId: 30104,
+          type: "MANGA",
+          title: "Yotsuba&!",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/manga/cover/large/bx30104-sUVzNlTWZ5cu.jpg",
+          score: 9.5,
+          status: "COMPLETED",
+          isFavorite: true,
+          genres: ["Comedy", "Slice of Life"],
+        },
+        {
+          mediaId: 101922,
+          type: "ANIME",
+          title: "Demon Slayer: Kimetsu no Yaiba",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg",
+          score: 8.5,
+          status: "COMPLETED",
+          genres: ["Action", "Adventure", "Drama", "Fantasy"],
+        },
+        {
+          mediaId: 457,
+          type: "ANIME",
+          title: "MUSHI-SHI",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx457-l6cTtNgI9Bi6.png",
+          score: 9.5,
+          status: "COMPLETED",
+          genres: ["Adventure", "Fantasy", "Mystery", "Slice of Life"],
+        },
+        {
+          mediaId: 98659,
+          type: "ANIME",
+          title: "Classroom of the Elite",
+          coverImage: "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx98659-WNyPLIZDpGGY.jpg",
+          score: 8.5,
+          status: "COMPLETED",
+          genres: ["Drama", "Psychological"],
         },
       ],
       stats: {
@@ -435,6 +677,22 @@ export function readSocialDb(): SocialDatabase {
         messages: Array.isArray(parsed.messages) ? parsed.messages : [],
         friendships: Array.isArray(parsed.friendships) ? parsed.friendships : [],
       };
+      // Automatically backfill libraryPreview onto seeded profiles from older social.json files
+      const needsSeedBackfill = loaded.profiles.some(
+        (p) =>
+          (p.id === "community-sora" || p.id === "community-ren" || p.id === "community-hana") &&
+          (!Array.isArray(p.libraryPreview) || p.libraryPreview.length === 0)
+      );
+      if (needsSeedBackfill) {
+        const seedById = new Map(createSeedSocialDb().profiles.map((sp) => [sp.id, sp]));
+        loaded.profiles = loaded.profiles.map((p) => {
+          const sp = seedById.get(p.id);
+          if (sp && (!Array.isArray(p.libraryPreview) || p.libraryPreview.length === 0)) {
+            return { ...p, libraryPreview: sp.libraryPreview };
+          }
+          return p;
+        });
+      }
       globalMemory.__shioriSocialDbCache = loaded;
       return loaded;
     } catch {
@@ -681,6 +939,23 @@ export function getAllLocalCommunityProfiles(): PublicUserProfile[] {
             title: e.title,
             coverImage: e.coverImage,
             score: e.score,
+          })),
+        libraryPreview: [...lib]
+          .sort(
+            (a, b) =>
+              Number(b.isFavorite) - Number(a.isFavorite) ||
+              (b.score ?? -1) - (a.score ?? -1)
+          )
+          .slice(0, 80)
+          .map((e) => ({
+            mediaId: e.mediaId,
+            type: e.type,
+            title: e.title,
+            coverImage: e.coverImage,
+            score: e.score,
+            status: e.status,
+            isFavorite: e.isFavorite,
+            genres: Array.isArray(e.genres) ? e.genres.slice(0, 5) : undefined,
           })),
         stats: {
           totalEntries: lib.length,

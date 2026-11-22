@@ -45,6 +45,7 @@ export async function GET(
           joinedAt: row.joined_at ?? new Date().toISOString(),
           favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
           favoriteMedia: Array.isArray(row.favorite_media) ? row.favorite_media : [],
+          libraryPreview: Array.isArray(s.libraryPreview) ? s.libraryPreview : [],
           stats: {
             totalEntries: Number(s.totalEntries ?? 0),
             animeCount: Number(s.animeCount ?? 0),

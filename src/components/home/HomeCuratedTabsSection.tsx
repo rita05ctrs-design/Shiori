@@ -105,34 +105,36 @@ export function HomeCuratedTabsSection({
           <p className="text-xs text-[#8A8FA4] mt-1">{current.subtitle}</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            role="tablist"
-            aria-label="Collections curatées"
-            className="inline-flex flex-wrap items-center gap-1 p-1 rounded-2xl bg-surface border border-white/[0.08]"
-          >
-            {tabs.map((t) => {
-              const Icon = t.icon;
-              const active = t.id === activeTab;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setActiveTab(t.id)}
-                  className={cn(
-                    "px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap",
-                    active
-                      ? "bg-accent text-accent-fg shadow-accent"
-                      : "text-[#9A9EAE] hover:text-white hover:bg-white/[0.05]"
-                  )}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{t.label}</span>
-                </button>
-              );
-            })}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 max-w-full">
+          <div className="w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar pb-0.5">
+            <div
+              role="tablist"
+              aria-label="Collections curatées"
+              className="inline-flex flex-nowrap items-center gap-1 p-1 rounded-2xl bg-surface border border-white/[0.08]"
+            >
+              {tabs.map((t) => {
+                const Icon = t.icon;
+                const active = t.id === activeTab;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setActiveTab(t.id)}
+                    className={cn(
+                      "px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                      active
+                        ? "bg-accent text-accent-fg shadow-accent"
+                        : "text-[#9A9EAE] hover:text-white hover:bg-white/[0.05]"
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <Link

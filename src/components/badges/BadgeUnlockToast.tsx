@@ -46,7 +46,7 @@ export function BadgeUnlockToast() {
   return (
     <div
       aria-live="polite"
-      className="fixed top-20 left-1/2 -translate-x-1/2 z-[95] w-[calc(100vw-1.5rem)] max-w-md pointer-events-none flex justify-center"
+      className="fixed top-[calc(4.75rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[95] w-[calc(100vw-1.5rem)] max-w-md pointer-events-none flex justify-center"
     >
       <AnimatePresence mode="wait">
         {active && meta && (

@@ -8,6 +8,7 @@ import type {
   FavoriteVoiceActor,
   LibraryEntry,
   MediaType,
+  PublicProfileLibraryItem,
   PublicProfileMediaSummary,
   PublicProfileStatsSummary,
   UnlockedBadgeRecord,
@@ -158,6 +159,7 @@ export async function syncPublicProfileToCloud(
     preferredLanguage?: ContentLanguage;
     favoriteStaff: FavoriteVoiceActor[];
     favoriteMedia: PublicProfileMediaSummary[];
+    libraryPreview?: PublicProfileLibraryItem[];
     stats: PublicProfileStatsSummary;
     unlockedBadges: UnlockedBadgeRecord[];
     pinnedBadges: string[];
@@ -184,7 +186,10 @@ export async function syncPublicProfileToCloud(
     preferred_language: payload.preferredLanguage ?? "fr",
     favorite_staff: payload.favoriteStaff.slice(0, 30),
     favorite_media: payload.favoriteMedia.slice(0, 40),
-    stats_summary: payload.stats,
+    stats_summary: {
+      ...payload.stats,
+      libraryPreview: (payload.libraryPreview ?? []).slice(0, 80),
+    },
     unlocked_badges: payload.unlockedBadges.slice(0, 60),
     pinned_badges: payload.pinnedBadges.slice(0, 3),
   };

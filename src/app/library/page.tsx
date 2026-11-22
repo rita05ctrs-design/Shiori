@@ -153,7 +153,7 @@ export default function LibraryPage() {
   };
 
   return (
-    <div className="pt-24 pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
         <div>
@@ -323,7 +323,7 @@ export default function LibraryPage() {
             options={LIBRARY_SORTS}
             defaultValue="UPDATED"
             align="right"
-            className="w-52"
+            className="flex-1 sm:flex-none min-w-[165px] sm:w-52"
           />
 
           <div className="inline-flex items-center p-1 rounded-xl bg-surface border border-white/[0.08]">
@@ -626,9 +626,9 @@ export default function LibraryPage() {
                   </div>
 
                   {/* Right controls */}
-                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0">
+                  <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-4 shrink-0">
                     {/* Score */}
-                    <div className="w-14 text-center font-mono text-xs">
+                    <div className="w-12 sm:w-14 text-center font-mono text-xs">
                       {entry.score !== null ? (
                         <span className="inline-flex items-center gap-1 text-[#F0B95B] font-semibold">
                           <Star className="w-3 h-3 fill-current" />
@@ -640,7 +640,7 @@ export default function LibraryPage() {
                     </div>
 
                     {/* Stepper */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 sm:gap-1.5">
                       <button
                         type="button"
                         onClick={() => incrementProgress(entry.mediaId, -1)}
@@ -649,7 +649,7 @@ export default function LibraryPage() {
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="w-24 text-center font-mono text-xs text-[#D8DBE6]">
+                      <span className="w-20 sm:w-24 text-center font-mono text-xs text-[#D8DBE6]">
                         {unit} <strong className="text-white">{entry.progress}</strong>
                         {entry.totalUnits ? `/${entry.totalUnits}` : ""}
                       </span>

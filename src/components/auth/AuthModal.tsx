@@ -121,7 +121,7 @@ export function AuthModal() {
   return (
     <AnimatePresence>
       {authModalOpen && (
-        <div className="fixed inset-0 z-[88] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[88] flex items-center justify-center px-3 sm:px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -135,7 +135,7 @@ export function AuthModal() {
             animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: 12, scale: 0.96, filter: "blur(4px)" }}
             transition={{ type: "spring", stiffness: 330, damping: 28 }}
-            className="relative w-full max-w-[440px] rounded-3xl bg-[#0F111B] border border-white/[0.12] shadow-[0_36px_110px_rgba(0,0,0,0.9),0_0_60px_rgb(var(--shiori-accent-rgb)/0.12)] overflow-hidden"
+            className="relative w-full max-w-[440px] max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain rounded-3xl bg-[#0F111B] border border-white/[0.12] shadow-[0_36px_110px_rgba(0,0,0,0.9),0_0_60px_rgb(var(--shiori-accent-rgb)/0.12)]"
           >
             {/* Subtle top crimson ambient glow */}
             <div

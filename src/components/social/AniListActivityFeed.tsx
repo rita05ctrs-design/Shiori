@@ -283,34 +283,36 @@ export function AniListActivityFeed() {
       {/* Scope Bar: Global / Abonnements / Mon activité + Refresh */}
       <div className="rounded-2xl card-surface border border-sky-500/20 p-4 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="inline-flex flex-wrap items-center gap-1 p-1 rounded-xl bg-obsidian/80 border border-white/[0.08]">
-            {[
-              { id: "global" as const, label: "Global AniList", icon: Globe },
-              { id: "following" as const, label: "Abonnements", icon: Users },
-              { id: "me" as const, label: "Mon activité", icon: User },
-            ].map((s) => {
-              const Icon = s.icon;
-              const active = scope === s.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setScope(s.id)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5",
-                    active
-                      ? "bg-[#02A9FF] text-[#06121C] shadow-[0_6px_18px_rgba(2,169,255,0.35)]"
-                      : "text-[#A2A6B8] hover:text-white"
-                  )}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{s.label}</span>
-                </button>
-              );
-            })}
+          <div className="w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar">
+            <div className="inline-flex flex-nowrap items-center gap-1 p-1 rounded-xl bg-obsidian/80 border border-white/[0.08]">
+              {[
+                { id: "global" as const, label: "Global AniList", icon: Globe },
+                { id: "following" as const, label: "Abonnements", icon: Users },
+                { id: "me" as const, label: "Mon activité", icon: User },
+              ].map((s) => {
+                const Icon = s.icon;
+                const active = scope === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setScope(s.id)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                      active
+                        ? "bg-[#02A9FF] text-[#06121C] shadow-[0_6px_18px_rgba(2,169,255,0.35)]"
+                        : "text-[#A2A6B8] hover:text-white"
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {!anilistConnection.connected && (
               <a
                 href="/api/auth/anilist/start"
@@ -333,7 +335,7 @@ export function AniListActivityFeed() {
 
         {/* Type Filters + Optional AniList Username Lookup in "Mon activité" */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 max-w-full">
             {[
               { id: "ALL" as const, label: "Tout", icon: null },
               { id: "ANIME" as const, label: "Animés", icon: Tv },
@@ -348,13 +350,13 @@ export function AniListActivityFeed() {
                   type="button"
                   onClick={() => setTypeFilter(f.id)}
                   className={cn(
-                    "px-3 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1",
+                    "px-3 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap shrink-0",
                     active
                       ? "bg-white text-[#090A0F] border-white"
                       : "bg-obsidian/70 border-white/[0.08] text-[#9A9EAE] hover:text-white"
                   )}
                 >
-                  {Icon && <Icon className="w-3 h-3" />}
+                  {Icon && <Icon className="w-3 h-3 shrink-0" />}
                   <span>{f.label}</span>
                 </button>
               );

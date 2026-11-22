@@ -221,6 +221,12 @@ export interface PublicProfileMediaSummary {
   score: number | null;
 }
 
+export interface PublicProfileLibraryItem extends PublicProfileMediaSummary {
+  status?: LibraryStatus;
+  isFavorite?: boolean;
+  genres?: string[];
+}
+
 export interface PublicProfileStatsSummary {
   totalEntries: number;
   animeCount: number;
@@ -266,6 +272,7 @@ export interface PublicUserProfile {
   joinedAt: string;
   favoriteStaff: FavoriteVoiceActor[];
   favoriteMedia: PublicProfileMediaSummary[];
+  libraryPreview?: PublicProfileLibraryItem[];
   stats: PublicProfileStatsSummary;
   unlockedBadges?: UnlockedBadgeRecord[];
   pinnedBadges?: string[];
@@ -367,11 +374,24 @@ export interface PersonalizedRecommendation {
 
 export interface ShioriNotification {
   id: string;
-  kind: "AIRING" | "MILESTONE" | "RECOMMENDATION" | "SYSTEM";
+  kind:
+    | "AIRING"
+    | "MILESTONE"
+    | "RECOMMENDATION"
+    | "SYSTEM"
+    | "FRIEND_REQUEST"
+    | "MESSAGE"
+    | "SOCIAL"
+    | "BADGE";
   title: string;
   body: string;
   mediaId?: number;
   coverImage?: string;
+  href?: string;
+  actorId?: string;
+  actorUsername?: string;
+  actorDisplayName?: string;
+  actorAvatarUrl?: string | null;
   isRead: boolean;
   createdAt: string;
 }

@@ -71,6 +71,7 @@ import type {
   MediaItem,
   MediaType,
   NotificationPrefs,
+  PublicProfileLibraryItem,
   PublicUserProfile,
   ShioriNotification,
   ThemeSettings,
@@ -83,6 +84,8 @@ const STORAGE_KEYS = {
   library: "shiori_library_v1",
   profile: "shiori_profile_v1",
   notifications: "shiori_notifications_v1",
+  readNotifs: "shiori_read_notifs_v1",
+  dismissedNotifs: "shiori_dismissed_notifs_v1",
   activity: "shiori_activity_v1",
   anilistStats: "shiori_anilist_stats_v1",
   ambiance: "shiori_ambiance_v1",
@@ -216,6 +219,7 @@ interface ShioriContextValue {
   // Notifications & Activity
   notifications: ShioriNotification[];
   unreadCount: number;
+  refreshNotifications: () => Promise<void>;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
   clearNotifications: () => void;
@@ -269,6 +273,9 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<ShioriNotification[]>(() =>
     createDefaultNotifications()
   );
+  const [socialNotifications, setSocialNotifications] = useState<ShioriNotification[]>([]);
+  const [readNotifIds, setReadNotifIds] = useState<string[]>([]);
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<string[]>([]);
   const [activity, setActivity] = useState<ActivityEvent[]>(() =>
     createDefaultActivity(createDefaultLibrary())
   );
@@ -355,6 +362,16 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       if (savedNotifs) {
         const parsed = JSON.parse(savedNotifs);
         if (Array.isArray(parsed)) setNotifications(parsed);
+      }
+      const savedReadNotifs = localStorage.getItem(STORAGE_KEYS.readNotifs);
+      if (savedReadNotifs) {
+        const parsed = JSON.parse(savedReadNotifs);
+        if (Array.isArray(parsed)) setReadNotifIds(parsed.map(String));
+      }
+      const savedDismissedNotifs = localStorage.getItem(STORAGE_KEYS.dismissedNotifs);
+      if (savedDismissedNotifs) {
+        const parsed = JSON.parse(savedDismissedNotifs);
+        if (Array.isArray(parsed)) setDismissedNotifIds(parsed.map(String));
       }
       const savedActivity = localStorage.getItem(STORAGE_KEYS.activity);
       if (savedActivity) {
@@ -732,6 +749,30 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         coverImage: e.coverImage,
         score: e.score,
       }));
+      const favIds = new Set(orderedFavorites.map((e) => e.mediaId));
+      const libraryPreviewPayload: PublicProfileLibraryItem[] = [
+        ...orderedFavorites.slice(0, 30),
+        ...library
+          .filter((e) => !favIds.has(e.mediaId))
+          .sort(
+            (a, b) =>
+              (b.score ?? -1) - (a.score ?? -1) ||
+              Number(b.status === "COMPLETED") - Number(a.status === "COMPLETED") ||
+              new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          )
+          .slice(0, 50),
+      ]
+        .slice(0, 80)
+        .map((e) => ({
+          mediaId: e.mediaId,
+          type: e.type,
+          title: e.title,
+          coverImage: e.coverImage,
+          score: e.score,
+          status: e.status,
+          isFavorite: e.isFavorite,
+          genres: Array.isArray(e.genres) ? e.genres.slice(0, 5) : undefined,
+        }));
       const statsPayload = {
         totalEntries: library.length,
         animeCount: library.filter((e) => e.type === "ANIME").length,
@@ -758,6 +799,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           preferredLanguage: contentLanguage,
           favoriteStaff,
           favoriteMedia: favoriteMediaPayload,
+          libraryPreview: libraryPreviewPayload,
           stats: statsPayload,
           unlockedBadges,
           pinnedBadges,
@@ -779,6 +821,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           joinedAt: profile.joinedAt,
           favoriteStaff,
           favoriteMedia: favoriteMediaPayload,
+          libraryPreview: libraryPreviewPayload,
           stats: statsPayload,
           unlockedBadges,
           pinnedBadges,
@@ -952,6 +995,30 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
   }, [notifications, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.readNotifs,
+        JSON.stringify(readNotifIds.slice(-250))
+      );
+    } catch {
+      // ignore
+    }
+  }, [readNotifIds, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.dismissedNotifs,
+        JSON.stringify(dismissedNotifIds.slice(-250))
+      );
+    } catch {
+      // ignore
+    }
+  }, [dismissedNotifIds, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1797,16 +1864,44 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     [profile.id, profile.username, refreshFriendships, toast]
   );
 
-  // Hydrate unread DM badge + subscribe to Supabase Realtime direct_messages!
+  // Hydrate unread DM badge + unified real-time notifications bell (friend requests, messages, likes/comments)
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({
+        userId: profile.id,
+        username: profile.username,
+      });
+      const res = await fetch(`/api/notifications/realtime?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data?.notifications)) {
+        setSocialNotifications(data.notifications);
+      }
+    } catch {
+      // ignore transient network errors
+    }
+  }, [profile.id, profile.username]);
+
   useEffect(() => {
     if (!hydrated) return;
     void refreshUnreadMessages();
+    void refreshNotifications();
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void refreshNotifications();
+      void refreshUnreadMessages();
+    }, 12000);
 
     const supabase = getSupabaseBrowserClient();
-    if (!supabase || profile.mode !== "supabase") return;
+    if (!supabase || profile.mode !== "supabase") {
+      return () => clearInterval(interval);
+    }
 
     const channel = supabase
-      .channel(`shiori-dm-badge-${profile.id}`)
+      .channel(`shiori-bell-realtime-${profile.id}`)
       .on(
         "postgres_changes",
         {
@@ -1817,14 +1912,57 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         },
         () => {
           void refreshUnreadMessages();
+          void refreshNotifications();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "friendships",
+        },
+        () => {
+          void refreshFriendships();
+          void refreshNotifications();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "activity_likes",
+        },
+        () => {
+          void refreshNotifications();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "activity_comments",
+        },
+        () => {
+          void refreshNotifications();
         }
       )
       .subscribe();
 
     return () => {
+      clearInterval(interval);
       void supabase.removeChannel(channel);
     };
-  }, [hydrated, profile.id, profile.mode, refreshUnreadMessages]);
+  }, [
+    hydrated,
+    profile.id,
+    profile.mode,
+    refreshUnreadMessages,
+    refreshNotifications,
+    refreshFriendships,
+  ]);
 
   // Global keyboard shortcut Cmd+K / Ctrl+K
   useEffect(() => {
@@ -2597,21 +2735,76 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     toast({ title: "Déconnecté", description: "Vous êtes repassé en session invité." });
   }, [toast]);
 
+  const readNotifSet = useMemo(() => new Set(readNotifIds), [readNotifIds]);
+  const dismissedNotifSet = useMemo(() => new Set(dismissedNotifIds), [dismissedNotifIds]);
+
+  const badgeNotifications = useMemo<ShioriNotification[]>(() => {
+    const unlocked = evaluatedBadges
+      .filter((b) => b.unlocked)
+      .sort((a, b) => {
+        const ta = a.unlockedAt ? new Date(a.unlockedAt).getTime() : 0;
+        const tb = b.unlockedAt ? new Date(b.unlockedAt).getTime() : 0;
+        if (tb !== ta) return tb - ta;
+        if (RARITY_RANK[b.rarity] !== RARITY_RANK[a.rarity]) {
+          return RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity];
+        }
+        return b.target - a.target;
+      })
+      .slice(0, 3);
+
+    return unlocked.map((b) => ({
+      id: `badge-${b.id}`,
+      kind: "BADGE" as const,
+      title: `Badge débloqué · ${b.title}`,
+      body: b.description,
+      href: `/profile/${encodeURIComponent(profile.username)}#badges`,
+      isRead: false,
+      createdAt: b.unlockedAt || profile.joinedAt || new Date().toISOString(),
+    }));
+  }, [evaluatedBadges, profile.username, profile.joinedAt]);
+
+  const mergedNotifications = useMemo<ShioriNotification[]>(() => {
+    const map = new Map<string, ShioriNotification>();
+    for (const item of [...socialNotifications, ...badgeNotifications, ...notifications]) {
+      if (dismissedNotifSet.has(item.id)) continue;
+      if (!map.has(item.id)) {
+        map.set(item.id, {
+          ...item,
+          isRead: item.isRead || readNotifSet.has(item.id),
+        });
+      }
+    }
+    return Array.from(map.values())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 45);
+  }, [socialNotifications, badgeNotifications, notifications, readNotifSet, dismissedNotifSet]);
+
   const markNotificationRead = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    setReadNotifIds((prev) => (prev.includes(id) ? prev : [...prev.slice(-249), id]));
   }, []);
 
   const markAllNotificationsRead = useCallback(() => {
+    const allIds = mergedNotifications.map((n) => n.id);
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-  }, []);
+    setReadNotifIds((prev) => {
+      const set = new Set([...prev, ...allIds]);
+      return Array.from(set).slice(-250);
+    });
+  }, [mergedNotifications]);
 
   const clearNotifications = useCallback(() => {
+    const allIds = mergedNotifications.map((n) => n.id);
     setNotifications([]);
-  }, []);
+    setDismissedNotifIds((prev) => {
+      const set = new Set([...prev, ...allIds]);
+      return Array.from(set).slice(-250);
+    });
+  }, [mergedNotifications]);
 
   const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.isRead).length,
-    [notifications]
+    () => mergedNotifications.filter((n) => !n.isRead).length,
+    [mergedNotifications]
   );
 
   const value: ShioriContextValue = {
@@ -2670,8 +2863,9 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     signUpWithSupabase,
     signInWithGoogle,
     signOutSupabase,
-    notifications,
+    notifications: mergedNotifications,
     unreadCount,
+    refreshNotifications,
     markNotificationRead,
     markAllNotificationsRead,
     clearNotifications,

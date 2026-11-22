@@ -30,6 +30,7 @@ import { CONTENT_LANGUAGES } from "@/lib/i18n";
 import { AniListImportCard } from "@/components/settings/AniListImportCard";
 import { AmbianceSettingsCard } from "@/components/settings/AmbianceSettingsCard";
 import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
+import { PwaInstallCard } from "@/components/settings/PwaInstallCard";
 import { VoiceActorFavoritesManager } from "@/components/social/VoiceActorFavoritesManager";
 import { BadgesShowcase } from "@/components/badges/BadgesShowcase";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -174,7 +175,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=votre-cle-anon-publique`;
   };
 
   return (
-    <div className="pt-24 pb-16 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
       {/* Header */}
       <div>
         <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5">
@@ -250,6 +251,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=votre-cle-anon-publique`;
           })}
         </div>
       </section>
+
+      {/* Progressive Web App (PWA) Native Install Card */}
+      <PwaInstallCard />
 
       {/* Atmospheric Ambiance & Continuous Particle Effects */}
       <AmbianceSettingsCard />

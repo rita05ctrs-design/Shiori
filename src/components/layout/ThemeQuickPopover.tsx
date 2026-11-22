@@ -78,7 +78,7 @@ export function ThemeQuickPopover() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.97 }}
             transition={{ duration: 0.16 }}
-            className="absolute right-0 mt-2.5 w-80 sm:w-[340px] rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_28px_72px_rgba(0,0,0,0.92)] overflow-hidden z-50"
+            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top))] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2.5 sm:w-[340px] max-w-[calc(100vw-1.5rem)] rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_28px_72px_rgba(0,0,0,0.92)] overflow-hidden z-50"
           >
             {/* Header */}
             <div className="px-4 py-3 border-b border-white/[0.08] bg-surface-solid-header flex items-center justify-between gap-2">

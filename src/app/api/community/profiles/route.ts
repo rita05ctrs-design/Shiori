@@ -26,6 +26,7 @@ function mapSupabasePublicProfile(row: any): PublicUserProfile {
     joinedAt: row.joined_at ?? row.created_at ?? new Date().toISOString(),
     favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
     favoriteMedia: Array.isArray(row.favorite_media) ? row.favorite_media : [],
+    libraryPreview: Array.isArray(statsRaw.libraryPreview) ? statsRaw.libraryPreview : [],
     stats: {
       totalEntries: Number(statsRaw.totalEntries ?? 0),
       animeCount: Number(statsRaw.animeCount ?? 0),
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest) {
       joinedAt: typeof body?.joinedAt === "string" ? body.joinedAt : new Date().toISOString(),
       favoriteStaff: Array.isArray(body?.favoriteStaff) ? body.favoriteStaff.slice(0, 30) : [],
       favoriteMedia: Array.isArray(body?.favoriteMedia) ? body.favoriteMedia.slice(0, 40) : [],
+      libraryPreview: Array.isArray(body?.libraryPreview) ? body.libraryPreview.slice(0, 80) : [],
       stats: {
         totalEntries: Number(body?.stats?.totalEntries ?? 0),
         animeCount: Number(body?.stats?.animeCount ?? 0),
@@ -157,7 +159,10 @@ export async function POST(request: NextRequest) {
             is_activity_public: publicProfile.isActivityPublic,
             favorite_staff: publicProfile.favoriteStaff,
             favorite_media: publicProfile.favoriteMedia,
-            stats_summary: publicProfile.stats,
+            stats_summary: {
+              ...publicProfile.stats,
+              libraryPreview: publicProfile.libraryPreview ?? [],
+            },
             unlocked_badges: publicProfile.unlockedBadges ?? [],
             pinned_badges: publicProfile.pinnedBadges ?? [],
           };

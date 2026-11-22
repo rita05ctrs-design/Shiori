@@ -22,6 +22,7 @@ import { UserAvatar } from "@/components/ui/UserAvatar";
 import { ActivityCard } from "@/components/social/ActivityCard";
 import { VoiceActorFavoritesManager } from "@/components/social/VoiceActorFavoritesManager";
 import { FriendActionButton } from "@/components/social/FriendActionButton";
+import { ProfileAffinityCard } from "@/components/social/ProfileAffinityCard";
 import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
 import { BadgesShowcase } from "@/components/badges/BadgesShowcase";
@@ -229,7 +230,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
   });
 
   return (
-    <div className="pt-24 pb-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
       {/* Back link */}
       <Link
         href="/community"
@@ -240,7 +241,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
       </Link>
 
       {/* Hero Profile Header Card */}
-      <section className="rounded-3xl card-surface border border-white/[0.09] p-6 sm:p-8 relative overflow-hidden">
+      <section className="rounded-3xl card-surface border border-white/[0.09] p-4 sm:p-6 md:p-8 relative overflow-hidden">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -top-24 -right-16 w-80 h-80 rounded-full opacity-25 blur-3xl"
@@ -377,19 +378,22 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           return (
             <div
               key={stat.label}
-              className="rounded-2xl card-surface p-4 border border-white/[0.07]"
+              className="rounded-2xl card-surface p-3 sm:p-4 border border-white/[0.07] min-w-0"
             >
-              <p className="text-[10.5px] font-mono uppercase tracking-wider text-[#858A9E] flex items-center gap-1.5">
-                <Icon className={`w-3.5 h-3.5 ${stat.color}`} />
-                <span>{stat.label}</span>
+              <p className="text-[10px] sm:text-[10.5px] font-mono uppercase tracking-wider text-[#858A9E] flex items-center gap-1.5 truncate">
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${stat.color}`} />
+                <span className="truncate">{stat.label}</span>
               </p>
-              <p className="text-xl font-bold font-mono text-white mt-1.5">
+              <p className="text-lg sm:text-xl font-bold font-mono text-white mt-1.5 truncate">
                 {stat.value}
               </p>
             </div>
           );
         })}
       </section>
+
+      {/* Compatibility & Affinity Card (when visiting another member's public profile) */}
+      {!isOwnProfile && <ProfileAffinityCard targetProfile={displayProfile} />}
 
       {/* Gamification: Badges & Trophies Showcase */}
       <BadgesShowcase

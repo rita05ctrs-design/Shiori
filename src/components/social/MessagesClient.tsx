@@ -11,6 +11,7 @@ import {
   Check,
   CheckCheck,
   Radio,
+  ArrowLeft,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -38,6 +39,8 @@ export function MessagesClient() {
   const [partnerProfiles, setPartnerProfiles] = useState<PublicUserProfile[]>([]);
   // Strictly track the active conversation by unique user ID (never username/displayName!)
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
+  // On mobile (< md), toggle between full-width conversations list and full-width active chat thread
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
   const [pendingToParam, setPendingToParam] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -70,6 +73,7 @@ export function MessagesClient() {
 
   const selectPartner = useCallback((partnerId: string) => {
     setActivePartnerId(partnerId);
+    setMobileView("chat");
     setNewChatOpen(false);
     requestAnimationFrame(() => {
       composerInputRef.current?.focus({ preventScroll: true });
@@ -158,6 +162,7 @@ export function MessagesClient() {
       if (p.id === pendingToParam || p.username.toLowerCase() === lower) {
         if (p.id !== currentUserId) {
           setActivePartnerId(p.id);
+          setMobileView("chat");
         }
         setPendingToParam(null);
         return;
@@ -473,20 +478,20 @@ export function MessagesClient() {
   }, [memberById, currentUserId, searchMember, friendIds]);
 
   return (
-    <div className="pt-24 pb-12 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5 [overflow-anchor:none]">
+    <div className="pt-[calc(4.75rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-12 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-5 [overflow-anchor:none]">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1 flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5" />
-            <span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent mb-1 flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">
               Messagerie Privée ·{" "}
               {realtimeLive
                 ? "Supabase Realtime en direct"
                 : "Synchronisation temps réel (3s)"}
             </span>
           </p>
-          <h1 className="text-3xl font-bold tracking-tight text-gradient-editorial">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gradient-editorial">
             Messages privés
           </h1>
         </div>
@@ -503,7 +508,7 @@ export function MessagesClient() {
           </button>
 
           {newChatOpen && (
-            <div className="absolute right-0 top-full mt-2 z-40 w-[min(92vw,420px)] rounded-2xl bg-[#0D101A]/98 border border-accent/35 shadow-[0_24px_60px_rgba(0,0,0,0.8)] p-4 space-y-3">
+            <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 z-40 w-[min(calc(100vw-2rem),420px)] rounded-2xl bg-[#0D101A]/98 border border-accent/35 shadow-[0_24px_60px_rgba(0,0,0,0.8)] p-4 space-y-3">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-[#7D8296] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -557,10 +562,15 @@ export function MessagesClient() {
         </div>
       </div>
 
-      {/* Main Two-Pane Inbox (viewport-fitted so header + composer stay visible with zero page jump) */}
-      <div className="grid grid-cols-1 md:grid-cols-12 rounded-3xl card-surface border border-white/[0.09] overflow-hidden md:h-[clamp(440px,calc(100dvh-13.5rem),600px)] min-h-[440px]">
+      {/* Main Two-Pane Inbox: full-width list OR full-width active chat on mobile, split pane on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl card-surface border border-white/[0.09] overflow-hidden h-[calc(100dvh-16rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[380px] md:h-[clamp(440px,calc(100dvh-13.5rem),600px)]">
         {/* LEFT: Conversations List (strictly 1 row per unique partnerId) */}
-        <aside className="md:col-span-4 border-b md:border-b-0 md:border-r border-white/[0.08] bg-obsidian/55 flex flex-col min-h-0">
+        <aside
+          className={cn(
+            "md:col-span-4 md:border-r border-white/[0.08] bg-obsidian/55 flex-col min-h-0",
+            mobileView === "chat" ? "hidden md:flex" : "flex"
+          )}
+        >
           <div className="p-4 border-b border-white/[0.07] flex items-center justify-between gap-2 shrink-0">
             <p className="text-xs font-semibold text-white">
               Conversations ({conversations.length})
@@ -626,9 +636,14 @@ export function MessagesClient() {
         </aside>
 
         {/* RIGHT: Active Chat Thread */}
-        <div className="md:col-span-8 flex flex-col bg-surface/40 min-h-0">
+        <div
+          className={cn(
+            "md:col-span-8 flex-col bg-surface/40 min-h-0",
+            mobileView === "list" ? "hidden md:flex" : "flex"
+          )}
+        >
           {!activeThread ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-2">
+            <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-10 text-center space-y-2">
               <MessageSquare className="w-8 h-8 text-accent opacity-80" />
               <p className="text-sm font-semibold text-white">
                 Sélectionnez une conversation
@@ -636,14 +651,34 @@ export function MessagesClient() {
               <p className="text-xs text-[#858A9E]">
                 Ou ouvrez n&apos;importe quel profil membre pour envoyer un message privé.
               </p>
+              <button
+                type="button"
+                onClick={() => setMobileView("list")}
+                className="md:hidden mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/[0.07] border border-white/[0.12] text-xs font-semibold text-white cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Retour aux conversations</span>
+              </button>
             </div>
           ) : (
             <>
+              {/* Mobile Back-to-List Bar */}
+              <div className="md:hidden px-3.5 py-2 border-b border-white/[0.07] bg-obsidian/85 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMobileView("list")}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent-soft hover:text-white transition-colors py-1 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Retour aux conversations</span>
+                </button>
+              </div>
+
               {/* Thread Header */}
-              <div className="px-5 py-3.5 border-b border-white/[0.08] bg-surface-solid-header flex items-center justify-between gap-3">
+              <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-white/[0.08] bg-surface-solid-header flex items-center justify-between gap-2 sm:gap-3 shrink-0">
                 <Link
                   href={`/profile/${encodeURIComponent(activeThread.partnerUsername)}`}
-                  className="flex items-center gap-3 group min-w-0"
+                  className="flex items-center gap-2.5 sm:gap-3 group min-w-0"
                 >
                   <UserAvatar
                     avatarUrl={activeThread.partnerAvatarUrl}
@@ -666,7 +701,8 @@ export function MessagesClient() {
                   href={`/profile/${encodeURIComponent(activeThread.partnerUsername)}`}
                   className="text-xs text-[#A6AAB8] hover:text-white inline-flex items-center gap-1 shrink-0"
                 >
-                  <span>Voir profil</span>
+                  <span className="hidden sm:inline">Voir profil</span>
+                  <span className="sm:hidden">Profil</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </Link>
               </div>
@@ -674,7 +710,7 @@ export function MessagesClient() {
               {/* Messages Stream */}
               <div
                 ref={messagesContainerRef}
-                className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-3"
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-5 space-y-3"
               >
                 {threadMessages.length === 0 ? (
                   <p className="text-center text-xs text-[#858A9E] py-10">
@@ -728,21 +764,21 @@ export function MessagesClient() {
               {/* Composer */}
               <form
                 onSubmit={handleSend}
-                className="p-3.5 border-t border-white/[0.08] bg-obsidian/70 flex items-center gap-2.5"
+                className="p-2.5 sm:p-3.5 border-t border-white/[0.08] bg-obsidian/70 flex items-center gap-2 sm:gap-2.5 shrink-0"
               >
                 <input
                   ref={composerInputRef}
                   type="text"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder={`Écrire un message privé à ${activeThread.partnerDisplayName}...`}
+                  placeholder={`Message à ${activeThread.partnerDisplayName}...`}
                   maxLength={2000}
-                  className="flex-1 h-10 px-4 rounded-xl bg-surface border border-white/[0.1] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                  className="min-w-0 flex-1 h-10 px-3 sm:px-4 rounded-xl bg-surface border border-white/[0.1] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                 />
                 <button
                   type="submit"
                   disabled={sending || !draft.trim()}
-                  className="h-10 px-4 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-45 text-accent-fg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  className="h-10 px-3 sm:px-4 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-45 text-accent-fg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Envoyer</span>

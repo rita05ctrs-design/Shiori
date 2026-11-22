@@ -54,6 +54,14 @@ export function CommunityClient() {
     getFriendRelation,
   } = useShiori();
   const [tab, setTab] = useState<CommunityTab>("anilist");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const param = new URLSearchParams(window.location.search).get("tab");
+    if (param === "friends" || param === "activity" || param === "members" || param === "anilist") {
+      setTab(param);
+    }
+  }, []);
   const [kindFilter, setKindFilter] = useState<"ALL" | CommunityActivityKind>("ALL");
   const [memberQuery, setMemberQuery] = useState("");
   const [directAddUsername, setDirectAddUsername] = useState("");
@@ -163,17 +171,17 @@ export function CommunityClient() {
   }, [loadActivities]);
 
   return (
-    <div className="pt-24 pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5 flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5" />
-            <span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent mb-1.5 flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">
               Communauté Shiori · {realtimeLive ? "Supabase Realtime connecté" : "Fil en direct"}
             </span>
           </p>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
             Activité & Profils Publics
           </h1>
           <p className="text-sm text-[#8A8FA4] mt-1.5 max-w-2xl">
@@ -200,66 +208,68 @@ export function CommunityClient() {
         </div>
       </div>
 
-      {/* Main Navigation Tabs: Fil AniList (default) vs Activité Shiori vs Membres */}
+      {/* Main Navigation Tabs: horizontally scrollable on mobile so nothing wraps or overflows */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap items-center p-1 rounded-full bg-surface border border-white/[0.09] self-start gap-0.5">
-          <button
-            type="button"
-            onClick={() => setTab("anilist")}
-            className={cn(
-              "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5",
-              tab === "anilist"
-                ? "bg-[#02A9FF] text-[#06121C] shadow-[0_6px_18px_rgba(2,169,255,0.35)]"
-                : "text-[#9A9EAE] hover:text-white"
-            )}
-          >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Fil AniList</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("activity")}
-            className={cn(
-              "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5",
-              tab === "activity"
-                ? "bg-accent text-accent-fg shadow-accent"
-                : "text-[#9A9EAE] hover:text-white"
-            )}
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Activité Shiori</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("friends")}
-            className={cn(
-              "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 relative",
-              tab === "friends"
-                ? "bg-emerald-500 text-[#061810] shadow-[0_6px_18px_rgba(16,185,129,0.32)]"
-                : "text-[#9A9EAE] hover:text-white"
-            )}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Amis ({friends.length})</span>
-            {incomingFriendRequests.length > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold leading-none">
-                +{incomingFriendRequests.length}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("members")}
-            className={cn(
-              "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5",
-              tab === "members"
-                ? "bg-accent text-accent-fg shadow-accent"
-                : "text-[#9A9EAE] hover:text-white"
-            )}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Membres ({totalMembersCount || profiles.length})</span>
-          </button>
+        <div className="w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar pb-0.5">
+          <div className="inline-flex flex-nowrap items-center p-1 rounded-full bg-surface border border-white/[0.09] gap-0.5">
+            <button
+              type="button"
+              onClick={() => setTab("anilist")}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                tab === "anilist"
+                  ? "bg-[#02A9FF] text-[#06121C] shadow-[0_6px_18px_rgba(2,169,255,0.35)]"
+                  : "text-[#9A9EAE] hover:text-white"
+              )}
+            >
+              <Globe className="w-3.5 h-3.5 shrink-0" />
+              <span>Fil AniList</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("activity")}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                tab === "activity"
+                  ? "bg-accent text-accent-fg shadow-accent"
+                  : "text-[#9A9EAE] hover:text-white"
+              )}
+            >
+              <Activity className="w-3.5 h-3.5 shrink-0" />
+              <span>Activité Shiori</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("friends")}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 relative whitespace-nowrap shrink-0",
+                tab === "friends"
+                  ? "bg-emerald-500 text-[#061810] shadow-[0_6px_18px_rgba(16,185,129,0.32)]"
+                  : "text-[#9A9EAE] hover:text-white"
+              )}
+            >
+              <UserPlus className="w-3.5 h-3.5 shrink-0" />
+              <span>Amis ({friends.length})</span>
+              {incomingFriendRequests.length > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold leading-none">
+                  +{incomingFriendRequests.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("members")}
+              className={cn(
+                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                tab === "members"
+                  ? "bg-accent text-accent-fg shadow-accent"
+                  : "text-[#9A9EAE] hover:text-white"
+              )}
+            >
+              <Users className="w-3.5 h-3.5 shrink-0" />
+              <span>Membres ({totalMembersCount || profiles.length})</span>
+            </button>
+          </div>
         </div>
 
         {tab === "activity" ? (
@@ -301,12 +311,12 @@ export function CommunityClient() {
       {/* TAB 0: ANILIST LIVE ACTIVITY FEED + SIDEBAR DIRECTORY */}
       {tab === "anilist" ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-8">
+          <div className="lg:col-span-8 min-w-0">
             <AniListActivityFeed />
           </div>
 
-          <aside className="lg:col-span-4 space-y-4">
-            <div className="rounded-2xl card-surface p-5 space-y-4">
+          <aside className="lg:col-span-4 min-w-0 space-y-4">
+            <div className="rounded-2xl card-surface p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                   <Users className="w-4 h-4 text-accent" />
@@ -380,16 +390,16 @@ export function CommunityClient() {
       ) : tab === "activity" ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Feed Column */}
-          <div className="lg:col-span-8 space-y-4">
-            {/* Kind Filter Chips */}
-            <div className="flex flex-wrap items-center gap-1.5">
+          <div className="lg:col-span-8 min-w-0 space-y-4">
+            {/* Kind Filter Chips — horizontally scrollable on mobile */}
+            <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 max-w-full">
               {ACTIVITY_FILTERS.map((f) => (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => setKindFilter(f.id)}
                   className={cn(
-                    "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer",
+                    "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap shrink-0",
                     kindFilter === f.id
                       ? "bg-white text-[#090A0F] border-white"
                       : "bg-surface border-white/[0.08] text-[#9A9EAE] hover:text-white"
@@ -434,8 +444,8 @@ export function CommunityClient() {
           </div>
 
           {/* Right Sidebar: Quick Member Discovery */}
-          <aside className="lg:col-span-4 space-y-4">
-            <div className="rounded-2xl card-surface p-5 space-y-4">
+          <aside className="lg:col-span-4 min-w-0 space-y-4">
+            <div className="rounded-2xl card-surface p-4 sm:p-5 space-y-4">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                   <Users className="w-4 h-4 text-accent" />

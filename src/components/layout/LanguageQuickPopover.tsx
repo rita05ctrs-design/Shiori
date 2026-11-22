@@ -60,7 +60,7 @@ export function LanguageQuickPopover() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.96 }}
             transition={{ type: "spring", stiffness: 420, damping: 28 }}
-            className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-[#0D101A]/98 border border-white/[0.12] shadow-[0_24px_60px_rgba(0,0,0,0.82)] p-2.5 z-50 space-y-1.5"
+            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top))] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl bg-[#0D101A]/98 border border-white/[0.12] shadow-[0_24px_60px_rgba(0,0,0,0.82)] p-2.5 z-50 space-y-1.5"
           >
             <div className="px-2 py-1 border-b border-white/[0.07]">
               <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent-soft">

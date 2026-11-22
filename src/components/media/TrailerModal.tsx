@@ -19,7 +19,7 @@ export function TrailerModal() {
   return (
     <AnimatePresence>
       {trailerVideo && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center px-3 sm:px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

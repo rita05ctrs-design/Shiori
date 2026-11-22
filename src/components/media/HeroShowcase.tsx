@@ -139,7 +139,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
         }
       }}
       className={cn(
-        "relative w-full min-h-[550px] sm:min-h-[610px] lg:min-h-[660px] flex items-end overflow-hidden pt-20 pb-10 sm:pb-14 select-none",
+        "relative w-full min-h-[520px] sm:min-h-[610px] lg:min-h-[660px] flex items-end overflow-hidden pt-[calc(4.75rem+env(safe-area-inset-top))] pb-10 sm:pb-14 select-none",
         heroDragging ? "cursor-grabbing" : "cursor-grab"
       )}
     >
@@ -307,12 +307,12 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                     hidden: { opacity: 0, y: 16 },
                     visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: CINEMA_EASE } },
                   }}
-                  className="mt-7 flex flex-wrap items-center gap-3"
+                  className="mt-6 sm:mt-7 flex flex-wrap items-center gap-2.5 sm:gap-3"
                 >
                   <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }}>
                     <Link
                       href={`/media/${active.id}`}
-                      className="inline-flex items-center gap-2.5 h-11 px-6 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold shadow-[0_12px_34px_rgb(var(--shiori-accent-rgb)/0.45)] transition-colors"
+                      className="inline-flex items-center gap-2 h-10 sm:h-11 px-4 sm:px-6 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs sm:text-sm font-semibold shadow-[0_12px_34px_rgb(var(--shiori-accent-rgb)/0.45)] transition-colors"
                     >
                       <Info className="w-4 h-4" />
                       <span>Voir la fiche</span>
@@ -325,7 +325,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                     whileTap={{ scale: 0.96 }}
                     onClick={() => openQuickEdit(active)}
                     className={cn(
-                      "inline-flex items-center gap-2 h-11 px-5 rounded-full backdrop-blur-md border text-sm font-medium transition-all cursor-pointer",
+                      "inline-flex items-center gap-2 h-10 sm:h-11 px-4 sm:px-5 rounded-full backdrop-blur-md border text-xs sm:text-sm font-medium transition-all cursor-pointer",
                       entry
                         ? "bg-emerald-500/18 border-emerald-400/40 text-emerald-200 hover:bg-emerald-500/28"
                         : "bg-white/[0.08] hover:bg-white/[0.15] border-white/[0.14] text-white"
@@ -353,7 +353,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                       whileHover={{ scale: 1.03 }}
                       whileTap={{ scale: 0.96 }}
                       onClick={() => openTrailer(active.trailer!.id, title)}
-                      className="inline-flex items-center gap-2 h-11 px-5 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/[0.14] text-sm font-medium text-[#E9E8E3] transition-all cursor-pointer"
+                      className="inline-flex items-center gap-2 h-10 sm:h-11 px-4 sm:px-5 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/[0.14] text-xs sm:text-sm font-medium text-[#E9E8E3] transition-all cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current text-[#F0B95B]" />
                       <span>Bande-annonce</span>
@@ -365,8 +365,8 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
           </div>
 
           {/* Right Slide Selector Thumbnails + Live Auto-Advance Progress */}
-          <div className="lg:col-span-4 flex flex-col items-start lg:items-end justify-end gap-3">
-            <div className="flex items-center gap-2">
+          <div className="lg:col-span-4 min-w-0 flex flex-col items-start lg:items-end justify-end gap-3">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-1">
               {slides.map((slide, idx) => {
                 const isSelected = idx === index;
                 return (

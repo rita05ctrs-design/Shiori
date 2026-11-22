@@ -77,6 +77,8 @@ html[data-corners="soft"] {
 html {
   background-color: var(--shiori-bg);
   color: #f4f3ee;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
@@ -95,10 +97,20 @@ body {
   background-repeat: no-repeat;
   color: #f4f3ee;
   min-height: 100vh;
-  overflow-x: clip;
+  min-height: 100dvh;
+  max-width: 100%;
+  overflow-x: hidden;
   transition: background-color 220ms ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* iPhone / Mobile Safe Area helpers (Dynamic Island, Notch & Home Indicator) */
+.safe-pt {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Custom sleek scrollbars */
