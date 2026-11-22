@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  ensureServerSupabaseProfile,
   getAllLocalCommunityProfiles,
   makeId,
   pushLocalActivity,
@@ -180,12 +181,16 @@ export async function POST(request: NextRequest) {
 
     let createdId = makeId("act");
     const createdAt = new Date().toISOString();
+    let savedToSupabase = false;
+    let supabaseError: string | undefined;
 
-    // Persist to Supabase `activity_events` (triggers Supabase Realtime!)
+    // Persist to Supabase `activity_events` FIRST (triggers Supabase Realtime!)
     if (actor.source === "supabase") {
       try {
         const supabase = await getSupabaseServerClient();
         if (supabase) {
+          // Ensure user exists in `public.profiles` so foreign key never fails!
+          const ensured = await ensureServerSupabaseProfile(supabase, actor);
           const { data: inserted, error } = await supabase
             .from("activity_events")
             .insert({
@@ -197,7 +202,7 @@ export async function POST(request: NextRequest) {
               action,
               event_kind: kind,
               is_public: true,
-              actor_username: actor.username,
+              actor_username: ensured.username || actor.username,
               actor_display_name: actor.displayName,
               actor_avatar_url: actor.avatarUrl,
               metadata: {
@@ -215,10 +220,13 @@ export async function POST(request: NextRequest) {
 
           if (!error && inserted?.id) {
             createdId = String(inserted.id);
+            savedToSupabase = true;
+          } else if (error) {
+            supabaseError = error.message;
           }
         }
-      } catch {
-        // fallback cleanly to local store
+      } catch (err) {
+        supabaseError = err instanceof Error ? err.message : "Erreur insertion activity_events";
       }
     }
 
@@ -245,8 +253,17 @@ export async function POST(request: NextRequest) {
       comments: [],
     };
 
-    pushLocalActivity(item);
-    return NextResponse.json({ ok: true, activity: item });
+    try {
+      pushLocalActivity(item);
+    } catch {
+      // non-fatal on serverless FS
+    }
+    return NextResponse.json({
+      ok: true,
+      activity: item,
+      savedToSupabase,
+      supabaseError,
+    });
   } catch {
     return NextResponse.json({ error: "Erreur publication activité" }, { status: 500 });
   }

@@ -1,7 +1,9 @@
 import crypto from "crypto";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   readAccountDb,
@@ -16,8 +18,32 @@ import type {
   PublicUserProfile,
 } from "@/types/media";
 
-const DATA_DIR = path.join(process.cwd(), ".shiori-data");
-const SOCIAL_DB_PATH = path.join(DATA_DIR, "social.json");
+const PROJECT_DATA_DIR = path.join(process.cwd(), ".shiori-data");
+const TMP_DATA_DIR = path.join(os.tmpdir(), "shiori-data");
+
+let resolvedDataDir: string | null = null;
+const globalMemory = globalThis as unknown as {
+  __shioriSocialDbCache?: SocialDatabase;
+};
+
+function getWritableSocialPath(): string | null {
+  if (resolvedDataDir) {
+    return path.join(resolvedDataDir, "social.json");
+  }
+  for (const dir of [PROJECT_DATA_DIR, TMP_DATA_DIR]) {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.accessSync(dir, fs.constants.W_OK);
+      resolvedDataDir = dir;
+      return path.join(dir, "social.json");
+    } catch {
+      // try next candidate (e.g. /tmp on Vercel serverless)
+    }
+  }
+  return null;
+}
 
 export interface SocialDatabase {
   profiles: PublicUserProfile[];
@@ -397,38 +423,115 @@ function createSeedSocialDb(): SocialDatabase {
   return { profiles, activities, messages, friendships: [] };
 }
 
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
 export function readSocialDb(): SocialDatabase {
-  ensureDir();
-  if (!fs.existsSync(SOCIAL_DB_PATH)) {
-    const seed = createSeedSocialDb();
-    writeSocialDb(seed);
-    return seed;
+  const filePath = getWritableSocialPath();
+  if (filePath && fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, "utf8");
+      const parsed = JSON.parse(raw) as Partial<SocialDatabase>;
+      const loaded: SocialDatabase = {
+        profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
+        activities: Array.isArray(parsed.activities) ? parsed.activities : [],
+        messages: Array.isArray(parsed.messages) ? parsed.messages : [],
+        friendships: Array.isArray(parsed.friendships) ? parsed.friendships : [],
+      };
+      globalMemory.__shioriSocialDbCache = loaded;
+      return loaded;
+    } catch {
+      // fall through cleanly
+    }
   }
-  try {
-    const raw = fs.readFileSync(SOCIAL_DB_PATH, "utf8");
-    const parsed = JSON.parse(raw) as Partial<SocialDatabase>;
-    return {
-      profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
-      activities: Array.isArray(parsed.activities) ? parsed.activities : [],
-      messages: Array.isArray(parsed.messages) ? parsed.messages : [],
-      friendships: Array.isArray(parsed.friendships) ? parsed.friendships : [],
-    };
-  } catch {
-    return createSeedSocialDb();
+
+  if (globalMemory.__shioriSocialDbCache) {
+    return globalMemory.__shioriSocialDbCache;
   }
+
+  const seed = createSeedSocialDb();
+  writeSocialDb(seed);
+  return seed;
 }
 
 export function writeSocialDb(db: SocialDatabase) {
-  ensureDir();
-  const tmp = `${SOCIAL_DB_PATH}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2), "utf8");
-  fs.renameSync(tmp, SOCIAL_DB_PATH);
+  globalMemory.__shioriSocialDbCache = db;
+  const filePath = getWritableSocialPath();
+  if (!filePath) return;
+  try {
+    const tmp = `${filePath}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2), "utf8");
+    fs.renameSync(tmp, filePath);
+  } catch {
+    // Never crash serverless handlers if filesystem is read-only; in-memory cache stays updated
+  }
+}
+
+/**
+ * Guarantees that an authenticated Supabase user has a row in `public.profiles`
+ * (retrying with a unique suffix on username collision) so `public_profiles`,
+ * `friendships`, `activity_events` and `direct_messages` never fail foreign-key checks.
+ */
+export async function ensureServerSupabaseProfile(
+  supabase: SupabaseClient,
+  actor: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatarUrl?: string | null;
+    accentColor?: string;
+  }
+): Promise<{ ok: boolean; username: string; error?: string }> {
+  try {
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .eq("id", actor.id)
+      .maybeSingle();
+
+    if (existing?.id) {
+      return { ok: true, username: String(existing.username || actor.username) };
+    }
+
+    const cleanBase =
+      actor.username
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 24) || `user_${actor.id.slice(0, 6)}`;
+
+    const baseRow = {
+      id: actor.id,
+      username: cleanBase,
+      display_name: actor.displayName || cleanBase,
+      avatar_url: actor.avatarUrl ?? null,
+      accent_color: actor.accentColor || "#E5484D",
+      is_activity_public: true,
+    };
+
+    const { error } = await supabase
+      .from("profiles")
+      .upsert(baseRow, { onConflict: "id" });
+
+    if (!error) {
+      return { ok: true, username: cleanBase };
+    }
+
+    // Retry with unique suffix if username collided with another member
+    const fallbackUsername = `${cleanBase.slice(0, 20)}_${actor.id.slice(0, 5)}`;
+    const retry = await supabase
+      .from("profiles")
+      .upsert({ ...baseRow, username: fallbackUsername }, { onConflict: "id" });
+
+    if (!retry.error) {
+      return { ok: true, username: fallbackUsername };
+    }
+
+    return { ok: false, username: cleanBase, error: retry.error.message };
+  } catch (err) {
+    return {
+      ok: false,
+      username: actor.username,
+      error: err instanceof Error ? err.message : "Erreur initialisation profil",
+    };
+  }
 }
 
 export function makeId(prefix: string): string {

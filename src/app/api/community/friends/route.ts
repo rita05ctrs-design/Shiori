@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  ensureServerSupabaseProfile,
   getAllLocalCommunityProfiles,
   makeId,
   readSocialDb,
@@ -86,6 +87,46 @@ function makeFallbackProfile(
   };
 }
 
+function formatSupabaseFriendError(err: { code?: string; message?: string }): {
+  status: number;
+  error: string;
+} {
+  const code = err.code ?? "";
+  const msg = (err.message ?? "").toLowerCase();
+
+  if (code === "42P01" || code === "PGRST205" || msg.includes("friendships")) {
+    return {
+      status: 503,
+      error:
+        "La table public.friendships n'est pas encore créée dans Supabase. Exécutez supabase/schema.sql dans votre SQL Editor.",
+    };
+  }
+  if (code === "23503") {
+    return {
+      status: 400,
+      error:
+        "Profil non encore synchronisé dans public.profiles. Rechargez la page puis réessayez.",
+    };
+  }
+  if (code === "42501" || msg.includes("row-level security")) {
+    return {
+      status: 403,
+      error:
+        "Permission refusée par Supabase (RLS) sur public.friendships. Vérifiez les politiques de schema.sql.",
+    };
+  }
+  if (code === "23505") {
+    return {
+      status: 409,
+      error: "Une relation ou demande d'ami existe déjà avec cet utilisateur.",
+    };
+  }
+  return {
+    status: 500,
+    error: err.message || "Erreur Supabase lors de la gestion de l'amitié.",
+  };
+}
+
 async function loadAllKnownProfiles(): Promise<{
   byId: Map<string, PublicUserProfile>;
   byUsername: Map<string, PublicUserProfile>;
@@ -99,7 +140,7 @@ async function loadAllKnownProfiles(): Promise<{
       const { data, error } = await supabase
         .from("public_profiles")
         .select("*")
-        .limit(120);
+        .limit(200);
       if (!error && Array.isArray(data)) {
         for (const row of data) {
           const p = mapSupabaseProfile(row);
@@ -109,7 +150,7 @@ async function loadAllKnownProfiles(): Promise<{
       }
     }
   } catch {
-    // ignore if Supabase view not migrated
+    // ignore if view not migrated
   }
 
   for (const p of getAllLocalCommunityProfiles()) {
@@ -119,6 +160,47 @@ async function loadAllKnownProfiles(): Promise<{
   }
 
   return { byId, byUsername };
+}
+
+async function findTargetProfile(
+  rawTargetId: string,
+  rawTargetUsername: string
+): Promise<PublicUserProfile | null> {
+  // 1) Direct targeted lookup in Supabase `public_profiles` (handles > 200 users cleanly!)
+  try {
+    const supabase = await getSupabaseServerClient();
+    if (supabase) {
+      if (rawTargetId && isUuid(rawTargetId)) {
+        const { data } = await supabase
+          .from("public_profiles")
+          .select("*")
+          .eq("id", rawTargetId)
+          .maybeSingle();
+        if (data) return mapSupabaseProfile(data);
+      }
+      if (rawTargetUsername) {
+        const { data } = await supabase
+          .from("public_profiles")
+          .select("*")
+          .ilike("username", rawTargetUsername)
+          .maybeSingle();
+        if (data) return mapSupabaseProfile(data);
+      }
+    }
+  } catch {
+    // fall through to local community store
+  }
+
+  // 2) Fallback lookup in local / community profiles
+  const local = getAllLocalCommunityProfiles();
+  const targetLower = rawTargetUsername.toLowerCase();
+  return (
+    local.find(
+      (p) =>
+        (rawTargetId && p.id === rawTargetId) ||
+        (targetLower && p.username.toLowerCase() === targetLower)
+    ) ?? null
+  );
 }
 
 function samePair(
@@ -149,6 +231,7 @@ export async function GET(request: NextRequest) {
   const actorUserLower = actor.username.toLowerCase();
   const { byId, byUsername } = await loadAllKnownProfiles();
   const records: FriendshipRecord[] = [];
+  let warning: string | undefined;
 
   // 1) Fetch Supabase friendships if signed in via Supabase
   if (actor.source === "supabase" && isUuid(actor.id)) {
@@ -161,7 +244,9 @@ export async function GET(request: NextRequest) {
           .or(`requester_id.eq.${actor.id},addressee_id.eq.${actor.id}`)
           .order("created_at", { ascending: false });
 
-        if (!error && Array.isArray(data)) {
+        if (error) {
+          warning = formatSupabaseFriendError(error).error;
+        } else if (Array.isArray(data)) {
           for (const row of data) {
             const reqProfile = byId.get(String(row.requester_id));
             const addProfile = byId.get(String(row.addressee_id));
@@ -182,7 +267,7 @@ export async function GET(request: NextRequest) {
         }
       }
     } catch {
-      // fall through gracefully if table not migrated yet
+      // keep going cleanly
     }
   }
 
@@ -247,6 +332,7 @@ export async function GET(request: NextRequest) {
     incomingRequests,
     outgoingRequests,
     friendships: records,
+    warning,
   });
 }
 
@@ -254,6 +340,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const action = String(body?.action || "add") as "add" | "accept" | "decline" | "remove";
+
+    if (!["add", "accept", "decline", "remove"].includes(action)) {
+      return NextResponse.json(
+        { ok: false, error: "Action d'amitié non reconnue." },
+        { status: 400 }
+      );
+    }
 
     const actor = await resolveServerActor({
       userId: body?.userId,
@@ -269,24 +362,24 @@ export async function POST(request: NextRequest) {
     const rawTargetId = String(body?.targetUserId || "").trim();
 
     if (!rawTargetUsername && !rawTargetId) {
-      return NextResponse.json({ error: "Membre cible manquant" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Veuillez renseigner un pseudo d'utilisateur valide." },
+        { status: 400 }
+      );
     }
 
-    const { byId, byUsername } = await loadAllKnownProfiles();
-    const targetProfile =
-      (rawTargetId ? byId.get(rawTargetId) : undefined) ??
-      (rawTargetUsername ? byUsername.get(rawTargetUsername.toLowerCase()) : undefined) ??
-      (rawTargetUsername
-        ? makeFallbackProfile(
-            rawTargetId || `user-${rawTargetUsername.toLowerCase()}`,
-            rawTargetUsername,
-            String(body?.targetDisplayName || rawTargetUsername),
-            body?.targetAvatarUrl ?? null
-          )
-        : null);
+    const targetProfile = await findTargetProfile(rawTargetId, rawTargetUsername);
 
     if (!targetProfile) {
-      return NextResponse.json({ error: "Utilisateur introuvable" }, { status: 404 });
+      const shownHandle = rawTargetUsername ? ` (@${rawTargetUsername})` : "";
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "USER_NOT_FOUND",
+          error: `Utilisateur introuvable sur Shiori${shownHandle}. Vérifiez le pseudo exact ou demandez-lui de se connecter une première fois.`,
+        },
+        { status: 404 }
+      );
     }
 
     const actorUserLower = actor.username.toLowerCase();
@@ -294,39 +387,182 @@ export async function POST(request: NextRequest) {
 
     if (targetProfile.id === actor.id || targetUserLower === actorUserLower) {
       return NextResponse.json(
-        { error: "Vous ne pouvez pas vous ajouter vous-même en ami." },
+        {
+          ok: false,
+          code: "SELF_FRIEND",
+          error: "Vous ne pouvez pas vous ajouter vous-même en ami.",
+        },
         { status: 400 }
       );
     }
 
+    const targetIsSupabaseUser = isUuid(targetProfile.id);
+    if (targetIsSupabaseUser && actor.source !== "supabase") {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "AUTH_REQUIRED",
+          error:
+            "Connectez-vous à votre compte Shiori pour ajouter un membre inscrit en ami.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const canSyncSupabase =
+      actor.source === "supabase" && isUuid(actor.id) && targetIsSupabaseUser;
+
+    // 1) SUPABASE CLOUD FRIENDSHIPS (Primary source of truth for registered Supabase users)
+    if (canSyncSupabase) {
+      const supabase = await getSupabaseServerClient();
+      if (!supabase) {
+        return NextResponse.json(
+          { ok: false, error: "Connexion Supabase indisponible côté serveur." },
+          { status: 503 }
+        );
+      }
+
+      // Ensure actor's own profile row exists in `public.profiles` before FK insert!
+      const ensured = await ensureServerSupabaseProfile(supabase, actor);
+      if (!ensured.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              ensured.error ||
+              "Impossible d'initialiser votre profil dans public.profiles.",
+          },
+          { status: 500 }
+        );
+      }
+
+      if (action === "remove" || action === "decline") {
+        const { error } = await supabase
+          .from("friendships")
+          .delete()
+          .or(
+            `and(requester_id.eq.${actor.id},addressee_id.eq.${targetProfile.id}),and(requester_id.eq.${targetProfile.id},addressee_id.eq.${actor.id})`
+          );
+        if (error) {
+          const mapped = formatSupabaseFriendError(error);
+          return NextResponse.json({ ok: false, error: mapped.error }, { status: mapped.status });
+        }
+        return NextResponse.json({ ok: true, status: "REMOVED" });
+      }
+
+      if (action === "accept") {
+        const { data: updated, error } = await supabase
+          .from("friendships")
+          .update({ status: "ACCEPTED", updated_at: new Date().toISOString() })
+          .eq("requester_id", targetProfile.id)
+          .eq("addressee_id", actor.id)
+          .select("id")
+          .maybeSingle();
+
+        if (error) {
+          const mapped = formatSupabaseFriendError(error);
+          return NextResponse.json({ ok: false, error: mapped.error }, { status: mapped.status });
+        }
+        if (!updated) {
+          return NextResponse.json(
+            { ok: false, error: "Aucune demande d'ami en attente de cet utilisateur." },
+            { status: 404 }
+          );
+        }
+        return NextResponse.json({ ok: true, status: "ACCEPTED" });
+      }
+
+      // action === "add" — Check both directions first!
+      const { data: existingRows, error: checkErr } = await supabase
+        .from("friendships")
+        .select("*")
+        .or(
+          `and(requester_id.eq.${actor.id},addressee_id.eq.${targetProfile.id}),and(requester_id.eq.${targetProfile.id},addressee_id.eq.${actor.id})`
+        );
+
+      if (checkErr) {
+        const mapped = formatSupabaseFriendError(checkErr);
+        return NextResponse.json({ ok: false, error: mapped.error }, { status: mapped.status });
+      }
+
+      const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+      if (existing) {
+        if (existing.status === "ACCEPTED") {
+          return NextResponse.json({
+            ok: true,
+            status: "ACCEPTED",
+            alreadyFriends: true,
+            message: `Vous êtes déjà ami avec ${targetProfile.displayName} (@${targetProfile.username}).`,
+          });
+        }
+        // Reverse incoming request -> auto-accept!
+        if (existing.addressee_id === actor.id) {
+          const { error: accErr } = await supabase
+            .from("friendships")
+            .update({ status: "ACCEPTED", updated_at: new Date().toISOString() })
+            .eq("id", existing.id);
+          if (accErr) {
+            const mapped = formatSupabaseFriendError(accErr);
+            return NextResponse.json({ ok: false, error: mapped.error }, { status: mapped.status });
+          }
+          return NextResponse.json({
+            ok: true,
+            status: "ACCEPTED",
+            autoAccepted: true,
+          });
+        }
+        return NextResponse.json({
+          ok: true,
+          status: "PENDING",
+          alreadyPending: true,
+          message: `Une demande d'ami est déjà en attente pour @${targetProfile.username}.`,
+        });
+      }
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("friendships")
+        .insert({
+          requester_id: actor.id,
+          addressee_id: targetProfile.id,
+          status: "PENDING",
+        })
+        .select("id, created_at")
+        .single();
+
+      if (insErr) {
+        const mapped = formatSupabaseFriendError(insErr);
+        return NextResponse.json({ ok: false, error: mapped.error }, { status: mapped.status });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        status: "PENDING",
+        friendship: {
+          id: String(inserted.id),
+          requesterId: actor.id,
+          requesterUsername: ensured.username,
+          requesterDisplayName: actor.displayName,
+          requesterAvatarUrl: actor.avatarUrl,
+          addresseeId: targetProfile.id,
+          addresseeUsername: targetProfile.username,
+          addresseeDisplayName: targetProfile.displayName,
+          addresseeAvatarUrl: targetProfile.avatarUrl,
+          status: "PENDING",
+          createdAt: inserted.created_at ?? new Date().toISOString(),
+        },
+      });
+    }
+
+    // 2) LOCAL / COMMUNITY SHOWCASE FRIENDSHIPS
     const db = readSocialDb();
     const existingIdx = db.friendships.findIndex((f) =>
       samePair(f, actor.id, actorUserLower, targetProfile.id, targetUserLower)
     );
 
-    // Sync helper for Supabase `public.friendships` when both IDs are real UUIDs
-    const canSyncSupabase =
-      actor.source === "supabase" && isUuid(actor.id) && isUuid(targetProfile.id);
-
     if (action === "remove" || action === "decline") {
       if (existingIdx !== -1) {
         db.friendships.splice(existingIdx, 1);
         writeSocialDb(db);
-      }
-      if (canSyncSupabase) {
-        try {
-          const supabase = await getSupabaseServerClient();
-          if (supabase) {
-            await supabase
-              .from("friendships")
-              .delete()
-              .or(
-                `and(requester_id.eq.${actor.id},addressee_id.eq.${targetProfile.id}),and(requester_id.eq.${targetProfile.id},addressee_id.eq.${actor.id})`
-              );
-          }
-        } catch {
-          // non-fatal
-        }
       }
       return NextResponse.json({ ok: true, status: "REMOVED" });
     }
@@ -351,49 +587,17 @@ export async function POST(request: NextRequest) {
         });
         writeSocialDb(db);
       }
-
-      if (canSyncSupabase) {
-        try {
-          const supabase = await getSupabaseServerClient();
-          if (supabase) {
-            await supabase
-              .from("friendships")
-              .update({ status: "ACCEPTED", updated_at: new Date().toISOString() })
-              .eq("requester_id", targetProfile.id)
-              .eq("addressee_id", actor.id);
-          }
-        } catch {
-          // non-fatal
-        }
-      }
-
       return NextResponse.json({ ok: true, status: "ACCEPTED" });
     }
 
-    // action === "add"
     if (existingIdx !== -1) {
       const existing = db.friendships[existingIdx];
-      // If the other member already sent a request to actor -> auto-accept!
       const isIncoming =
         existing.addresseeId === actor.id ||
         existing.addresseeUsername.toLowerCase() === actorUserLower;
       if (isIncoming && existing.status === "PENDING") {
         existing.status = "ACCEPTED";
         writeSocialDb(db);
-        if (canSyncSupabase) {
-          try {
-            const supabase = await getSupabaseServerClient();
-            if (supabase) {
-              await supabase
-                .from("friendships")
-                .update({ status: "ACCEPTED", updated_at: new Date().toISOString() })
-                .eq("requester_id", targetProfile.id)
-                .eq("addressee_id", actor.id);
-            }
-          } catch {
-            // non-fatal
-          }
-        }
         return NextResponse.json({
           ok: true,
           status: "ACCEPTED",
@@ -401,45 +605,20 @@ export async function POST(request: NextRequest) {
           friendship: existing,
         });
       }
-
       return NextResponse.json({
         ok: true,
         status: existing.status,
+        alreadyFriends: existing.status === "ACCEPTED",
+        alreadyPending: existing.status === "PENDING",
         friendship: existing,
       });
     }
 
-    // Showcase community profiles accept right away so users can immediately test & enjoy Friends;
-    // real registered/Supabase accounts receive a genuine PENDING invitation!
     const isCommunityShowcase = targetProfile.id.startsWith("community-");
     const status = isCommunityShowcase ? "ACCEPTED" : "PENDING";
 
-    let createdId = makeId("fr");
-    if (canSyncSupabase) {
-      try {
-        const supabase = await getSupabaseServerClient();
-        if (supabase) {
-          const { data: inserted } = await supabase
-            .from("friendships")
-            .upsert(
-              {
-                requester_id: actor.id,
-                addressee_id: targetProfile.id,
-                status,
-              },
-              { onConflict: "requester_id,addressee_id" }
-            )
-            .select("id")
-            .single();
-          if (inserted?.id) createdId = String(inserted.id);
-        }
-      } catch {
-        // graceful fallback to local store
-      }
-    }
-
     const record: FriendshipRecord = {
-      id: createdId,
+      id: makeId("fr"),
       requesterId: actor.id,
       requesterUsername: actor.username,
       requesterDisplayName: actor.displayName,
@@ -461,9 +640,16 @@ export async function POST(request: NextRequest) {
       autoAccepted: isCommunityShowcase,
       friendship: record,
     });
-  } catch {
+  } catch (err) {
+    console.error("[/api/community/friends] POST error:", err);
     return NextResponse.json(
-      { error: "Erreur lors de la mise à jour de l'amitié" },
+      {
+        ok: false,
+        error:
+          err instanceof Error
+            ? `Erreur lors de la mise à jour de l'amitié : ${err.message}`
+            : "Impossible de traiter la demande d'ami pour le moment.",
+      },
       { status: 500 }
     );
   }

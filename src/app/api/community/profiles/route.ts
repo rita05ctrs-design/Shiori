@@ -140,40 +140,67 @@ export async function POST(request: NextRequest) {
       source: actor.source === "supabase" ? "supabase" : "local",
     };
 
-    // Always persist in local community store for immediate discovery
-    upsertLocalCommunityProfile(publicProfile);
-
-    // Sync to Supabase `profiles` if authenticated via Supabase
+    // 1) Sync to Supabase `profiles` FIRST if authenticated via Supabase (never blocked by local FS!)
     let savedToSupabase = false;
+    let supabaseError: string | undefined;
     if (actor.source === "supabase") {
       try {
         const supabase = await getSupabaseServerClient();
         if (supabase) {
-          const { error } = await supabase.from("profiles").upsert(
-            {
-              id: actor.id,
-              username: publicProfile.username,
-              display_name: publicProfile.displayName,
-              avatar_url: publicProfile.avatarUrl,
-              bio: publicProfile.bio,
-              accent_color: publicProfile.accentColor,
-              is_activity_public: publicProfile.isActivityPublic,
-              favorite_staff: publicProfile.favoriteStaff,
-              favorite_media: publicProfile.favoriteMedia,
-              stats_summary: publicProfile.stats,
-              unlocked_badges: publicProfile.unlockedBadges ?? [],
-              pinned_badges: publicProfile.pinnedBadges ?? [],
-            },
-            { onConflict: "id" }
-          );
-          if (!error) savedToSupabase = true;
+          const baseRow = {
+            id: actor.id,
+            username: publicProfile.username,
+            display_name: publicProfile.displayName,
+            avatar_url: publicProfile.avatarUrl,
+            bio: publicProfile.bio,
+            accent_color: publicProfile.accentColor,
+            is_activity_public: publicProfile.isActivityPublic,
+            favorite_staff: publicProfile.favoriteStaff,
+            favorite_media: publicProfile.favoriteMedia,
+            stats_summary: publicProfile.stats,
+            unlocked_badges: publicProfile.unlockedBadges ?? [],
+            pinned_badges: publicProfile.pinnedBadges ?? [],
+          };
+          const { error } = await supabase
+            .from("profiles")
+            .upsert(baseRow, { onConflict: "id" });
+
+          if (!error) {
+            savedToSupabase = true;
+          } else if (error.code === "23505") {
+            // Username collision: retry with unique short suffix
+            const uniqueUsername = `${publicProfile.username.slice(0, 22)}_${actor.id.slice(0, 5)}`;
+            const retry = await supabase
+              .from("profiles")
+              .upsert({ ...baseRow, username: uniqueUsername }, { onConflict: "id" });
+            if (!retry.error) {
+              savedToSupabase = true;
+              publicProfile.username = uniqueUsername;
+            } else {
+              supabaseError = retry.error.message;
+            }
+          } else {
+            supabaseError = error.message;
+          }
         }
-      } catch {
-        // non-fatal if new columns haven't been migrated yet
+      } catch (err) {
+        supabaseError = err instanceof Error ? err.message : "Erreur Supabase profiles";
       }
     }
 
-    return NextResponse.json({ ok: true, profile: publicProfile, savedToSupabase });
+    // 2) Best-effort local store mirror (serverless-safe, never crashes on read-only FS)
+    try {
+      upsertLocalCommunityProfile(publicProfile);
+    } catch {
+      // non-fatal
+    }
+
+    return NextResponse.json({
+      ok: true,
+      profile: publicProfile,
+      savedToSupabase,
+      supabaseError,
+    });
   } catch {
     return NextResponse.json({ ok: false, error: "Payload profil invalide" }, { status: 400 });
   }

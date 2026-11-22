@@ -2,7 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "./client";
 import type {
   AniListUserStatsSnapshot,
+  BadgeRarity,
+  CommunityActivityKind,
+  FavoriteVoiceActor,
   LibraryEntry,
+  MediaType,
+  PublicProfileMediaSummary,
+  PublicProfileStatsSummary,
   UnlockedBadgeRecord,
 } from "@/types/media";
 
@@ -35,56 +41,245 @@ function entryToRow(userId: string, entry: LibraryEntry) {
   };
 }
 
+export interface CloudProfileSnapshot {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  bio: string;
+  accentColor: string;
+  isActivityPublic: boolean;
+  favoriteStaff: FavoriteVoiceActor[];
+  unlockedBadges: UnlockedBadgeRecord[];
+  pinnedBadges: string[];
+  joinedAt: string;
+}
+
 /**
- * Ensures the signed-in user has a row in `public.profiles` so foreign keys on
- * `library_entries` and `user_anilist_stats` never fail.
+ * Ensures the signed-in user has a row in `public.profiles` (and therefore in `public.public_profiles`)
+ * immediately on sign-in, and returns their canonical cloud profile row.
  */
 export async function ensureSupabaseProfile(
   supabase: SupabaseClient,
   user: { id: string; email?: string; user_metadata?: Record<string, unknown> }
-) {
+): Promise<{ ok: boolean; profile?: CloudProfileSnapshot; error?: string }> {
   const rawName =
     (user.user_metadata?.display_name as string) ||
     (user.user_metadata?.full_name as string) ||
+    (user.user_metadata?.name as string) ||
     user.email?.split("@")[0] ||
     "Membre Shiori";
   const baseUsername =
-    (user.user_metadata?.username as string) ||
-    rawName.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") ||
-    `user_${user.id.slice(0, 6)}`;
+    ((user.user_metadata?.username as string) || rawName)
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 24) || `user_${user.id.slice(0, 6)}`;
+
+  const selectCols =
+    "id, username, display_name, avatar_url, bio, accent_color, is_activity_public, favorite_staff, unlocked_badges, pinned_badges, created_at";
 
   const { data: existing } = await supabase
     .from("profiles")
-    .select("id")
+    .select(selectCols)
     .eq("id", user.id)
     .maybeSingle();
 
-  if (existing) return { ok: true };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapRow = (row: any): CloudProfileSnapshot => ({
+    id: String(row.id),
+    username: String(row.username || baseUsername),
+    displayName: String(row.display_name || rawName),
+    avatarUrl: row.avatar_url ?? null,
+    bio: String(row.bio ?? ""),
+    accentColor: String(row.accent_color || "#E5484D"),
+    isActivityPublic: row.is_activity_public !== false,
+    favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
+    unlockedBadges: Array.isArray(row.unlocked_badges) ? row.unlocked_badges : [],
+    pinnedBadges: Array.isArray(row.pinned_badges) ? row.pinned_badges.slice(0, 3) : [],
+    joinedAt: String(row.created_at || new Date().toISOString()),
+  });
 
-  const { error } = await supabase.from("profiles").upsert(
-    {
-      id: user.id,
-      username: baseUsername,
-      display_name: rawName,
-      avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
-    },
-    { onConflict: "id" }
-  );
-
-  if (error) {
-    // Retry with unique suffix if username collided
-    const retry = await supabase.from("profiles").upsert(
-      {
-        id: user.id,
-        username: `${baseUsername}_${user.id.slice(0, 5)}`,
-        display_name: rawName,
-        avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
-      },
-      { onConflict: "id" }
-    );
-    return { ok: !retry.error, error: retry.error?.message };
+  if (existing) {
+    return { ok: true, profile: mapRow(existing) };
   }
-  return { ok: true };
+
+  const insertPayload = {
+    id: user.id,
+    username: baseUsername,
+    display_name: rawName,
+    avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
+    accent_color: "#E5484D",
+    is_activity_public: true,
+  };
+
+  const { data: created, error } = await supabase
+    .from("profiles")
+    .upsert(insertPayload, { onConflict: "id" })
+    .select(selectCols)
+    .maybeSingle();
+
+  if (!error) {
+    return { ok: true, profile: created ? mapRow(created) : undefined };
+  }
+
+  // Retry with unique suffix if username collided with another member
+  const retryUsername = `${baseUsername.slice(0, 20)}_${user.id.slice(0, 5)}`;
+  const retry = await supabase
+    .from("profiles")
+    .upsert({ ...insertPayload, username: retryUsername }, { onConflict: "id" })
+    .select(selectCols)
+    .maybeSingle();
+
+  return {
+    ok: !retry.error,
+    profile: retry.data ? mapRow(retry.data) : undefined,
+    error: retry.error?.message,
+  };
+}
+
+/**
+ * Directly syncs the signed-in user's full public profile snapshot into `public.profiles`
+ * using the browser's authenticated Supabase session JWT.
+ */
+export async function syncPublicProfileToCloud(
+  userId: string,
+  payload: {
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+    bio: string;
+    accentColor: string;
+    isActivityPublic: boolean;
+    favoriteStaff: FavoriteVoiceActor[];
+    favoriteMedia: PublicProfileMediaSummary[];
+    stats: PublicProfileStatsSummary;
+    unlockedBadges: UnlockedBadgeRecord[];
+    pinnedBadges: string[];
+  }
+): Promise<{ synced: boolean; error?: string }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { synced: false };
+
+  const cleanUsername =
+    payload.username
+      .trim()
+      .replace(/^@+/, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 30) || `user_${userId.slice(0, 6)}`;
+
+  const row = {
+    id: userId,
+    username: cleanUsername,
+    display_name: payload.displayName.trim() || cleanUsername,
+    avatar_url: payload.avatarUrl,
+    bio: payload.bio ?? "",
+    accent_color: payload.accentColor || "#E5484D",
+    is_activity_public: payload.isActivityPublic,
+    favorite_staff: payload.favoriteStaff.slice(0, 30),
+    favorite_media: payload.favoriteMedia.slice(0, 40),
+    stats_summary: payload.stats,
+    unlocked_badges: payload.unlockedBadges.slice(0, 60),
+    pinned_badges: payload.pinnedBadges.slice(0, 3),
+  };
+
+  try {
+    const { error } = await supabase.from("profiles").upsert(row, { onConflict: "id" });
+    if (!error) return { synced: true };
+
+    // Handle username unique conflict gracefully by keeping existing username or suffixing
+    if (error.code === "23505") {
+      const retry = await supabase
+        .from("profiles")
+        .upsert(
+          { ...row, username: `${cleanUsername.slice(0, 22)}_${userId.slice(0, 5)}` },
+          { onConflict: "id" }
+        );
+      return { synced: !retry.error, error: retry.error?.message };
+    }
+    return { synced: false, error: error.message };
+  } catch (err) {
+    return { synced: false, error: err instanceof Error ? err.message : "Erreur sync profil" };
+  }
+}
+
+export interface ActivityBackfillItem {
+  kind: CommunityActivityKind;
+  mediaId: number;
+  mediaTitle: string;
+  mediaType: MediaType | "STAFF" | "BADGE";
+  coverImage: string | null;
+  action: string;
+  score?: number | null;
+  badgeId?: string;
+  badgeRarity?: BadgeRarity;
+}
+
+/**
+ * Ensures existing library highlights (favorites, scores, completed series, favorite Seiyuu)
+ * are represented in Supabase `public.activity_events` when the user's activity is public.
+ * Idempotent: skips any (event_kind, media_id) already stored for this user.
+ */
+export async function backfillCloudActivities(
+  userId: string,
+  actor: {
+    username: string;
+    displayName: string;
+    avatarUrl: string | null;
+    accentColor: string;
+    pinnedBadges: string[];
+  },
+  events: ActivityBackfillItem[]
+): Promise<{ inserted: number }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase || events.length === 0) return { inserted: 0 };
+
+  try {
+    const { data: existingRows, error: selErr } = await supabase
+      .from("activity_events")
+      .select("event_kind, media_id")
+      .eq("user_id", userId)
+      .limit(100);
+
+    if (selErr) return { inserted: 0 };
+
+    const existingKeys = new Set<string>(
+      (existingRows ?? []).map((r) => `${r.event_kind}:${r.media_id}`)
+    );
+
+    const toInsert = events
+      .filter((e) => !existingKeys.has(`${e.kind}:${e.mediaId}`))
+      .slice(0, 8)
+      .map((e) => ({
+        user_id: userId,
+        media_id: e.mediaId,
+        media_title: e.mediaTitle,
+        media_type: e.mediaType === "MANGA" ? "MANGA" : "ANIME",
+        cover_image: e.coverImage ?? null,
+        action: e.action,
+        event_kind: e.kind,
+        is_public: true,
+        actor_username: actor.username,
+        actor_display_name: actor.displayName,
+        actor_avatar_url: actor.avatarUrl,
+        metadata: {
+          isStaff: e.mediaType === "STAFF" || e.kind === "FAVORITE_STAFF",
+          isBadge: e.mediaType === "BADGE" || e.kind === "BADGE_UNLOCKED",
+          badgeId: e.badgeId,
+          badgeRarity: e.badgeRarity,
+          pinnedBadges: actor.pinnedBadges.slice(0, 3),
+          score: typeof e.score === "number" ? e.score : null,
+          accentColor: actor.accentColor,
+        },
+      }));
+
+    if (toInsert.length === 0) return { inserted: 0 };
+
+    const { error: insErr } = await supabase.from("activity_events").insert(toInsert);
+    return { inserted: insErr ? 0 : toInsert.length };
+  } catch {
+    return { inserted: 0 };
+  }
 }
 
 /**

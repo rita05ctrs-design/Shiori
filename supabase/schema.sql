@@ -98,8 +98,12 @@ create policy "Users can view their own profile"
   on public.profiles for select using (auth.uid() = id);
 
 -- Vue publique sécurisée des profils (sans jamais exposer anilist_access_token ni email)
+-- security_invoker = false garantit que les visiteurs et membres connectés peuvent découvrir
+-- les profils publics (sans jamais lire anilist_access_token ni email).
 drop view if exists public.public_profiles;
-create view public.public_profiles as
+create view public.public_profiles
+  with (security_invoker = false)
+as
 select
   id,
   username,
@@ -545,17 +549,61 @@ create trigger set_anilist_stats_updated_at
   before update on public.user_anilist_stats
   for each row execute function public.handle_updated_at();
 
+drop trigger if exists set_friendships_updated_at on public.friendships;
+create trigger set_friendships_updated_at
+  before update on public.friendships
+  for each row execute function public.handle_updated_at();
+
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  v_display text;
+  v_base_user text;
 begin
-  insert into public.profiles (id, username, display_name, avatar_url)
-  values (
-    new.id,
-    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data->>'display_name', split_part(new.email, '@', 1)),
-    new.raw_user_meta_data->>'avatar_url'
-  )
-  on conflict (id) do nothing;
+  v_display := coalesce(
+    nullif(trim(new.raw_user_meta_data->>'display_name'), ''),
+    nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+    nullif(trim(new.raw_user_meta_data->>'name'), ''),
+    nullif(split_part(coalesce(new.email, ''), '@', 1), ''),
+    'Membre Shiori'
+  );
+
+  v_base_user := lower(
+    regexp_replace(
+      coalesce(
+        nullif(trim(new.raw_user_meta_data->>'username'), ''),
+        v_display
+      ),
+      '[^a-zA-Z0-9_]+',
+      '_',
+      'g'
+    )
+  );
+  v_base_user := trim(both '_' from v_base_user);
+  if v_base_user = '' then
+    v_base_user := 'user_' || left(new.id::text, 6);
+  end if;
+
+  begin
+    insert into public.profiles (id, username, display_name, avatar_url)
+    values (
+      new.id,
+      v_base_user,
+      v_display,
+      new.raw_user_meta_data->>'avatar_url'
+    )
+    on conflict (id) do nothing;
+  exception when unique_violation then
+    insert into public.profiles (id, username, display_name, avatar_url)
+    values (
+      new.id,
+      left(v_base_user, 22) || '_' || left(new.id::text, 5),
+      v_display,
+      new.raw_user_meta_data->>'avatar_url'
+    )
+    on conflict (id) do nothing;
+  end;
+
   return new;
 end;
 $$ language plpgsql security definer;
@@ -564,3 +612,62 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Rattrapage idempotent : crée une ligne public.profiles pour tous les comptes
+-- auth.users déjà inscrits qui n'avaient pas encore de profil public.
+do $$
+declare
+  u record;
+  v_display text;
+  v_base_user text;
+begin
+  for u in
+    select au.id, au.email, au.raw_user_meta_data
+    from auth.users au
+    left join public.profiles p on p.id = au.id
+    where p.id is null
+  loop
+    v_display := coalesce(
+      nullif(trim(u.raw_user_meta_data->>'display_name'), ''),
+      nullif(trim(u.raw_user_meta_data->>'full_name'), ''),
+      nullif(trim(u.raw_user_meta_data->>'name'), ''),
+      nullif(split_part(coalesce(u.email, ''), '@', 1), ''),
+      'Membre Shiori'
+    );
+    v_base_user := lower(
+      regexp_replace(
+        coalesce(
+          nullif(trim(u.raw_user_meta_data->>'username'), ''),
+          v_display
+        ),
+        '[^a-zA-Z0-9_]+',
+        '_',
+        'g'
+      )
+    );
+    v_base_user := trim(both '_' from v_base_user);
+    if v_base_user = '' then
+      v_base_user := 'user_' || left(u.id::text, 6);
+    end if;
+
+    begin
+      insert into public.profiles (id, username, display_name, avatar_url)
+      values (
+        u.id,
+        v_base_user,
+        v_display,
+        u.raw_user_meta_data->>'avatar_url'
+      )
+      on conflict (id) do nothing;
+    exception when unique_violation then
+      insert into public.profiles (id, username, display_name, avatar_url)
+      values (
+        u.id,
+        left(v_base_user, 22) || '_' || left(u.id::text, 5),
+        v_display,
+        u.raw_user_meta_data->>'avatar_url'
+      )
+      on conflict (id) do nothing;
+    end;
+  end loop;
+end $$;

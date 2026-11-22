@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { ensureServerSupabaseProfile } from "@/lib/server/social-store";
 
 /**
  * Server-side OAuth PKCE callback for Supabase (Google OAuth, Magic Links, etc.).
@@ -16,8 +17,25 @@ export async function GET(request: NextRequest) {
   if (code) {
     const supabase = await getSupabaseServerClient();
     if (supabase) {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
       if (!error) {
+        const user = data?.user;
+        if (user) {
+          const displayName =
+            (user.user_metadata?.display_name as string) ||
+            (user.user_metadata?.full_name as string) ||
+            (user.user_metadata?.name as string) ||
+            user.email?.split("@")[0] ||
+            "Membre Shiori";
+          const username =
+            (user.user_metadata?.username as string) || displayName;
+          await ensureServerSupabaseProfile(supabase, {
+            id: user.id,
+            username,
+            displayName,
+            avatarUrl: (user.user_metadata?.avatar_url as string) ?? null,
+          });
+        }
         return NextResponse.redirect(`${origin}${nextPath}`);
       }
     }

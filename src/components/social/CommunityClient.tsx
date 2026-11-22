@@ -58,8 +58,13 @@ export function CommunityClient() {
   const [memberQuery, setMemberQuery] = useState("");
   const [directAddUsername, setDirectAddUsername] = useState("");
   const [addingDirect, setAddingDirect] = useState(false);
+  const [friendFeedback, setFriendFeedback] = useState<{
+    type: "error" | "success";
+    text: string;
+  } | null>(null);
   const [activities, setActivities] = useState<CommunityActivityItem[]>([]);
   const [profiles, setProfiles] = useState<PublicUserProfile[]>([]);
+  const [totalMembersCount, setTotalMembersCount] = useState<number>(0);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [realtimeLive, setRealtimeLive] = useState(false);
@@ -89,6 +94,9 @@ export function CommunityClient() {
         const data = await res.json();
         if (Array.isArray(data?.profiles)) {
           setProfiles(data.profiles);
+          if (!q.trim()) {
+            setTotalMembersCount(data.profiles.length);
+          }
         }
       }
     } finally {
@@ -98,14 +106,24 @@ export function CommunityClient() {
 
   useEffect(() => {
     void loadActivities();
-  }, [loadActivities]);
+  }, [loadActivities, profile.id, profile.mode, profile.isActivityPublic]);
 
   useEffect(() => {
     const t = setTimeout(() => {
       void loadProfiles(memberQuery);
     }, memberQuery ? 220 : 0);
     return () => clearTimeout(t);
-  }, [memberQuery, loadProfiles]);
+  }, [memberQuery, loadProfiles, profile.id, profile.mode, profile.username]);
+
+  // Also refresh once shortly after mount so freshly backfilled profile & activity appear live
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void loadProfiles(memberQuery);
+      void loadActivities();
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id, profile.mode]);
 
   // Subscribe to Supabase Realtime for live activity_events, activity_likes, activity_comments!
   useEffect(() => {
@@ -240,7 +258,7 @@ export function CommunityClient() {
             )}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Membres ({profiles.length})</span>
+            <span>Membres ({totalMembersCount || profiles.length})</span>
           </button>
         </div>
 
@@ -523,6 +541,7 @@ export function CommunityClient() {
                   const cleaned = directAddUsername.trim().replace(/^@+/, "");
                   if (!cleaned || addingDirect) return;
                   setAddingDirect(true);
+                  setFriendFeedback(null);
                   try {
                     const match = profiles.find(
                       (p) => p.username.toLowerCase() === cleaned.toLowerCase()
@@ -533,7 +552,15 @@ export function CommunityClient() {
                       displayName: match?.displayName || cleaned,
                       avatarUrl: match?.avatarUrl ?? null,
                     });
-                    if (res.ok) setDirectAddUsername("");
+                    if (res.ok) {
+                      setDirectAddUsername("");
+                      setMemberQuery("");
+                      if (res.message) {
+                        setFriendFeedback({ type: "success", text: res.message });
+                      }
+                    } else if (res.error) {
+                      setFriendFeedback({ type: "error", text: res.error });
+                    }
                   } finally {
                     setAddingDirect(false);
                   }
@@ -546,6 +573,7 @@ export function CommunityClient() {
                   onChange={(e) => {
                     setDirectAddUsername(e.target.value);
                     setMemberQuery(e.target.value);
+                    if (friendFeedback) setFriendFeedback(null);
                   }}
                   placeholder="@pseudo de votre ami..."
                   className="flex-1 md:w-64 h-10 px-3.5 rounded-xl bg-obsidian/85 border border-white/[0.1] text-xs font-mono text-white placeholder:text-[#656A7E] focus:outline-none focus:border-emerald-400"
@@ -564,6 +592,27 @@ export function CommunityClient() {
                 </button>
               </form>
             </div>
+
+            {friendFeedback && (
+              <div
+                role="status"
+                className={cn(
+                  "rounded-xl px-3.5 py-2.5 text-xs border flex items-center justify-between gap-3",
+                  friendFeedback.type === "error"
+                    ? "bg-rose-500/12 border-rose-400/35 text-rose-200"
+                    : "bg-emerald-500/12 border-emerald-400/35 text-emerald-200"
+                )}
+              >
+                <span>{friendFeedback.text}</span>
+                <button
+                  type="button"
+                  onClick={() => setFriendFeedback(null)}
+                  className="text-[11px] opacity-75 hover:opacity-100 cursor-pointer shrink-0"
+                >
+                  Fermer
+                </button>
+              </div>
+            )}
 
             {/* Live filtered search results while typing */}
             {memberQuery.trim().length > 0 && (

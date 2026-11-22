@@ -20,14 +20,18 @@ import {
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
 import {
+  backfillCloudActivities,
+  ensureSupabaseProfile,
   fetchCloudAniListStats,
   fetchCloudLibrary,
   fetchCloudUserBadges,
   removeEntryFromCloud,
   syncAniListImportBrowser,
   syncEntryToCloud,
+  syncPublicProfileToCloud,
   syncUserBadgesToCloud,
   uploadProfileAvatar,
+  type ActivityBackfillItem,
 } from "@/lib/supabase/sync";
 import {
   evaluateAllBadges,
@@ -176,7 +180,7 @@ interface ShioriContextValue {
     username: string;
     displayName?: string;
     avatarUrl?: string | null;
-  }) => Promise<{ ok: boolean; status?: string }>;
+  }) => Promise<{ ok: boolean; status?: string; error?: string; message?: string }>;
   acceptFriend: (target: { id?: string; username: string; displayName?: string }) => Promise<void>;
   removeFriend: (target: { id?: string; username: string; displayName?: string }) => Promise<void>;
   unreadMessagesCount: number;
@@ -280,6 +284,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   const hasStoredBadgesRef = useRef(false);
   const initialBadgeEvalDoneRef = useRef(false);
   const publishedRareBadgesRef = useRef<Set<string>>(new Set());
+  const backfilledActivityKeyRef = useRef<string | null>(null);
   const [ambiance, setAmbiance] = useState<AmbianceSettings>(DEFAULT_AMBIANCE);
   const [theme, setTheme] = useState<ThemeSettings>(DEFAULT_THEME);
 
@@ -400,24 +405,50 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         email?: string;
         user_metadata?: Record<string, unknown>;
       }) => {
-        const name =
+        const fallbackName =
           (user.user_metadata?.display_name as string) ||
           (user.user_metadata?.full_name as string) ||
           (user.user_metadata?.name as string) ||
           user.email?.split("@")[0] ||
           "Membre Shiori";
-        const username =
-          (user.user_metadata?.username as string) ||
-          name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+        const fallbackUsername =
+          ((user.user_metadata?.username as string) || fallbackName)
+            .toLowerCase()
+            .replace(/[^a-z0-9_]+/g, "_")
+            .replace(/^_+|_+$/g, "") || `user_${user.id.slice(0, 6)}`;
+
+        // 1) Guarantee user immediately has a row in `public.profiles` (& `public_profiles`)!
+        const ensured = await ensureSupabaseProfile(supabase, user);
+        const cloudProf = ensured.profile;
+
+        const finalDisplayName = cloudProf?.displayName || fallbackName;
+        const finalUsername = cloudProf?.username || fallbackUsername;
+
         setProfile((prev) => ({
           ...prev,
           id: user.id,
           email: user.email ?? prev.email,
-          displayName: name,
-          username,
-          avatarInitials: name.slice(0, 2).toUpperCase(),
+          displayName: finalDisplayName,
+          username: finalUsername,
+          bio: cloudProf?.bio !== undefined ? cloudProf.bio : prev.bio,
+          avatarUrl:
+            cloudProf?.avatarUrl !== undefined
+              ? cloudProf.avatarUrl
+              : (user.user_metadata?.avatar_url as string) ?? prev.avatarUrl ?? null,
+          accentColor: cloudProf?.accentColor || prev.accentColor,
+          isActivityPublic:
+            cloudProf?.isActivityPublic !== undefined
+              ? cloudProf.isActivityPublic
+              : prev.isActivityPublic ?? true,
+          joinedAt: cloudProf?.joinedAt || prev.joinedAt,
+          avatarInitials: finalDisplayName.slice(0, 2).toUpperCase(),
           mode: "supabase",
         }));
+
+        if (cloudProf?.favoriteStaff && cloudProf.favoriteStaff.length > 0) {
+          setFavoriteStaff(cloudProf.favoriteStaff);
+        }
+
         const [cloudLib, cloudStats, cloudBadges] = await Promise.all([
           fetchCloudLibrary(user.id),
           fetchCloudAniListStats(user.id),
@@ -660,6 +691,45 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       const meanScore = scored.length
         ? Math.round((scored.reduce((a, b) => a + (b.score ?? 0), 0) / scored.length) * 10) / 10
         : null;
+      const favoriteMediaPayload = orderedFavorites.slice(0, 40).map((e) => ({
+        mediaId: e.mediaId,
+        type: e.type,
+        title: e.title,
+        coverImage: e.coverImage,
+        score: e.score,
+      }));
+      const statsPayload = {
+        totalEntries: library.length,
+        animeCount: library.filter((e) => e.type === "ANIME").length,
+        mangaCount: library.filter((e) => e.type === "MANGA").length,
+        episodesWatched: library
+          .filter((e) => e.type === "ANIME")
+          .reduce((a, b) => a + b.progress, 0),
+        chaptersRead: library
+          .filter((e) => e.type === "MANGA")
+          .reduce((a, b) => a + b.progress, 0),
+        completedCount: library.filter((e) => e.status === "COMPLETED").length,
+        meanScore,
+      };
+
+      // 1) Direct authenticated Supabase JWT upsert into `public.profiles`
+      if (profile.mode === "supabase") {
+        void syncPublicProfileToCloud(profile.id, {
+          username: profile.username,
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl ?? null,
+          bio: profile.bio,
+          accentColor: profile.accentColor,
+          isActivityPublic: profile.isActivityPublic ?? true,
+          favoriteStaff,
+          favoriteMedia: favoriteMediaPayload,
+          stats: statsPayload,
+          unlockedBadges,
+          pinnedBadges,
+        });
+      }
+
+      // 2) Server API sync (also updates local/community discovery)
       fetch("/api/community/profiles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -673,26 +743,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           isActivityPublic: profile.isActivityPublic ?? true,
           joinedAt: profile.joinedAt,
           favoriteStaff,
-          favoriteMedia: orderedFavorites.slice(0, 40).map((e) => ({
-            mediaId: e.mediaId,
-            type: e.type,
-            title: e.title,
-            coverImage: e.coverImage,
-            score: e.score,
-          })),
-          stats: {
-            totalEntries: library.length,
-            animeCount: library.filter((e) => e.type === "ANIME").length,
-            mangaCount: library.filter((e) => e.type === "MANGA").length,
-            episodesWatched: library
-              .filter((e) => e.type === "ANIME")
-              .reduce((a, b) => a + b.progress, 0),
-            chaptersRead: library
-              .filter((e) => e.type === "MANGA")
-              .reduce((a, b) => a + b.progress, 0),
-            completedCount: library.filter((e) => e.status === "COMPLETED").length,
-            meanScore,
-          },
+          favoriteMedia: favoriteMediaPayload,
+          stats: statsPayload,
           unlockedBadges,
           pinnedBadges,
           socialInteractionsCount,
@@ -709,6 +761,133 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     unlockedBadges,
     pinnedBadges,
     socialInteractionsCount,
+  ]);
+
+  // Automatic idempotent backfill of existing library actions (favorites, scores, completed series, Seiyuu)
+  // into `activity_events` whenever the user's profile is public!
+  useEffect(() => {
+    if (!hydrated || profile.isActivityPublic === false) return;
+    if (library.length === 0 && favoriteStaff.length === 0) return;
+
+    const backfillKey = `${profile.id}:${profile.mode}:${profile.username}`;
+    if (backfilledActivityKeyRef.current === backfillKey) return;
+
+    const timer = setTimeout(() => {
+      const highlights: ActivityBackfillItem[] = [];
+      const usedMediaIds = new Set<number>();
+
+      // 1) Top favorites (#1, #2)
+      for (const fav of orderedFavorites.slice(0, 2)) {
+        usedMediaIds.add(fav.mediaId);
+        highlights.push({
+          kind: "FAVORITE_MEDIA",
+          mediaId: fav.mediaId,
+          mediaTitle: fav.title,
+          mediaType: fav.type,
+          coverImage: fav.coverImage,
+          action: "A ajouté en coup de cœur",
+          score: fav.score,
+        });
+      }
+
+      // 2) Recently completed series
+      const completed = [...library]
+        .filter((e) => e.status === "COMPLETED" && !usedMediaIds.has(e.mediaId))
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .slice(0, 2);
+      for (const item of completed) {
+        usedMediaIds.add(item.mediaId);
+        highlights.push({
+          kind: "COMPLETED",
+          mediaId: item.mediaId,
+          mediaTitle: item.title,
+          mediaType: item.type,
+          coverImage: item.coverImage,
+          action: item.score ? `A terminé la série · ★ ${item.score}/10` : "A terminé la série",
+          score: item.score,
+        });
+      }
+
+      // 3) Highest scored titles
+      const scored = [...library]
+        .filter((e) => e.score !== null && e.score > 0 && !usedMediaIds.has(e.mediaId))
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .slice(0, 2);
+      for (const item of scored) {
+        usedMediaIds.add(item.mediaId);
+        highlights.push({
+          kind: "SCORED",
+          mediaId: item.mediaId,
+          mediaTitle: item.title,
+          mediaType: item.type,
+          coverImage: item.coverImage,
+          action: `A attribué la note de ${item.score}/10`,
+          score: item.score,
+        });
+      }
+
+      // 4) Favorite Voice Actor (Seiyuu)
+      if (favoriteStaff.length > 0) {
+        const s = favoriteStaff[0];
+        highlights.push({
+          kind: "FAVORITE_STAFF",
+          mediaId: s.id,
+          mediaTitle: s.name,
+          mediaType: "STAFF",
+          coverImage: s.image || null,
+          action: "A ajouté en Voice Actor favori (Seiyuu)",
+        });
+      }
+
+      if (highlights.length === 0) return;
+      backfilledActivityKeyRef.current = backfillKey;
+
+      // Sync via API route (updates Supabase server-side + local store)
+      fetch("/api/community/activity/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isPublic: true,
+          userId: profile.id,
+          actorUsername: profile.username,
+          actorDisplayName: profile.displayName,
+          actorAvatarUrl: profile.avatarUrl ?? null,
+          actorAccentColor: profile.accentColor,
+          actorPinnedBadges: pinnedBadges.slice(0, 3),
+          events: highlights,
+        }),
+      }).catch(() => {});
+
+      // Also guarantee direct browser Supabase JWT backfill when signed in with Supabase
+      if (profile.mode === "supabase") {
+        void backfillCloudActivities(
+          profile.id,
+          {
+            username: profile.username,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl ?? null,
+            accentColor: profile.accentColor,
+            pinnedBadges: pinnedBadges.slice(0, 3),
+          },
+          highlights
+        );
+      }
+    }, 1100);
+
+    return () => clearTimeout(timer);
+  }, [
+    hydrated,
+    profile.id,
+    profile.mode,
+    profile.username,
+    profile.displayName,
+    profile.avatarUrl,
+    profile.accentColor,
+    profile.isActivityPublic,
+    library,
+    orderedFavorites,
+    favoriteStaff,
+    pinnedBadges,
   ]);
 
   // Persist to localStorage after hydration
@@ -1018,7 +1197,39 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           actorAccentColor: profile.accentColor,
           actorPinnedBadges: pinnedBadges.slice(0, 3),
         }),
-      }).catch(() => {});
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          // If server cookies weren't available for Supabase, write directly via browser JWT!
+          if (profile.mode === "supabase" && !data?.savedToSupabase) {
+            const supabase = getSupabaseBrowserClient();
+            if (supabase) {
+              void supabase.from("activity_events").insert({
+                user_id: profile.id,
+                media_id: payload.mediaId,
+                media_title: payload.mediaTitle,
+                media_type: payload.mediaType === "MANGA" ? "MANGA" : "ANIME",
+                cover_image: payload.coverImage ?? null,
+                action: payload.action,
+                event_kind: payload.kind,
+                is_public: true,
+                actor_username: profile.username,
+                actor_display_name: profile.displayName,
+                actor_avatar_url: profile.avatarUrl ?? null,
+                metadata: {
+                  isStaff: payload.mediaType === "STAFF" || payload.kind === "FAVORITE_STAFF",
+                  isBadge: payload.mediaType === "BADGE" || payload.kind === "BADGE_UNLOCKED",
+                  badgeId: payload.badgeId,
+                  badgeRarity: payload.badgeRarity,
+                  pinnedBadges: pinnedBadges.slice(0, 3),
+                  score: typeof payload.score === "number" ? payload.score : null,
+                  accentColor: profile.accentColor,
+                },
+              });
+            }
+          }
+        })
+        .catch(() => {});
     },
     [profile, pinnedBadges]
   );
@@ -1405,35 +1616,52 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             targetAvatarUrl: target.avatarUrl ?? null,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data?.ok === false) {
+          const errMsg =
+            data?.error ||
+            "Impossible d'envoyer la demande d'ami. Vérifiez le pseudo et réessayez.";
           toast({
-            title: "Impossible d'ajouter cet ami",
-            description: data?.error || "Réessayez dans un instant.",
+            title: "Ajout d'ami impossible",
+            description: errMsg,
             variant: "warning",
           });
-          return { ok: false };
+          return { ok: false, error: errMsg };
         }
         await refreshFriendships();
         const label = target.displayName || `@${target.username}`;
+        if (data?.alreadyFriends) {
+          const msg = data?.message || `Vous êtes déjà ami avec ${label}.`;
+          toast({ title: "Déjà amis", description: msg, variant: "info" });
+          return { ok: true, status: "ACCEPTED", message: msg };
+        }
+        if (data?.alreadyPending) {
+          const msg = data?.message || `Une demande est déjà en attente pour ${label}.`;
+          toast({ title: "Demande déjà envoyée", description: msg, variant: "info" });
+          return { ok: true, status: "PENDING", message: msg };
+        }
         if (data?.status === "ACCEPTED") {
+          const msg = `${label} est maintenant votre ami !`;
           toast({
-            title: `${label} est maintenant votre ami !`,
-            description: "Vous pouvez retrouver vos amis dans Communauté → Amis et Messagerie.",
+            title: msg,
+            description: "Retrouvez vos amis dans Communauté → Amis et Messagerie.",
             variant: "success",
             celebrate: true,
           });
+          return { ok: true, status: "ACCEPTED", message: msg };
         } else {
+          const msg = `Demande d'ami envoyée à ${label}.`;
           toast({
             title: "Demande d'ami envoyée",
             description: `En attente de confirmation de ${label}.`,
             variant: "info",
           });
+          return { ok: true, status: "PENDING", message: msg };
         }
-        return { ok: true, status: data?.status };
       } catch {
-        toast({ title: "Erreur réseau", variant: "warning" });
-        return { ok: false };
+        const errMsg = "Erreur réseau : impossible de joindre le serveur Shiori.";
+        toast({ title: "Erreur réseau", description: errMsg, variant: "warning" });
+        return { ok: false, error: errMsg };
       }
     },
     [profile, refreshFriendships, toast]
@@ -1697,7 +1925,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           action: "A ajouté en coup de cœur",
           score: merged.score,
         });
-      } else if (merged.status === "COMPLETED" && existing?.status !== "COMPLETED") {
+      }
+      if (merged.status === "COMPLETED" && existing?.status !== "COMPLETED") {
         publishCommunityActivity({
           kind: "COMPLETED",
           mediaId: merged.mediaId,
