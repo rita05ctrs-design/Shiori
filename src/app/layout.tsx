@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Cormorant_Garamond, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ShioriProvider } from "@/context/ShioriContext";
@@ -31,10 +31,104 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["400", "500", "600"],
 });
 
+const SITE_URL = "https://shiori-lac.vercel.app";
+const SITE_TITLE = "Shiori — Suivi Anime & Manga";
+const SITE_DESCRIPTION =
+  "Suivez, découvrez et organisez vos animés et mangas dans une interface nocturne d'exception. Calendrier des sorties et saisons, découverte par envies, statistiques détaillées et synchronisation bidirectionnelle AniList & Supabase.";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#07080C",
+  colorScheme: "dark",
+};
+
 export const metadata: Metadata = {
-  title: "Shiori (栞) — Plateforme Premium de Suivi Anime & Manga",
-  description:
-    "Suivez, découvrez et archivez vos animés et mangas dans une interface nocturne d'exception. Calendrier hebdomadaire, statistiques détaillées et synchronisation Supabase.",
+  metadataBase: new URL(SITE_URL),
+  applicationName: "Shiori",
+  manifest: "/manifest.json",
+  title: {
+    default: SITE_TITLE,
+    template: "%s | Shiori",
+  },
+  description: SITE_DESCRIPTION,
+  keywords: [
+    "Shiori",
+    "suivi anime",
+    "suivi manga",
+    "anime tracker",
+    "manga tracker",
+    "calendrier anime",
+    "sorties anime",
+    "saisons anime",
+    "simulcast anime",
+    "bibliothèque anime",
+    "liste anime",
+    "synchronisation AniList",
+    "statistiques anime",
+    "découvrir des animes",
+    "MyAnimeList",
+    "AniList",
+  ],
+  authors: [{ name: "Shiori", url: SITE_URL }],
+  creator: "Shiori",
+  publisher: "Shiori",
+  category: "entertainment",
+  alternates: {
+    canonical: "/",
+  },
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Shiori",
+    statusBarStyle: "black-translucent",
+  },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    url: SITE_URL,
+    siteName: "Shiori",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [
+      {
+        url: "/icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "Shiori — Suivi Anime & Manga",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/icon-512.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export default function RootLayout({
