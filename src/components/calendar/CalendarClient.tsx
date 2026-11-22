@@ -22,6 +22,8 @@ import {
   Film,
   Layers,
   ChevronRight,
+  X,
+  ListChecks,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import {
@@ -99,7 +101,7 @@ interface CalendarClientProps {
 }
 
 export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
-  const { getEntry, quickAdd, openQuickEdit, incrementProgress, openTrailer } = useShiori();
+  const { getEntry, quickAdd, upsertEntry, openQuickEdit, incrementProgress, openTrailer } = useShiori();
 
   // Rolling 7 days starting from Today
   const rollingDays = useMemo(() => {
@@ -300,9 +302,64 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           </div>
         </div>
 
-        {/* Quick Action */}
+        {/* Quick 1-Click Oui / Non (for aired episodes) or Follow (for upcoming) */}
         <div className="shrink-0">
-          {entry ? (
+          {isPast ? (
+            (() => {
+              const isWatched = Boolean(entry && entry.progress >= slot.episode);
+              return (
+                <div
+                  role="group"
+                  aria-label={`Avez-vous vu ${title} épisode ${slot.episode} ?`}
+                  className="inline-flex items-center p-0.5 rounded-xl bg-obsidian/90 border border-white/[0.1]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isWatched) {
+                        upsertEntry(slot.media, {
+                          status: "WATCHING",
+                          progress: Math.max(0, slot.episode - 1),
+                        });
+                      }
+                    }}
+                    title={isWatched ? `Marquer Ép. ${slot.episode} non vu` : "Non vu"}
+                    className={cn(
+                      "h-8 px-2 rounded-lg text-[11px] font-semibold inline-flex items-center gap-0.5 transition-colors cursor-pointer",
+                      !isWatched
+                        ? "bg-white/[0.12] text-white"
+                        : "text-[#7D8296] hover:text-rose-300 hover:bg-rose-500/12"
+                    )}
+                  >
+                    <X className="w-3 h-3" />
+                    <span className="hidden sm:inline">Non</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isWatched) {
+                        const total = slot.media.episodes;
+                        upsertEntry(slot.media, {
+                          status: total && slot.episode >= total ? "COMPLETED" : "WATCHING",
+                          progress: slot.episode,
+                        });
+                      }
+                    }}
+                    title={isWatched ? `Ép. ${slot.episode} vu ✓` : `Marquer Ép. ${slot.episode} vu en 1 clic`}
+                    className={cn(
+                      "h-8 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 transition-all cursor-pointer",
+                      isWatched
+                        ? "bg-emerald-500 text-[#07080C] shadow-[0_4px_14px_rgba(16,185,129,0.4)]"
+                        : "text-[#C6CAD8] hover:bg-accent hover:text-accent-fg"
+                    )}
+                  >
+                    <Check className="w-3 h-3 stroke-[2.8]" />
+                    <span className="hidden sm:inline">Oui</span>
+                  </button>
+                </div>
+              );
+            })()
+          ) : entry ? (
             <button
               type="button"
               onClick={() => incrementProgress(slot.media.id, 1)}
@@ -315,9 +372,9 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           ) : (
             <button
               type="button"
-              onClick={() => openQuickEdit(slot.media)}
-              title="Ajouter à ma bibliothèque"
-              className="h-9 px-3 rounded-xl bg-white/[0.05] hover:bg-accent border border-white/[0.09] hover:border-accent text-accent-fg text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
+              onClick={() => quickAdd(slot.media, "WATCHING")}
+              title="Suivre cet anime en 1 clic"
+              className="h-9 px-3 rounded-xl bg-white/[0.05] hover:bg-accent border border-white/[0.09] hover:border-accent text-white hover:text-accent-fg text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Suivre</span>
@@ -348,6 +405,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
 
         {/* Quick Section Jump Pills */}
         <div className="flex flex-wrap lg:flex-nowrap shrink-0 items-center gap-2">
+          <Link
+            href="/episodes"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-full bg-emerald-500/16 hover:bg-emerald-500/26 border border-emerald-400/35 text-xs font-semibold text-emerald-200 transition-colors"
+          >
+            <ListChecks className="w-3.5 h-3.5" />
+            <span>Pointage 1 clic</span>
+          </Link>
           <a
             href="#daily-schedule"
             className="inline-flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-full bg-white/[0.07] hover:bg-white/[0.13] border border-white/[0.12] text-xs font-semibold text-white transition-colors"

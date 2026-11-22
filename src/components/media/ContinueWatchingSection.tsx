@@ -207,7 +207,7 @@ export function ContinueWatchingSection() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.94 }}
                         onClick={() => handleIncrement(entry.mediaId)}
-                        className="w-full h-8 rounded-xl bg-white/[0.06] hover:bg-accent border border-white/[0.09] hover:border-accent text-xs font-semibold text-accent-fg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        className="w-full h-8 rounded-xl bg-white/[0.06] hover:bg-accent border border-white/[0.09] hover:border-accent text-xs font-semibold text-white hover:text-accent-fg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>

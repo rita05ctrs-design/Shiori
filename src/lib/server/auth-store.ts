@@ -3,9 +3,11 @@ import fs from "fs";
 import path from "path";
 import type {
   ActivityEvent,
+  FavoriteVoiceActor,
   LibraryEntry,
   NotificationPrefs,
   ShioriNotification,
+  UnlockedBadgeRecord,
   UserProfile,
 } from "@/types/media";
 
@@ -23,7 +25,13 @@ export interface StoredAccount {
   displayName: string;
   bio: string;
   avatarInitials: string;
+  avatarUrl?: string | null;
   accentColor: string;
+  isActivityPublic?: boolean;
+  favoriteStaff?: FavoriteVoiceActor[];
+  unlockedBadges?: UnlockedBadgeRecord[];
+  pinnedBadges?: string[];
+  socialInteractionsCount?: number;
   passwordHash: string;
   notificationPrefs: NotificationPrefs;
   joinedAt: string;
@@ -154,7 +162,9 @@ export function toPublicProfile(account: StoredAccount): UserProfile {
     email: account.email,
     bio: account.bio,
     avatarInitials: account.avatarInitials,
+    avatarUrl: account.avatarUrl ?? null,
     accentColor: account.accentColor,
+    isActivityPublic: account.isActivityPublic ?? true,
     mode: "account",
     notificationPrefs: account.notificationPrefs,
     joinedAt: account.joinedAt,

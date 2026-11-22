@@ -19,19 +19,27 @@ import {
   User,
   Flower2,
   ArrowLeftRight,
+  ListChecks,
+  Users,
+  MessageSquare,
+  UserCircle2,
+  Mic2,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { AMBIANCE_OPTIONS } from "@/components/settings/AmbianceSettingsCard";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
+import { UserAvatar } from "@/components/ui/UserAvatar";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "Accueil", icon: Home },
   { href: "/discover", label: "Découvrir", icon: Compass },
   { href: "/library", label: "Bibliothèque", icon: Library },
+  { href: "/episodes", label: "Épisodes", icon: ListChecks },
   { href: "/calendar", label: "Calendrier", icon: CalendarDays },
-  { href: "/stats", label: "Statistiques", icon: BarChart3 },
+  { href: "/community", label: "Communauté", icon: Users },
+  { href: "/stats", label: "Stats", icon: BarChart3 },
 ];
 
 export function Navbar() {
@@ -43,6 +51,7 @@ export function Navbar() {
     ambiance,
     updateAmbiance,
     anilistConnection,
+    unreadMessagesCount,
     setCommandOpen,
     openAuthModal,
     signOutSupabase,
@@ -145,7 +154,7 @@ export function Navbar() {
           </Link>
 
           {/* Primary Navigation (Desktop) */}
-          <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 p-1 rounded-full bg-white/[0.03] border border-white/[0.06]">
+          <nav className="hidden md:flex items-center gap-0.5 p-1 rounded-full bg-white/[0.03] border border-white/[0.06]">
             {NAV_ITEMS.map((item) => {
               const isActive =
                 item.href === "/"
@@ -157,7 +166,7 @@ export function Navbar() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "relative px-3 lg:px-4 py-1.5 rounded-full text-[13px] font-medium transition-colors flex items-center gap-1.5 lg:gap-2 whitespace-nowrap",
+                    "relative px-2 xl:px-3 py-1.5 rounded-full text-[12px] lg:text-[12.5px] font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap",
                     isActive
                       ? "text-white"
                       : "text-[#9A9EAE] hover:text-[#F4F3EE]"
@@ -189,23 +198,43 @@ export function Navbar() {
           </nav>
 
           {/* Right Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 lg:gap-2">
             {/* Search Command Trigger */}
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
               aria-label="Rechercher un anime ou manga"
-              className="group flex items-center gap-2 h-9 px-3 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.16] transition-all text-[13px] text-[#9A9EAE] hover:text-white cursor-pointer"
+              className="group flex items-center gap-1.5 h-9 px-2.5 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.16] transition-all text-[13px] text-[#9A9EAE] hover:text-white cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 text-[#9A9EAE] group-hover:text-white transition-colors" />
-              <span className="hidden xl:inline">Rechercher...</span>
-              <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white/[0.07] text-[10px] font-mono text-[#A6AAB8] border border-white/[0.08]">
+              <span className="hidden 2xl:inline">Rechercher...</span>
+              <kbd className="hidden xl:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white/[0.07] text-[10px] font-mono text-[#A6AAB8] border border-white/[0.08]">
                 ⌘K
               </kbd>
             </button>
 
             {/* Quick Theme & Color Customizer Popover */}
             <ThemeQuickPopover />
+
+            {/* Private Direct Messages Indicator */}
+            <Link
+              href="/messages"
+              aria-label="Messages privés"
+              title="Messages privés"
+              className={cn(
+                "relative w-9 h-9 rounded-full border flex items-center justify-center transition-all",
+                pathname.startsWith("/messages")
+                  ? "bg-accent/20 border-accent/55 text-white"
+                  : "bg-white/[0.045] hover:bg-white/[0.09] border-white/[0.08] hover:border-white/[0.18] text-[#B8BCCB] hover:text-white"
+              )}
+            >
+              <MessageSquare className="w-4 h-4" />
+              {unreadMessagesCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-accent text-[10px] font-bold text-accent-fg flex items-center justify-center shadow-[0_0_10px_rgb(var(--shiori-accent-rgb)/0.8)]">
+                  {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+                </span>
+              )}
+            </Link>
 
             {/* Notifications Bell Popover */}
             <NotificationsPopover />
@@ -215,17 +244,17 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={() => setProfileMenuOpen((v) => !v)}
-                className="flex items-center gap-2.5 h-9 pl-1.5 pr-3 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.18] transition-all cursor-pointer"
+                className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.18] transition-all cursor-pointer"
               >
-                <div
-                  className="w-6.5 h-6.5 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shadow-inner"
-                  style={{
-                    background: `linear-gradient(135deg, ${profile.accentColor}, var(--shiori-accent-deep))`,
-                  }}
-                >
-                  {profile.avatarInitials}
-                </div>
-                <span className="hidden sm:inline text-[13px] font-medium text-[#ECEBE6] max-w-[90px] truncate">
+                <UserAvatar
+                  avatarUrl={profile.avatarUrl}
+                  initials={profile.avatarInitials}
+                  accentColor={profile.accentColor}
+                  alt={profile.displayName}
+                  size="sm"
+                  className="w-6.5 h-6.5"
+                />
+                <span className="hidden lg:inline text-[13px] font-medium text-[#ECEBE6] max-w-[82px] truncate">
                   {profile.displayName}
                 </span>
               </button>
@@ -241,14 +270,13 @@ export function Navbar() {
                   >
                     <div className="p-4 border-b border-white/[0.08] bg-surface-solid-header">
                       <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white shrink-0"
-                          style={{
-                            background: `linear-gradient(135deg, ${profile.accentColor}, var(--shiori-accent-deep))`,
-                          }}
-                        >
-                          {profile.avatarInitials}
-                        </div>
+                        <UserAvatar
+                          avatarUrl={profile.avatarUrl}
+                          initials={profile.avatarInitials}
+                          accentColor={profile.accentColor}
+                          alt={profile.displayName}
+                          size="md"
+                        />
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-white truncate">
                             {profile.displayName}
@@ -279,6 +307,35 @@ export function Navbar() {
                     </div>
 
                     <div className="p-1.5">
+                      <Link
+                        href={`/profile/${encodeURIComponent(profile.username)}`}
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
+                      >
+                        <UserCircle2 className="w-4 h-4 text-accent" />
+                        <span>Mon profil public</span>
+                      </Link>
+                      <Link
+                        href="/messages"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
+                      >
+                        <MessageSquare className="w-4 h-4 text-[#9A9EAE]" />
+                        <span>Messages privés</span>
+                        {unreadMessagesCount > 0 && (
+                          <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-accent-fg text-[10px] font-mono font-bold">
+                            {unreadMessagesCount}
+                          </span>
+                        )}
+                      </Link>
+                      <Link
+                        href="/settings#voice-actors"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
+                      >
+                        <Mic2 className="w-4 h-4 text-[#9A9EAE]" />
+                        <span>Voice Actors favoris</span>
+                      </Link>
                       <Link
                         href="/library"
                         onClick={() => setProfileMenuOpen(false)}
@@ -421,7 +478,7 @@ export function Navbar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-colors",
+                  "flex flex-col items-center gap-1 px-1.5 py-1.5 rounded-xl transition-colors",
                   isActive ? "text-accent-hover" : "text-[#8A8FA3]"
                 )}
               >

@@ -25,5 +25,9 @@ export async function GET(request: NextRequest) {
     library: account.library,
     notifications: account.notifications,
     activity: account.activity,
+    favoriteStaff: account.favoriteStaff ?? [],
+    unlockedBadges: account.unlockedBadges ?? [],
+    pinnedBadges: account.pinnedBadges ?? [],
+    socialInteractionsCount: account.socialInteractionsCount ?? 0,
   });
 }

@@ -7,6 +7,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { ToastContainer } from "@/components/layout/ToastContainer";
+import { BadgeUnlockToast } from "@/components/badges/BadgeUnlockToast";
 import { QuickEditModal } from "@/components/media/QuickEditModal";
 import { TrailerModal } from "@/components/media/TrailerModal";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -156,6 +157,7 @@ export default function RootLayout({
             <TrailerModal />
             <AuthModal />
             <ToastContainer />
+            <BadgeUnlockToast />
           </MotionRoot>
         </ShioriProvider>
       </body>

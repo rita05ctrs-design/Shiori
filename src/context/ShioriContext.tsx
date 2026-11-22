@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -21,10 +22,19 @@ import {
 import {
   fetchCloudAniListStats,
   fetchCloudLibrary,
+  fetchCloudUserBadges,
   removeEntryFromCloud,
   syncAniListImportBrowser,
   syncEntryToCloud,
+  syncUserBadgesToCloud,
+  uploadProfileAvatar,
 } from "@/lib/supabase/sync";
+import {
+  evaluateAllBadges,
+  extractBadgeMetrics,
+  isRareBadge,
+  RARITY_RANK,
+} from "@/lib/badges";
 import { getDisplayTitle, getStatusLabel } from "@/lib/utils";
 import {
   applyThemeToDocument,
@@ -40,6 +50,10 @@ import type {
   AniListImportResponse,
   AniListSyncEvent,
   AniListUserStatsSnapshot,
+  BadgeRarity,
+  CommunityActivityKind,
+  EvaluatedBadge,
+  FavoriteVoiceActor,
   LibraryEntry,
   LibraryStatus,
   MediaItem,
@@ -48,6 +62,7 @@ import type {
   ShioriNotification,
   ThemeSettings,
   ToastMessage,
+  UnlockedBadgeRecord,
   UserProfile,
 } from "@/types/media";
 
@@ -60,6 +75,10 @@ const STORAGE_KEYS = {
   ambiance: "shiori_ambiance_v1",
   theme: THEME_STORAGE_KEY,
   anilistAutoSync: "shiori_anilist_autosync_v1",
+  favoriteStaff: "shiori_favorite_staff_v1",
+  badges: "shiori_badges_v1",
+  pinnedBadges: "shiori_pinned_badges_v1",
+  socialCount: "shiori_social_count_v1",
 };
 
 const DEFAULT_ANILIST_CONNECTION: AniListConnectionStatus = {
@@ -124,7 +143,25 @@ interface ShioriContextValue {
   isAuthenticated: boolean;
   supabaseReady: boolean;
   updateProfile: (updates: Partial<UserProfile>) => void;
+  uploadAvatar: (file: File) => Promise<{ ok: boolean; url?: string; storage?: string; error?: string }>;
   updateNotificationPrefs: (prefs: Partial<NotificationPrefs>) => void;
+
+  // Favorite Voice Actors (Seiyuu) & Social / Community / Direct Messages
+  favoriteStaff: FavoriteVoiceActor[];
+  toggleFavoriteStaff: (staff: FavoriteVoiceActor) => void;
+  unreadMessagesCount: number;
+  refreshUnreadMessages: () => Promise<number>;
+
+  // Gamification — Badges & Trophies
+  unlockedBadges: UnlockedBadgeRecord[];
+  pinnedBadges: string[];
+  evaluatedBadges: EvaluatedBadge[];
+  socialInteractionsCount: number;
+  badgeUnlockQueue: EvaluatedBadge[];
+  dismissBadgeUnlock: () => void;
+  previewBadgeUnlock: (badgeId: string) => void;
+  togglePinBadge: (badgeId: string) => void;
+  recordSocialInteraction: () => void;
   signInWithSupabase: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
   signUpWithSupabase: (
     email: string,
@@ -196,6 +233,15 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   );
   const [anilistAutoSync, setAnilistAutoSyncState] = useState<boolean>(true);
   const [lastAniListSync, setLastAniListSync] = useState<AniListSyncEvent | null>(null);
+  const [favoriteStaff, setFavoriteStaff] = useState<FavoriteVoiceActor[]>([]);
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
+  const [unlockedBadges, setUnlockedBadges] = useState<UnlockedBadgeRecord[]>([]);
+  const [pinnedBadges, setPinnedBadges] = useState<string[]>([]);
+  const [socialInteractionsCount, setSocialInteractionsCount] = useState<number>(0);
+  const [badgeUnlockQueue, setBadgeUnlockQueue] = useState<EvaluatedBadge[]>([]);
+  const hasStoredBadgesRef = useRef(false);
+  const initialBadgeEvalDoneRef = useRef(false);
+  const publishedRareBadgesRef = useRef<Set<string>>(new Set());
   const [ambiance, setAmbiance] = useState<AmbianceSettings>(DEFAULT_AMBIANCE);
   const [theme, setTheme] = useState<ThemeSettings>(DEFAULT_THEME);
 
@@ -262,6 +308,27 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       if (savedAutoSync !== null) {
         setAnilistAutoSyncState(savedAutoSync !== "false");
       }
+      const savedStaff = localStorage.getItem(STORAGE_KEYS.favoriteStaff);
+      if (savedStaff) {
+        const parsed = JSON.parse(savedStaff);
+        if (Array.isArray(parsed)) setFavoriteStaff(parsed);
+      }
+      const savedBadges = localStorage.getItem(STORAGE_KEYS.badges);
+      if (savedBadges !== null) {
+        hasStoredBadgesRef.current = true;
+        const parsed = JSON.parse(savedBadges);
+        if (Array.isArray(parsed)) setUnlockedBadges(parsed);
+      }
+      const savedPinned = localStorage.getItem(STORAGE_KEYS.pinnedBadges);
+      if (savedPinned) {
+        const parsed = JSON.parse(savedPinned);
+        if (Array.isArray(parsed)) setPinnedBadges(parsed.slice(0, 3));
+      }
+      const savedSocialCount = localStorage.getItem(STORAGE_KEYS.socialCount);
+      if (savedSocialCount !== null) {
+        const n = Number(savedSocialCount);
+        if (Number.isFinite(n) && n >= 0) setSocialInteractionsCount(Math.floor(n));
+      }
       const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
       if (savedTheme) {
         const mergedTheme: ThemeSettings = { ...DEFAULT_THEME, ...JSON.parse(savedTheme) };
@@ -304,15 +371,35 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           avatarInitials: name.slice(0, 2).toUpperCase(),
           mode: "supabase",
         }));
-        const [cloudLib, cloudStats] = await Promise.all([
+        const [cloudLib, cloudStats, cloudBadges] = await Promise.all([
           fetchCloudLibrary(user.id),
           fetchCloudAniListStats(user.id),
+          fetchCloudUserBadges(user.id),
         ]);
         if (cloudLib && cloudLib.length > 0) {
           setLibrary(cloudLib);
         }
         if (cloudStats) {
           setAnilistStats(cloudStats);
+        }
+        if (cloudBadges) {
+          if (cloudBadges.unlockedBadges.length > 0) {
+            hasStoredBadgesRef.current = true;
+            setUnlockedBadges((prev) => {
+              const map = new Map<string, string>();
+              for (const b of prev) map.set(b.badgeId, b.unlockedAt);
+              for (const b of cloudBadges.unlockedBadges) {
+                if (!map.has(b.badgeId)) map.set(b.badgeId, b.unlockedAt);
+              }
+              return Array.from(map.entries()).map(([badgeId, unlockedAt]) => ({
+                badgeId,
+                unlockedAt,
+              }));
+            });
+          }
+          if (cloudBadges.pinnedBadges.length > 0) {
+            setPinnedBadges(cloudBadges.pinnedBadges.slice(0, 3));
+          }
         }
       };
 
@@ -340,6 +427,17 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(data.library)) setLibrary(data.library);
           if (Array.isArray(data.notifications)) setNotifications(data.notifications);
           if (Array.isArray(data.activity)) setActivity(data.activity);
+          if (Array.isArray(data.favoriteStaff)) setFavoriteStaff(data.favoriteStaff);
+          if (Array.isArray(data.unlockedBadges) && data.unlockedBadges.length > 0) {
+            hasStoredBadgesRef.current = true;
+            setUnlockedBadges(data.unlockedBadges);
+          }
+          if (Array.isArray(data.pinnedBadges) && data.pinnedBadges.length > 0) {
+            setPinnedBadges(data.pinnedBadges.slice(0, 3));
+          }
+          if (typeof data.socialInteractionsCount === "number") {
+            setSocialInteractionsCount(data.socialInteractionsCount);
+          }
         }
       })
       .catch(() => {
@@ -363,15 +461,102 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             username: profile.username,
             bio: profile.bio,
             accentColor: profile.accentColor,
+            avatarUrl: profile.avatarUrl ?? null,
+            isActivityPublic: profile.isActivityPublic ?? true,
             notificationPrefs: profile.notificationPrefs,
           },
+          favoriteStaff,
+          unlockedBadges,
+          pinnedBadges,
+          socialInteractionsCount,
         }),
       }).catch(() => {
         // ignore transient errors
       });
     }, 350);
     return () => clearTimeout(timer);
-  }, [hydrated, library, notifications, activity, profile]);
+  }, [
+    hydrated,
+    library,
+    notifications,
+    activity,
+    profile,
+    favoriteStaff,
+    unlockedBadges,
+    pinnedBadges,
+    socialInteractionsCount,
+  ]);
+
+  // Persist favoriteStaff to localStorage
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.favoriteStaff, JSON.stringify(favoriteStaff));
+    } catch {
+      // ignore
+    }
+  }, [favoriteStaff, hydrated]);
+
+  // Debounced sync of user's public profile snapshot (for /profile/[username] & /community)
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = setTimeout(() => {
+      const scored = library.filter((e) => e.score !== null);
+      const meanScore = scored.length
+        ? Math.round((scored.reduce((a, b) => a + (b.score ?? 0), 0) / scored.length) * 10) / 10
+        : null;
+      fetch("/api/community/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: profile.id,
+          username: profile.username,
+          displayName: profile.displayName,
+          avatarUrl: profile.avatarUrl ?? null,
+          bio: profile.bio,
+          accentColor: profile.accentColor,
+          isActivityPublic: profile.isActivityPublic ?? true,
+          joinedAt: profile.joinedAt,
+          favoriteStaff,
+          favoriteMedia: library
+            .filter((e) => e.isFavorite)
+            .slice(0, 12)
+            .map((e) => ({
+              mediaId: e.mediaId,
+              type: e.type,
+              title: e.title,
+              coverImage: e.coverImage,
+              score: e.score,
+            })),
+          stats: {
+            totalEntries: library.length,
+            animeCount: library.filter((e) => e.type === "ANIME").length,
+            mangaCount: library.filter((e) => e.type === "MANGA").length,
+            episodesWatched: library
+              .filter((e) => e.type === "ANIME")
+              .reduce((a, b) => a + b.progress, 0),
+            chaptersRead: library
+              .filter((e) => e.type === "MANGA")
+              .reduce((a, b) => a + b.progress, 0),
+            completedCount: library.filter((e) => e.status === "COMPLETED").length,
+            meanScore,
+          },
+          unlockedBadges,
+          pinnedBadges,
+          socialInteractionsCount,
+        }),
+      }).catch(() => {});
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [
+    hydrated,
+    profile,
+    favoriteStaff,
+    library,
+    unlockedBadges,
+    pinnedBadges,
+    socialInteractionsCount,
+  ]);
 
   // Persist to localStorage after hydration
   useEffect(() => {
@@ -653,6 +838,345 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     [anilistConnection.connected, anilistAutoSync, refreshAniListStatus, toast]
   );
 
+  // Publish public community activity (respects user's isActivityPublic setting!)
+  const publishCommunityActivity = useCallback(
+    (payload: {
+      kind: CommunityActivityKind;
+      mediaId: number;
+      mediaTitle: string;
+      mediaType: MediaType | "STAFF" | "BADGE";
+      coverImage: string | null;
+      action: string;
+      score?: number | null;
+      badgeId?: string;
+      badgeRarity?: BadgeRarity;
+    }) => {
+      if (profile.isActivityPublic === false) return;
+      fetch("/api/community/activity", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          isPublic: true,
+          userId: profile.id,
+          actorUsername: profile.username,
+          actorDisplayName: profile.displayName,
+          actorAvatarUrl: profile.avatarUrl ?? null,
+          actorAccentColor: profile.accentColor,
+          actorPinnedBadges: pinnedBadges.slice(0, 3),
+        }),
+      }).catch(() => {});
+    },
+    [profile, pinnedBadges]
+  );
+
+  // ============================================================================
+  // Gamification — Live Badge Evaluation, Unlock Toast Queue, Pinning & Sync
+  // ============================================================================
+  const badgeMetrics = useMemo(
+    () =>
+      extractBadgeMetrics({
+        library,
+        profile,
+        favoriteStaff,
+        socialInteractionsCount,
+      }),
+    [library, profile, favoriteStaff, socialInteractionsCount]
+  );
+
+  const evaluatedBadges = useMemo(
+    () => evaluateAllBadges(badgeMetrics, unlockedBadges),
+    [badgeMetrics, unlockedBadges]
+  );
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.pinnedBadges, JSON.stringify(pinnedBadges.slice(0, 3)));
+    } catch {
+      // ignore
+    }
+  }, [pinnedBadges, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.socialCount, String(socialInteractionsCount));
+    } catch {
+      // ignore
+    }
+  }, [socialInteractionsCount, hydrated]);
+
+  // Automatically unlock badges as soon as their threshold is met
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const alreadyUnlocked = new Set(unlockedBadges.map((b) => b.badgeId));
+    const freshEval = evaluateAllBadges(badgeMetrics, unlockedBadges);
+    const newlyEarned = freshEval.filter(
+      (b) => b.current >= b.target && !alreadyUnlocked.has(b.id)
+    );
+
+    if (newlyEarned.length === 0) {
+      initialBadgeEvalDoneRef.current = true;
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const addedRecords: UnlockedBadgeRecord[] = newlyEarned.map((b) => ({
+      badgeId: b.id,
+      unlockedAt: nowIso,
+    }));
+    const nextUnlocked = [...unlockedBadges, ...addedRecords];
+
+    const isInitialPass = !initialBadgeEvalDoneRef.current;
+    const isInitialMigration = isInitialPass && !hasStoredBadgesRef.current;
+    initialBadgeEvalDoneRef.current = true;
+    hasStoredBadgesRef.current = true;
+
+    setUnlockedBadges(nextUnlocked);
+    try {
+      localStorage.setItem(STORAGE_KEYS.badges, JSON.stringify(nextUnlocked));
+    } catch {
+      // ignore
+    }
+
+    const sortedNew = [...newlyEarned]
+      .map((b) => ({ ...b, unlocked: true, unlockedAt: nowIso, progressPct: 100 }))
+      .sort((a, b) => {
+        if (RARITY_RANK[b.rarity] !== RARITY_RANK[a.rarity]) {
+          return RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity];
+        }
+        return b.target - a.target;
+      });
+
+    let nextPinned = pinnedBadges;
+    if (isInitialMigration && pinnedBadges.length === 0) {
+      nextPinned = sortedNew.slice(0, 3).map((b) => b.id);
+      setPinnedBadges(nextPinned);
+      try {
+        localStorage.setItem(STORAGE_KEYS.pinnedBadges, JSON.stringify(nextPinned));
+      } catch {
+        // ignore
+      }
+    }
+
+    if (profile.mode === "supabase") {
+      void syncUserBadgesToCloud(profile.id, nextUnlocked, nextPinned);
+    }
+
+    // Show celebratory trophy unlock popup:
+    // - On initial pass / bulk import / catalog expansion (> 2 unlocked at once): show the #1 rarest badge once (no popup flood)
+    // - On live incremental unlocks (1–2): queue each newly unlocked badge
+    const toAnnounce =
+      isInitialPass || sortedNew.length > 2 ? sortedNew.slice(0, 1) : sortedNew;
+    if (toAnnounce.length > 0) {
+      setBadgeUnlockQueue((prev) => {
+        const existingIds = new Set(prev.map((x) => x.id));
+        return [...prev, ...toAnnounce.filter((x) => !existingIds.has(x.id))];
+      });
+    }
+
+    // Auto-publish Gold, Legendary & Mythic badge unlocks to /community on live actions
+    if (!isInitialPass && profile.isActivityPublic !== false) {
+      const rareCap = sortedNew.length > 2 ? 1 : 2;
+      const rareToPublish = sortedNew
+        .filter((b) => isRareBadge(b.rarity))
+        .slice(0, rareCap);
+      for (const b of rareToPublish) {
+        if (!publishedRareBadgesRef.current.has(b.id)) {
+          publishedRareBadgesRef.current.add(b.id);
+          publishCommunityActivity({
+            kind: "BADGE_UNLOCKED",
+            mediaId: 0,
+            mediaTitle: b.title,
+            mediaType: "BADGE",
+            coverImage: null,
+            action: `a débloqué le badge ${b.title} !`,
+            badgeId: b.id,
+            badgeRarity: b.rarity,
+          });
+        }
+      }
+    }
+  }, [
+    hydrated,
+    badgeMetrics,
+    unlockedBadges,
+    pinnedBadges,
+    profile.id,
+    profile.mode,
+    profile.isActivityPublic,
+    publishCommunityActivity,
+  ]);
+
+  const dismissBadgeUnlock = useCallback(() => {
+    setBadgeUnlockQueue((prev) => prev.slice(1));
+  }, []);
+
+  const previewBadgeUnlock = useCallback(
+    (badgeId: string) => {
+      const target = evaluatedBadges.find((b) => b.id === badgeId);
+      if (!target) return;
+      setBadgeUnlockQueue((prev) => [
+        { ...target, unlocked: true, unlockedAt: new Date().toISOString() },
+        ...prev.filter((x) => x.id !== target.id),
+      ]);
+    },
+    [evaluatedBadges]
+  );
+
+  const togglePinBadge = useCallback(
+    (badgeId: string) => {
+      const target = evaluatedBadges.find((b) => b.id === badgeId);
+      if (!target || !target.unlocked) {
+        toast({
+          title: "Badge verrouillé",
+          description: "Débloquez ce badge avant de pouvoir l'épingler sur votre profil.",
+          variant: "warning",
+        });
+        return;
+      }
+
+      const isPinned = pinnedBadges.includes(badgeId);
+      let nextPinned: string[];
+      if (isPinned) {
+        nextPinned = pinnedBadges.filter((id) => id !== badgeId);
+        toast({
+          title: "Badge désépinglé",
+          description: `${target.title} a été retiré de votre vitrine rapide.`,
+          variant: "info",
+        });
+      } else {
+        if (pinnedBadges.length >= 3) {
+          toast({
+            title: "Maximum 3 badges épinglés",
+            description: "Retirez un badge épinglé pour en mettre un autre en avant.",
+            variant: "warning",
+          });
+          return;
+        }
+        nextPinned = [...pinnedBadges, badgeId];
+        toast({
+          title: "Badge épinglé sur votre profil !",
+          description: `${target.title} apparaît maintenant à côté de @${profile.username}.`,
+          variant: "success",
+        });
+      }
+
+      setPinnedBadges(nextPinned);
+      if (profile.mode === "supabase") {
+        void syncUserBadgesToCloud(profile.id, unlockedBadges, nextPinned);
+      }
+    },
+    [evaluatedBadges, pinnedBadges, profile.id, profile.mode, profile.username, toast, unlockedBadges]
+  );
+
+  const recordSocialInteraction = useCallback(() => {
+    setSocialInteractionsCount((prev) => prev + 1);
+  }, []);
+
+  const toggleFavoriteStaff = useCallback(
+    (staff: FavoriteVoiceActor) => {
+      const exists = favoriteStaff.some((s) => s.id === staff.id);
+      if (exists) {
+        setFavoriteStaff((prev) => prev.filter((s) => s.id !== staff.id));
+        toast({
+          title: "Voice Actor retiré des favoris",
+          description: staff.name,
+          variant: "info",
+        });
+      } else {
+        setFavoriteStaff((prev) => [staff, ...prev]);
+        publishCommunityActivity({
+          kind: "FAVORITE_STAFF",
+          mediaId: staff.id,
+          mediaTitle: staff.name,
+          mediaType: "STAFF",
+          coverImage: staff.image || null,
+          action: "A ajouté en Voice Actor favori (Seiyuu)",
+        });
+        toast({
+          title: "Voice Actor ajouté aux favoris !",
+          description: staff.name,
+          coverImage: staff.image,
+          variant: "success",
+          celebrate: true,
+        });
+      }
+    },
+    [favoriteStaff, publishCommunityActivity, toast]
+  );
+
+  const uploadAvatar = useCallback(
+    async (file: File) => {
+      try {
+        const res = await uploadProfileAvatar(profile.id, file);
+        setProfile((prev) => ({ ...prev, avatarUrl: res.url }));
+        toast({
+          title: "Photo de profil mise à jour",
+          description:
+            res.storage === "supabase"
+              ? "Image hébergée sur Supabase Storage et appliquée partout."
+              : "Photo appliquée partout dans Shiori.",
+          variant: "success",
+        });
+        return { ok: true, url: res.url, storage: res.storage };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload impossible";
+        toast({ title: "Erreur avatar", description: msg, variant: "warning" });
+        return { ok: false, error: msg };
+      }
+    },
+    [profile.id, toast]
+  );
+
+  const refreshUnreadMessages = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({
+        userId: profile.id,
+        username: profile.username,
+      });
+      const res = await fetch(`/api/messages?${params.toString()}`, { cache: "no-store" });
+      if (!res.ok) return 0;
+      const data = await res.json();
+      const count = Number(data?.unreadCount ?? 0);
+      setUnreadMessagesCount(count);
+      return count;
+    } catch {
+      return 0;
+    }
+  }, [profile.id, profile.username]);
+
+  // Hydrate unread DM badge + subscribe to Supabase Realtime direct_messages!
+  useEffect(() => {
+    if (!hydrated) return;
+    void refreshUnreadMessages();
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || profile.mode !== "supabase") return;
+
+    const channel = supabase
+      .channel(`shiori-dm-badge-${profile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "direct_messages",
+          filter: `recipient_id=eq.${profile.id}`,
+        },
+        () => {
+          void refreshUnreadMessages();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [hydrated, profile.id, profile.mode, refreshUnreadMessages]);
+
   // Global keyboard shortcut Cmd+K / Ctrl+K
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -804,6 +1328,45 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
+      // Publish to public realtime community feed (if user enabled public activity)
+      if (updates.isFavorite === true && !existing?.isFavorite) {
+        publishCommunityActivity({
+          kind: "FAVORITE_MEDIA",
+          mediaId: merged.mediaId,
+          mediaTitle: merged.title,
+          mediaType: merged.type,
+          coverImage: merged.coverImage,
+          action: "A ajouté en coup de cœur",
+          score: merged.score,
+        });
+      } else if (merged.status === "COMPLETED" && existing?.status !== "COMPLETED") {
+        publishCommunityActivity({
+          kind: "COMPLETED",
+          mediaId: merged.mediaId,
+          mediaTitle: merged.title,
+          mediaType: merged.type,
+          coverImage: merged.coverImage,
+          action: merged.score
+            ? `A terminé la série · ★ ${merged.score}/10`
+            : "A terminé la série",
+          score: merged.score,
+        });
+      } else if (
+        updates.score !== undefined &&
+        updates.score !== null &&
+        updates.score !== existing?.score
+      ) {
+        publishCommunityActivity({
+          kind: "SCORED",
+          mediaId: merged.mediaId,
+          mediaTitle: merged.title,
+          mediaType: merged.type,
+          coverImage: merged.coverImage,
+          action: `A attribué la note de ${updates.score}/10`,
+          score: updates.score,
+        });
+      }
+
       toast({
         title: existing ? "Bibliothèque mise à jour" : "Ajouté à votre bibliothèque",
         description: `${merged.title} · ${getStatusLabel(merged.status, merged.type)}`,
@@ -814,7 +1377,15 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         celebrate: !existing || merged.status === "COMPLETED",
       });
     },
-    [library, addActivity, pushNotification, profile, pushMutationToAniList, toast]
+    [
+      library,
+      addActivity,
+      pushNotification,
+      profile,
+      pushMutationToAniList,
+      publishCommunityActivity,
+      toast,
+    ]
   );
 
   const quickAdd = useCallback(
@@ -879,6 +1450,18 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       // Bidirectional AniList OAuth Sync (SaveMediaListEntry)
       void pushMutationToAniList({ action: "save", entry: updated });
 
+      if (reachedEnd) {
+        publishCommunityActivity({
+          kind: "COMPLETED",
+          mediaId: existing.mediaId,
+          mediaTitle: existing.title,
+          mediaType: existing.type,
+          coverImage: existing.coverImage,
+          action: `A terminé la série (${unit} ${nextProg})`,
+          score: updated.score,
+        });
+      }
+
       toast({
         title: reachedEnd ? "Série terminée !" : `+${delta} ${unit.toLowerCase()}`,
         description: `${existing.title} · ${unit} ${nextProg}${existing.totalUnits ? `/${existing.totalUnits}` : ""}`,
@@ -889,7 +1472,15 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         celebrate: reachedEnd,
       });
     },
-    [library, addActivity, pushNotification, profile, pushMutationToAniList, toast]
+    [
+      library,
+      addActivity,
+      pushNotification,
+      profile,
+      pushMutationToAniList,
+      publishCommunityActivity,
+      toast,
+    ]
   );
 
   const toggleFavorite = useCallback(
@@ -912,6 +1503,17 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         isFavorite: updated.isFavorite,
         title: existing.title,
       });
+      if (updated.isFavorite) {
+        publishCommunityActivity({
+          kind: "FAVORITE_MEDIA",
+          mediaId: existing.mediaId,
+          mediaTitle: existing.title,
+          mediaType: existing.type,
+          coverImage: existing.coverImage,
+          action: "A ajouté en coup de cœur",
+          score: existing.score,
+        });
+      }
       toast({
         title: updated.isFavorite ? "Ajouté aux coups de cœur" : "Retiré des coups de cœur",
         description: existing.title,
@@ -920,7 +1522,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         celebrate: updated.isFavorite,
       });
     },
-    [library, profile, pushMutationToAniList, toast]
+    [library, profile, pushMutationToAniList, publishCommunityActivity, toast]
   );
 
   const removeEntry = useCallback(
@@ -1167,6 +1769,17 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       if (Array.isArray(data.library)) setLibrary(data.library);
       if (Array.isArray(data.notifications)) setNotifications(data.notifications);
       if (Array.isArray(data.activity)) setActivity(data.activity);
+      if (Array.isArray(data.favoriteStaff)) setFavoriteStaff(data.favoriteStaff);
+      if (Array.isArray(data.unlockedBadges) && data.unlockedBadges.length > 0) {
+        hasStoredBadgesRef.current = true;
+        setUnlockedBadges(data.unlockedBadges);
+      }
+      if (Array.isArray(data.pinnedBadges)) {
+        setPinnedBadges(data.pinnedBadges.slice(0, 3));
+      }
+      if (typeof data.socialInteractionsCount === "number") {
+        setSocialInteractionsCount(data.socialInteractionsCount);
+      }
 
       toast({
         title: `Bon retour, ${data.user.displayName} !`,
@@ -1360,7 +1973,21 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     isAuthenticated,
     supabaseReady,
     updateProfile,
+    uploadAvatar,
     updateNotificationPrefs,
+    favoriteStaff,
+    toggleFavoriteStaff,
+    unreadMessagesCount,
+    refreshUnreadMessages,
+    unlockedBadges,
+    pinnedBadges,
+    evaluatedBadges,
+    socialInteractionsCount,
+    badgeUnlockQueue,
+    dismissBadgeUnlock,
+    previewBadgeUnlock,
+    togglePinBadge,
+    recordSocialInteraction,
     signInWithSupabase,
     signUpWithSupabase,
     signInWithGoogle,

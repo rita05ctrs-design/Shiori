@@ -214,7 +214,9 @@ export function createDefaultProfile(): UserProfile {
     email: "kuro@shiori.app",
     bio: "Collectionneur d'histoires nocturnes — seinen, fantasy mélancolique & animation d'auteur.",
     avatarInitials: "KU",
+    avatarUrl: null,
     accentColor: "#E5484D",
+    isActivityPublic: true,
     mode: "local",
     notificationPrefs: {
       airingAlerts: true,

@@ -263,6 +263,10 @@ export interface HomeData {
   topAnime: MediaItem[];
   manga: MediaItem[];
   airingToday: AiringScheduleItem[];
+  movies: MediaItem[];
+  upcoming: MediaItem[];
+  hiddenGems: MediaItem[];
+  shortBinge: MediaItem[];
 }
 
 export async function fetchHomeData(): Promise<HomeData> {
@@ -283,6 +287,18 @@ export async function fetchHomeData(): Promise<HomeData> {
         manga: Page(page: 1, perPage: 12) {
           media(sort: SCORE_DESC, type: MANGA, isAdult: false) { ${MEDIA_FRAGMENT} }
         }
+        movies: Page(page: 1, perPage: 12) {
+          media(sort: SCORE_DESC, type: ANIME, format: MOVIE, popularity_greater: 45000, isAdult: false) { ${MEDIA_FRAGMENT} }
+        }
+        upcoming: Page(page: 1, perPage: 12) {
+          media(sort: POPULARITY_DESC, type: ANIME, status: NOT_YET_RELEASED, isAdult: false) { ${MEDIA_FRAGMENT} }
+        }
+        hiddenGems: Page(page: 1, perPage: 12) {
+          media(sort: SCORE_DESC, type: ANIME, averageScore_greater: 81, popularity_lesser: 110000, popularity_greater: 15000, isAdult: false) { ${MEDIA_FRAGMENT} }
+        }
+        shortBinge: Page(page: 1, perPage: 12) {
+          media(sort: POPULARITY_DESC, type: ANIME, format: TV, episodes_lesser: 14, episodes_greater: 5, averageScore_greater: 80, isAdult: false) { ${MEDIA_FRAGMENT} }
+        }
         airing: Page(page: 1, perPage: 16) {
           airingSchedules(airingAt_greater: $dayStart, airingAt_lesser: $dayEnd, sort: TIME) {
             id airingAt episode timeUntilAiring
@@ -302,6 +318,10 @@ export async function fetchHomeData(): Promise<HomeData> {
     const popular: MediaItem[] = (data.popular?.media ?? []).map(normalizeMedia);
     const topAnime: MediaItem[] = (data.topAnime?.media ?? []).map(normalizeMedia);
     const manga: MediaItem[] = (data.manga?.media ?? []).map(normalizeMedia);
+    const movies: MediaItem[] = (data.movies?.media ?? []).map(normalizeMedia);
+    const upcoming: MediaItem[] = (data.upcoming?.media ?? []).map(normalizeMedia);
+    const hiddenGems: MediaItem[] = (data.hiddenGems?.media ?? []).map(normalizeMedia);
+    const shortBinge: MediaItem[] = (data.shortBinge?.media ?? []).map(normalizeMedia);
     const airingToday: AiringScheduleItem[] = (data.airing?.airingSchedules ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((s: any) => s.media && !s.media.isAdult && (s.media.popularity ?? 0) > 1500)
@@ -337,6 +357,12 @@ export async function fetchHomeData(): Promise<HomeData> {
       topAnime: topAnime.length ? topAnime : seed.topAnime,
       manga: manga.length ? manga : seed.manga,
       airingToday: airingToday.length ? airingToday : seed.airing.slice(0, 8),
+      movies: movies.length ? movies : seed.topAnime.filter((m) => m.format === "MOVIE"),
+      upcoming: upcoming.length ? upcoming : seed.trending.slice(0, 8),
+      hiddenGems: hiddenGems.length ? hiddenGems : seed.topAnime.slice(0, 8),
+      shortBinge: shortBinge.length
+        ? shortBinge
+        : seed.popular.filter((m) => (m.episodes ?? 24) <= 13),
     };
   } catch {
     const hero = [
@@ -350,6 +376,10 @@ export async function fetchHomeData(): Promise<HomeData> {
       topAnime: seed.topAnime,
       manga: seed.manga,
       airingToday: seed.airing.slice(0, 8),
+      movies: seed.topAnime.filter((m) => m.format === "MOVIE").slice(0, 10),
+      upcoming: seed.trending.slice(0, 10),
+      hiddenGems: seed.topAnime.slice(0, 10),
+      shortBinge: seed.popular.filter((m) => (m.episodes ?? 24) <= 13).slice(0, 10),
     };
   }
 }
@@ -361,6 +391,11 @@ export interface DiscoverParams {
   genres?: string[];
   tags?: string[];
   minScore?: number;
+  maxScore?: number;
+  minEpisodes?: number;
+  maxEpisodes?: number;
+  minChapters?: number;
+  maxChapters?: number;
   season?: string;
   year?: number;
   format?: string;
@@ -386,6 +421,11 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     genres,
     tags,
     minScore,
+    maxScore,
+    minEpisodes,
+    maxEpisodes,
+    minChapters,
+    maxChapters,
     season,
     year,
     format,
@@ -413,6 +453,11 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
         $genres: [String],
         $tags: [String],
         $minScore: Int,
+        $maxScore: Int,
+        $episodesGreater: Int,
+        $episodesLesser: Int,
+        $chaptersGreater: Int,
+        $chaptersLesser: Int,
         $season: MediaSeason,
         $seasonYear: Int,
         $format: MediaFormat,
@@ -427,6 +472,11 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
             genre_in: $genres,
             tag_in: $tags,
             averageScore_greater: $minScore,
+            averageScore_lesser: $maxScore,
+            episodes_greater: $episodesGreater,
+            episodes_lesser: $episodesLesser,
+            chapters_greater: $chaptersGreater,
+            chapters_lesser: $chaptersLesser,
             season: $season,
             seasonYear: $seasonYear,
             format: $format,
@@ -449,7 +499,32 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     if (search?.trim()) variables.search = search.trim();
     if (genreList.length > 0) variables.genres = genreList;
     if (tagList.length > 0) variables.tags = tagList;
-    if (minScore && minScore > 0) variables.minScore = minScore;
+    // AniList *_greater and *_lesser are strict (> and <), so shift by 1 to make bounds inclusive
+    if (minScore && minScore > 0) variables.minScore = Math.max(0, Math.trunc(minScore) - 1);
+    if (maxScore && maxScore > 0) variables.maxScore = Math.min(101, Math.trunc(maxScore) + 1);
+
+    if (type === "ANIME") {
+      if (minEpisodes && minEpisodes > 0) {
+        variables.episodesGreater = Math.max(0, Math.trunc(minEpisodes) - 1);
+      }
+      if (maxEpisodes && maxEpisodes > 0) {
+        variables.episodesLesser = Math.trunc(maxEpisodes) + 1;
+        if (!minEpisodes || minEpisodes <= 0) {
+          variables.episodesGreater = 0; // Ensure known episode count (>= 1)
+        }
+      }
+    } else if (type === "MANGA") {
+      if (minChapters && minChapters > 0) {
+        variables.chaptersGreater = Math.max(0, Math.trunc(minChapters) - 1);
+      }
+      if (maxChapters && maxChapters > 0) {
+        variables.chaptersLesser = Math.trunc(maxChapters) + 1;
+        if (!minChapters || minChapters <= 0) {
+          variables.chaptersGreater = 0;
+        }
+      }
+    }
+
     if (season && season !== "ALL" && type === "ANIME") variables.season = season;
     if (year && !Number.isNaN(year)) variables.seasonYear = year;
     if (format && format !== "ALL") variables.format = format;
@@ -484,6 +559,30 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     }
     if (minScore && minScore > 0) {
       filtered = filtered.filter((m) => (m.averageScore ?? 0) >= minScore);
+    }
+    if (maxScore && maxScore > 0) {
+      filtered = filtered.filter(
+        (m) => m.averageScore !== null && m.averageScore <= maxScore
+      );
+    }
+    if (type === "ANIME") {
+      if (minEpisodes && minEpisodes > 0) {
+        filtered = filtered.filter((m) => (m.episodes ?? 0) >= minEpisodes);
+      }
+      if (maxEpisodes && maxEpisodes > 0) {
+        filtered = filtered.filter(
+          (m) => m.episodes !== null && m.episodes > 0 && m.episodes <= maxEpisodes
+        );
+      }
+    } else {
+      if (minChapters && minChapters > 0) {
+        filtered = filtered.filter((m) => (m.chapters ?? 0) >= minChapters);
+      }
+      if (maxChapters && maxChapters > 0) {
+        filtered = filtered.filter(
+          (m) => m.chapters !== null && m.chapters > 0 && m.chapters <= maxChapters
+        );
+      }
     }
     if (format && format !== "ALL") {
       filtered = filtered.filter((m) => m.format === format);
@@ -653,6 +752,81 @@ export async function fetchWeeklySchedule(): Promise<AiringScheduleItem[]> {
         timeUntilAiring: s.timeUntilAiring,
         media: normalizeMedia(s.media),
       }));
+
+    return filtered.length > 0 ? filtered : seed.airing;
+  } catch {
+    return seed.airing;
+  }
+}
+
+/**
+ * Dedicated 1-click Weekly Episode Tracker feed:
+ * Fetches BOTH episodes already aired in the last 7 days (most recent first)
+ * AND upcoming episodes in the next 7 days (soonest first) in one GraphQL batch.
+ */
+export async function fetchWeeklyEpisodeTrackerSchedule(): Promise<AiringScheduleItem[]> {
+  const seed = getSeedData();
+  try {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const pastStart = nowSec - 7 * 86400;
+    const futureEnd = nowSec + 7 * 86400;
+
+    const query = `
+      query ($pastStart: Int, $now: Int, $futureEnd: Int) {
+        recent1: Page(page: 1, perPage: 50) {
+          airingSchedules(airingAt_greater: $pastStart, airingAt_lesser: $now, sort: TIME_DESC) {
+            id airingAt episode timeUntilAiring
+            media { ${MEDIA_FRAGMENT} isAdult }
+          }
+        }
+        recent2: Page(page: 2, perPage: 50) {
+          airingSchedules(airingAt_greater: $pastStart, airingAt_lesser: $now, sort: TIME_DESC) {
+            id airingAt episode timeUntilAiring
+            media { ${MEDIA_FRAGMENT} isAdult }
+          }
+        }
+        upcoming1: Page(page: 1, perPage: 50) {
+          airingSchedules(airingAt_greater: $now, airingAt_lesser: $futureEnd, sort: TIME) {
+            id airingAt episode timeUntilAiring
+            media { ${MEDIA_FRAGMENT} isAdult }
+          }
+        }
+        upcoming2: Page(page: 2, perPage: 50) {
+          airingSchedules(airingAt_greater: $now, airingAt_lesser: $futureEnd, sort: TIME) {
+            id airingAt episode timeUntilAiring
+            media { ${MEDIA_FRAGMENT} isAdult }
+          }
+        }
+      }
+    `;
+
+    const data = await queryAniList(
+      query,
+      { pastStart, now: nowSec, futureEnd },
+      180
+    );
+
+    const combined = [
+      ...(data.recent1?.airingSchedules ?? []),
+      ...(data.recent2?.airingSchedules ?? []),
+      ...(data.upcoming1?.airingSchedules ?? []),
+      ...(data.upcoming2?.airingSchedules ?? []),
+    ];
+
+    const seen = new Set<number>();
+    const filtered: AiringScheduleItem[] = [];
+    for (const s of combined) {
+      if (!s?.media || s.media.isAdult || (s.media.popularity ?? 0) <= 1000) continue;
+      if (seen.has(s.id)) continue;
+      seen.add(s.id);
+      filtered.push({
+        id: s.id,
+        airingAt: s.airingAt,
+        episode: s.episode,
+        timeUntilAiring: s.timeUntilAiring,
+        media: normalizeMedia(s.media),
+      });
+    }
 
     return filtered.length > 0 ? filtered : seed.airing;
   } catch {

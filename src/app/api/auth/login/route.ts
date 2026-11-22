@@ -39,6 +39,10 @@ export async function POST(request: NextRequest) {
       library: account.library,
       notifications: account.notifications,
       activity: account.activity,
+      favoriteStaff: account.favoriteStaff ?? [],
+      unlockedBadges: account.unlockedBadges ?? [],
+      pinnedBadges: account.pinnedBadges ?? [],
+      socialInteractionsCount: account.socialInteractionsCount ?? 0,
     });
 
     res.cookies.set(SESSION_COOKIE_NAME, token, {

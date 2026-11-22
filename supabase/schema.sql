@@ -60,6 +60,13 @@ create table if not exists public.profiles (
   anilist_site_url text,
   anilist_token_expires_at timestamptz,
   anilist_connected_at timestamptz,
+  accent_color text default '#E5484D',
+  is_activity_public boolean not null default true,
+  favorite_staff jsonb not null default '[]'::jsonb,
+  favorite_media jsonb not null default '[]'::jsonb,
+  stats_summary jsonb not null default '{}'::jsonb,
+  unlocked_badges jsonb not null default '[]'::jsonb,
+  pinned_badges text[] not null default '{}',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -72,6 +79,13 @@ alter table public.profiles add column if not exists anilist_avatar_url text;
 alter table public.profiles add column if not exists anilist_site_url text;
 alter table public.profiles add column if not exists anilist_token_expires_at timestamptz;
 alter table public.profiles add column if not exists anilist_connected_at timestamptz;
+alter table public.profiles add column if not exists accent_color text default '#E5484D';
+alter table public.profiles add column if not exists is_activity_public boolean not null default true;
+alter table public.profiles add column if not exists favorite_staff jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists favorite_media jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists stats_summary jsonb not null default '{}'::jsonb;
+alter table public.profiles add column if not exists unlocked_badges jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists pinned_badges text[] not null default '{}';
 
 -- Sécurité : ne jamais exposer anilist_access_token au rôle anon
 revoke select (anilist_access_token) on public.profiles from anon;
@@ -82,6 +96,59 @@ drop policy if exists "Public profiles are viewable by everyone" on public.profi
 drop policy if exists "Users can view their own profile" on public.profiles;
 create policy "Users can view their own profile"
   on public.profiles for select using (auth.uid() = id);
+
+-- Vue publique sécurisée des profils (sans jamais exposer anilist_access_token ni email)
+drop view if exists public.public_profiles;
+create view public.public_profiles as
+select
+  id,
+  username,
+  display_name,
+  avatar_url,
+  banner_url,
+  bio,
+  coalesce(accent_color, '#E5484D') as accent_color,
+  coalesce(is_activity_public, true) as is_activity_public,
+  coalesce(favorite_staff, '[]'::jsonb) as favorite_staff,
+  coalesce(favorite_media, '[]'::jsonb) as favorite_media,
+  coalesce(stats_summary, '{}'::jsonb) as stats_summary,
+  created_at as joined_at,
+  coalesce(unlocked_badges, '[]'::jsonb) as unlocked_badges,
+  coalesce(pinned_badges, '{}'::text[]) as pinned_badges
+from public.profiles;
+
+grant select on public.public_profiles to anon, authenticated;
+
+-- Bucket Supabase Storage pour les avatars personnalisés
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatars',
+  'avatars',
+  true,
+  3145728,
+  array['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+)
+on conflict (id) do nothing;
+
+drop policy if exists "Avatar images are publicly accessible" on storage.objects;
+create policy "Avatar images are publicly accessible"
+  on storage.objects for select
+  using (bucket_id = 'avatars');
+
+drop policy if exists "Users can upload their own avatar" on storage.objects;
+create policy "Users can upload their own avatar"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Users can update their own avatar" on storage.objects;
+create policy "Users can update their own avatar"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Users can delete their own avatar" on storage.objects;
+create policy "Users can delete their own avatar"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 
 drop policy if exists "Users can insert their own profile" on public.profiles;
 create policy "Users can insert their own profile"
@@ -221,31 +288,196 @@ create policy "Users can delete their own notifications"
   on public.notifications for delete using (auth.uid() = user_id);
 
 -- ----------------------------------------------------------------------------
--- 5. ACTIVITY LOG (historique de progression pour la page Stats)
+-- 5. ACTIVITY LOG (historique personnel + fil communautaire temps réel)
 -- ----------------------------------------------------------------------------
 create table if not exists public.activity_events (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.profiles(id) on delete cascade,
-  media_id integer not null,
+  media_id integer not null default 0,
   media_title text not null,
-  media_type public.media_type not null,
+  media_type public.media_type not null default 'ANIME',
   cover_image text,
   action text not null,
+  event_kind text not null default 'UPDATE',
+  is_public boolean not null default true,
+  actor_username text,
+  actor_display_name text,
+  actor_avatar_url text,
+  metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
+alter table public.activity_events add column if not exists event_kind text not null default 'UPDATE';
+alter table public.activity_events add column if not exists is_public boolean not null default true;
+alter table public.activity_events add column if not exists actor_username text;
+alter table public.activity_events add column if not exists actor_display_name text;
+alter table public.activity_events add column if not exists actor_avatar_url text;
+alter table public.activity_events add column if not exists metadata jsonb not null default '{}'::jsonb;
+
 create index if not exists idx_activity_user_created
   on public.activity_events(user_id, created_at desc);
+create index if not exists idx_activity_public_created
+  on public.activity_events(is_public, created_at desc);
 
 alter table public.activity_events enable row level security;
 
 drop policy if exists "Users can view their own activity" on public.activity_events;
-create policy "Users can view their own activity"
-  on public.activity_events for select using (auth.uid() = user_id);
+drop policy if exists "Public or own activity is viewable" on public.activity_events;
+create policy "Public or own activity is viewable"
+  on public.activity_events for select using (is_public = true or auth.uid() = user_id);
 
 drop policy if exists "Users can insert their own activity" on public.activity_events;
 create policy "Users can insert their own activity"
   on public.activity_events for insert with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own activity" on public.activity_events;
+create policy "Users can delete their own activity"
+  on public.activity_events for delete using (auth.uid() = user_id);
+
+-- ----------------------------------------------------------------------------
+-- 5B. SOCIAL INTERACTIONS : LIKES & COMMENTAIRES SUR L'ACTIVITÉ
+-- ----------------------------------------------------------------------------
+create table if not exists public.activity_likes (
+  id uuid primary key default uuid_generate_v4(),
+  activity_id uuid not null references public.activity_events(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(activity_id, user_id)
+);
+
+create index if not exists idx_activity_likes_activity on public.activity_likes(activity_id);
+
+alter table public.activity_likes enable row level security;
+
+drop policy if exists "Anyone can view activity likes" on public.activity_likes;
+create policy "Anyone can view activity likes"
+  on public.activity_likes for select using (true);
+
+drop policy if exists "Authenticated users can like activity" on public.activity_likes;
+create policy "Authenticated users can like activity"
+  on public.activity_likes for insert with check (auth.uid() = user_id);
+
+drop policy if exists "Users can remove their own likes" on public.activity_likes;
+create policy "Users can remove their own likes"
+  on public.activity_likes for delete using (auth.uid() = user_id);
+
+create table if not exists public.activity_comments (
+  id uuid primary key default uuid_generate_v4(),
+  activity_id uuid not null references public.activity_events(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  author_username text not null,
+  author_display_name text not null,
+  author_avatar_url text,
+  body text not null check (char_length(trim(body)) between 1 and 600),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_activity_comments_activity
+  on public.activity_comments(activity_id, created_at asc);
+
+alter table public.activity_comments enable row level security;
+
+drop policy if exists "Anyone can view activity comments" on public.activity_comments;
+create policy "Anyone can view activity comments"
+  on public.activity_comments for select using (true);
+
+drop policy if exists "Authenticated users can comment on activity" on public.activity_comments;
+create policy "Authenticated users can comment on activity"
+  on public.activity_comments for insert with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own comments" on public.activity_comments;
+create policy "Users can delete their own comments"
+  on public.activity_comments for delete using (auth.uid() = user_id);
+
+-- ----------------------------------------------------------------------------
+-- 5C. MESSAGERIE PRIVÉE (DIRECT MESSAGES) ENTRE UTILISATEURS
+-- ----------------------------------------------------------------------------
+create table if not exists public.direct_messages (
+  id uuid primary key default uuid_generate_v4(),
+  sender_id uuid not null references public.profiles(id) on delete cascade,
+  recipient_id uuid not null references public.profiles(id) on delete cascade,
+  sender_username text not null,
+  sender_display_name text not null,
+  sender_avatar_url text,
+  recipient_username text not null,
+  recipient_display_name text not null,
+  recipient_avatar_url text,
+  body text not null check (char_length(trim(body)) between 1 and 2000),
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_dm_participants_created
+  on public.direct_messages(sender_id, recipient_id, created_at desc);
+create index if not exists idx_dm_recipient_unread
+  on public.direct_messages(recipient_id, is_read, created_at desc);
+
+alter table public.direct_messages enable row level security;
+
+drop policy if exists "Participants can read their own direct messages" on public.direct_messages;
+create policy "Participants can read their own direct messages"
+  on public.direct_messages for select using (auth.uid() = sender_id or auth.uid() = recipient_id);
+
+drop policy if exists "Users can send direct messages" on public.direct_messages;
+create policy "Users can send direct messages"
+  on public.direct_messages for insert with check (auth.uid() = sender_id);
+
+drop policy if exists "Recipients can mark messages read" on public.direct_messages;
+create policy "Recipients can mark messages read"
+  on public.direct_messages for update using (auth.uid() = recipient_id);
+
+-- Activer Supabase Realtime sur le fil d'activité, likes, commentaires et DM
+do $$ begin
+  alter publication supabase_realtime add table public.activity_events;
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter publication supabase_realtime add table public.activity_likes;
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter publication supabase_realtime add table public.activity_comments;
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  alter publication supabase_realtime add table public.direct_messages;
+exception when duplicate_object then null;
+end $$;
+
+-- ----------------------------------------------------------------------------
+-- 5D. GAMIFICATION : BADGES & RÉCOMPENSES (user_badges)
+-- ----------------------------------------------------------------------------
+create table if not exists public.user_badges (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  badge_id text not null,
+  unlocked_at timestamptz not null default now(),
+  is_pinned boolean not null default false,
+  unique(user_id, badge_id)
+);
+
+create index if not exists idx_user_badges_user on public.user_badges(user_id, unlocked_at desc);
+
+alter table public.user_badges enable row level security;
+
+drop policy if exists "Anyone can view unlocked badges on public profiles" on public.user_badges;
+create policy "Anyone can view unlocked badges on public profiles"
+  on public.user_badges for select using (true);
+
+drop policy if exists "Users can insert their own badges" on public.user_badges;
+create policy "Users can insert their own badges"
+  on public.user_badges for insert with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update their own badges" on public.user_badges;
+create policy "Users can update their own badges"
+  on public.user_badges for update using (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own badges" on public.user_badges;
+create policy "Users can delete their own badges"
+  on public.user_badges for delete using (auth.uid() = user_id);
 
 -- ----------------------------------------------------------------------------
 -- 6. TRIGGERS (auto-creation du profil + updated_at)

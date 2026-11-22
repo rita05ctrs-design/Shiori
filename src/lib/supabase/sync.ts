@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "./client";
-import type { AniListUserStatsSnapshot, LibraryEntry } from "@/types/media";
+import type {
+  AniListUserStatsSnapshot,
+  LibraryEntry,
+  UnlockedBadgeRecord,
+} from "@/types/media";
 
 function entryToRow(userId: string, entry: LibraryEntry) {
   const safeScore =
@@ -289,4 +293,186 @@ export async function fetchCloudAniListStats(
     manga: data.manga_stats,
     syncedAt: data.synced_at,
   };
+}
+
+/**
+ * Resizes an image file to a crisp square 256x256 JPEG data URL (<= ~25KB)
+ * for instant preview & local/fallback persistence when Supabase Storage isn't configured.
+ */
+async function compressAvatarToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Lecture du fichier impossible"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Format d'image invalide"));
+      img.onload = () => {
+        const size = 256;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(String(reader.result));
+          return;
+        }
+        const minSide = Math.min(img.width, img.height);
+        const sx = (img.width - minSide) / 2;
+        const sy = (img.height - minSide) / 2;
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+        resolve(canvas.toDataURL("image/jpeg", 0.86));
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Uploads a custom profile avatar to Supabase Storage (`avatars` bucket) if signed in
+ * via Supabase, or falls back smoothly to a crisp compressed square Data URL.
+ */
+export async function uploadProfileAvatar(
+  userId: string,
+  file: File
+): Promise<{ url: string; storage: "supabase" | "local"; warning?: string }> {
+  const supabase = getSupabaseBrowserClient();
+  if (supabase) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const filePath = `${user.id}/avatar-${Date.now()}.${ext || "jpg"}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("avatars")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: true,
+            contentType: file.type || "image/jpeg",
+          });
+
+        if (!uploadErr) {
+          const { data: pub } = supabase.storage.from("avatars").getPublicUrl(filePath);
+          if (pub?.publicUrl) {
+            await supabase
+              .from("profiles")
+              .update({ avatar_url: pub.publicUrl })
+              .eq("id", user.id);
+            return { url: pub.publicUrl, storage: "supabase" };
+          }
+        }
+      }
+    } catch {
+      // fall through cleanly to compressed local data URL
+    }
+  }
+
+  const dataUrl = await compressAvatarToDataUrl(file);
+  return {
+    url: dataUrl,
+    storage: "local",
+    warning:
+      userId && supabase
+        ? "Avatar enregistré localement (créez le bucket Supabase Storage 'avatars' via schema.sql pour l'hébergement cloud)."
+        : undefined,
+  };
+}
+
+/**
+ * Fetches unlocked badges & pinned badge IDs from Supabase (`public.user_badges` + `public.profiles`).
+ */
+export async function fetchCloudUserBadges(userId: string): Promise<{
+  unlockedBadges: UnlockedBadgeRecord[];
+  pinnedBadges: string[];
+} | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  try {
+    const [{ data: badgeRows, error: bErr }, { data: pRow }] = await Promise.all([
+      supabase
+        .from("user_badges")
+        .select("badge_id, unlocked_at, is_pinned")
+        .eq("user_id", userId)
+        .order("unlocked_at", { ascending: true }),
+      supabase
+        .from("profiles")
+        .select("unlocked_badges, pinned_badges")
+        .eq("id", userId)
+        .maybeSingle(),
+    ]);
+
+    const unlockedMap = new Map<string, string>();
+    const pinnedFromTable: string[] = [];
+
+    if (!bErr && Array.isArray(badgeRows)) {
+      for (const row of badgeRows) {
+        if (row.badge_id) {
+          unlockedMap.set(String(row.badge_id), String(row.unlocked_at || new Date().toISOString()));
+          if (row.is_pinned) pinnedFromTable.push(String(row.badge_id));
+        }
+      }
+    }
+
+    if (pRow && Array.isArray(pRow.unlocked_badges)) {
+      for (const item of pRow.unlocked_badges as UnlockedBadgeRecord[]) {
+        if (item?.badgeId && !unlockedMap.has(item.badgeId)) {
+          unlockedMap.set(item.badgeId, item.unlockedAt || new Date().toISOString());
+        }
+      }
+    }
+
+    const pinnedBadges =
+      pRow && Array.isArray(pRow.pinned_badges) && pRow.pinned_badges.length > 0
+        ? (pRow.pinned_badges as string[]).slice(0, 3)
+        : pinnedFromTable.slice(0, 3);
+
+    const unlockedBadges: UnlockedBadgeRecord[] = Array.from(unlockedMap.entries()).map(
+      ([badgeId, unlockedAt]) => ({ badgeId, unlockedAt })
+    );
+
+    if (unlockedBadges.length === 0 && pinnedBadges.length === 0) return null;
+    return { unlockedBadges, pinnedBadges };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persists unlocked badges + pinned selection to Supabase (`public.user_badges` & `public.profiles`).
+ */
+export async function syncUserBadgesToCloud(
+  userId: string,
+  unlockedBadges: UnlockedBadgeRecord[],
+  pinnedBadges: string[]
+): Promise<{ synced: boolean }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { synced: false };
+
+  try {
+    const pinnedSet = new Set(pinnedBadges.slice(0, 3));
+    if (unlockedBadges.length > 0) {
+      const rows = unlockedBadges.map((b) => ({
+        user_id: userId,
+        badge_id: b.badgeId,
+        unlocked_at: b.unlockedAt,
+        is_pinned: pinnedSet.has(b.badgeId),
+      }));
+      await supabase.from("user_badges").upsert(rows, { onConflict: "user_id,badge_id" });
+    }
+
+    await supabase
+      .from("profiles")
+      .update({
+        unlocked_badges: unlockedBadges,
+        pinned_badges: pinnedBadges.slice(0, 3),
+      })
+      .eq("id", userId);
+
+    return { synced: true };
+  } catch {
+    return { synced: false };
+  }
 }

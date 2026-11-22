@@ -50,6 +50,24 @@ export async function PUT(request: NextRequest) {
       if (typeof body.profile.accentColor === "string") {
         current.accentColor = body.profile.accentColor;
       }
+      if (body.profile.avatarUrl === null || typeof body.profile.avatarUrl === "string") {
+        current.avatarUrl = body.profile.avatarUrl;
+      }
+      if (typeof body.profile.isActivityPublic === "boolean") {
+        current.isActivityPublic = body.profile.isActivityPublic;
+      }
+      if (Array.isArray(body.favoriteStaff)) {
+        current.favoriteStaff = body.favoriteStaff;
+      }
+      if (Array.isArray(body.unlockedBadges)) {
+        current.unlockedBadges = body.unlockedBadges;
+      }
+      if (Array.isArray(body.pinnedBadges)) {
+        current.pinnedBadges = body.pinnedBadges.slice(0, 3);
+      }
+      if (typeof body.socialInteractionsCount === "number") {
+        current.socialInteractionsCount = Math.max(0, Math.floor(body.socialInteractionsCount));
+      }
       if (body.profile.notificationPrefs && typeof body.profile.notificationPrefs === "object") {
         current.notificationPrefs = {
           ...current.notificationPrefs,

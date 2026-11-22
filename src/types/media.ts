@@ -185,6 +185,16 @@ export interface ThemeSettings {
   syncParticles: boolean;
 }
 
+export interface FavoriteVoiceActor {
+  id: number;
+  name: string;
+  nativeName: string | null;
+  image: string;
+  language: string | null;
+  siteUrl: string | null;
+  notableRoles?: { name: string; mediaTitle?: string | null }[];
+}
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -192,10 +202,138 @@ export interface UserProfile {
   email: string;
   bio: string;
   avatarInitials: string;
+  avatarUrl?: string | null;
   accentColor: string;
+  isActivityPublic?: boolean;
   mode: "local" | "account" | "supabase";
   notificationPrefs: NotificationPrefs;
   joinedAt: string;
+}
+
+export interface PublicProfileMediaSummary {
+  mediaId: number;
+  type: MediaType;
+  title: string;
+  coverImage: string;
+  score: number | null;
+}
+
+export interface PublicProfileStatsSummary {
+  totalEntries: number;
+  animeCount: number;
+  mangaCount: number;
+  episodesWatched: number;
+  chaptersRead: number;
+  completedCount: number;
+  meanScore: number | null;
+}
+
+export type BadgeRarity = "bronze" | "silver" | "gold" | "legendary" | "mythic";
+export type BadgeCategory = "anime" | "manga" | "milestone" | "critic" | "social";
+
+export interface UnlockedBadgeRecord {
+  badgeId: string;
+  unlockedAt: string;
+}
+
+export interface EvaluatedBadge {
+  id: string;
+  title: string;
+  description: string;
+  category: BadgeCategory;
+  rarity: BadgeRarity;
+  iconKey: string;
+  current: number;
+  target: number;
+  unitLabel: string;
+  unlocked: boolean;
+  unlockedAt: string | null;
+  progressPct: number;
+}
+
+export interface PublicUserProfile {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  avatarInitials: string;
+  bio: string;
+  accentColor: string;
+  isActivityPublic: boolean;
+  joinedAt: string;
+  favoriteStaff: FavoriteVoiceActor[];
+  favoriteMedia: PublicProfileMediaSummary[];
+  stats: PublicProfileStatsSummary;
+  unlockedBadges?: UnlockedBadgeRecord[];
+  pinnedBadges?: string[];
+  socialInteractionsCount?: number;
+  source?: "supabase" | "local" | "community";
+}
+
+export type CommunityActivityKind =
+  | "FAVORITE_MEDIA"
+  | "FAVORITE_STAFF"
+  | "COMPLETED"
+  | "SCORED"
+  | "BADGE_UNLOCKED"
+  | "UPDATE";
+
+export interface ActivityCommentItem {
+  id: string;
+  activityId: string;
+  userId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  authorAvatarUrl: string | null;
+  authorAccentColor?: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface CommunityActivityItem {
+  id: string;
+  userId: string;
+  actorUsername: string;
+  actorDisplayName: string;
+  actorAvatarUrl: string | null;
+  actorAccentColor?: string;
+  actorPinnedBadges?: string[];
+  kind: CommunityActivityKind;
+  mediaId: number;
+  mediaTitle: string;
+  mediaType: MediaType | "STAFF" | "BADGE";
+  coverImage: string | null;
+  action: string;
+  score?: number | null;
+  badgeId?: string | null;
+  badgeRarity?: BadgeRarity | null;
+  isPublic: boolean;
+  createdAt: string;
+  likes: string[]; // user IDs who liked
+  comments: ActivityCommentItem[];
+}
+
+export interface DirectMessageItem {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  senderUsername: string;
+  senderDisplayName: string;
+  senderAvatarUrl: string | null;
+  recipientUsername: string;
+  recipientDisplayName: string;
+  recipientAvatarUrl: string | null;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface PersonalizedRecommendation {
+  media: MediaItem;
+  reason: string;
+  reasonKind: "similar" | "genre";
+  sourceTitle?: string;
+  matchedTag?: string;
 }
 
 export interface ShioriNotification {

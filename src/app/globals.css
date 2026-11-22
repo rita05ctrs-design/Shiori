@@ -177,3 +177,76 @@ select option {
   background-color: var(--shiori-surface-solid);
   color: #f4f3ee;
 }
+
+/* ============================================================================
+   Gamification Badges — GPU-composited specular shine & holographic shimmer
+   ============================================================================ */
+@keyframes shiori-badge-shine {
+  0% {
+    transform: translateX(-140%) skewX(-24deg);
+  }
+  100% {
+    transform: translateX(260%) skewX(-24deg);
+  }
+}
+
+@keyframes shiori-holo-shift {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translateX(-8%) translateY(-6%) scale(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translateX(8%) translateY(6%) scale(1.04);
+  }
+}
+
+.badge-shine-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.badge-shine-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 48%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 100%
+  );
+  transform: translateX(-140%) skewX(-24deg);
+  will-change: transform;
+}
+
+.badge-shine-sweep:hover::after,
+.badge-shine-auto::after {
+  animation: shiori-badge-shine 1.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.badge-shine-loop::after {
+  animation: shiori-badge-shine 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.badge-holo-aura {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(244, 114, 182, 0.28), transparent 52%),
+    radial-gradient(circle at 82% 22%, rgba(56, 189, 248, 0.28), transparent 52%),
+    radial-gradient(circle at 52% 88%, rgba(250, 204, 21, 0.24), transparent 55%);
+  animation: shiori-holo-shift 5.5s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.badge-mythic-aura {
+  background:
+    radial-gradient(circle at 14% 18%, rgba(56, 189, 248, 0.36), transparent 50%),
+    radial-gradient(circle at 86% 24%, rgba(251, 191, 36, 0.34), transparent 52%),
+    radial-gradient(circle at 50% 90%, rgba(244, 63, 94, 0.32), transparent 55%),
+    radial-gradient(circle at 50% 40%, rgba(192, 132, 252, 0.26), transparent 60%);
+  animation: shiori-holo-shift 4.2s ease-in-out infinite;
+  will-change: transform, opacity;
+}

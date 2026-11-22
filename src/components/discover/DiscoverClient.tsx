@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -40,6 +40,7 @@ import { LuxurySelect, type LuxurySelectOption } from "@/components/ui/LuxurySel
 import {
   FILTER_CATEGORIES,
   getTaxonomyLabel,
+  MOOD_PRESETS,
   SITUATION_GROUPS,
   type MoodPreset,
   type SituationGroupId,
@@ -89,10 +90,47 @@ const STATUS_OPTIONS: LuxurySelectOption[] = [
 
 const MIN_SCORE_OPTIONS: LuxurySelectOption[] = [
   { id: "ALL", label: "Toutes notes", icon: Star },
-  { id: "70", label: "7.0+ · Très bon", icon: Star, accent: "text-[#F0B95B]" },
-  { id: "75", label: "7.5+ · Remarquable", icon: Star, accent: "text-[#F0B95B]" },
-  { id: "80", label: "8.0+ · Incontournable", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "60", label: "6.0+ · Correct", icon: Star, accent: "text-[#9A9EAE]" },
+  { id: "70", label: "7.0+ · Bon", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "75", label: "7.5+ · Très bon", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "80", label: "8.0+ · Excellent", icon: Star, accent: "text-[#F0B95B]" },
   { id: "85", label: "8.5+ · Chef-d'œuvre", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "90", label: "9.0+ · Légendaire", icon: Star, accent: "text-[#F0B95B]" },
+];
+
+interface LengthPreset {
+  id: string;
+  label: string;
+  hint: string;
+  min: string;
+  max: string;
+}
+
+const ANIME_LENGTH_PRESETS: LengthPreset[] = [
+  { id: "ALL", label: "Tous", hint: "Aucune limite d'épisodes", min: "", max: "" },
+  { id: "UNDER_13", label: "≤ 13 ép.", hint: "Format court · 1 saison", min: "1", max: "13" },
+  { id: "14_26", label: "14 – 26 ép.", hint: "Format 2 cours", min: "14", max: "26" },
+  { id: "27_50", label: "27 – 50 ép.", hint: "Série moyenne", min: "27", max: "50" },
+  { id: "51_100", label: "51 – 100 ép.", hint: "Grande saga", min: "51", max: "100" },
+  { id: "OVER_100", label: "100+ ép.", hint: "Shōnen fleuve", min: "100", max: "" },
+];
+
+const MANGA_LENGTH_PRESETS: LengthPreset[] = [
+  { id: "ALL", label: "Tous", hint: "Aucune limite de chapitres", min: "", max: "" },
+  { id: "UNDER_50", label: "≤ 50 ch.", hint: "Série courte", min: "1", max: "50" },
+  { id: "51_150", label: "51 – 150 ch.", hint: "Format moyen", min: "51", max: "150" },
+  { id: "151_300", label: "151 – 300 ch.", hint: "Longue série", min: "151", max: "300" },
+  { id: "OVER_300", label: "300+ ch.", hint: "Grande épopée", min: "300", max: "" },
+];
+
+const QUICK_SCORE_PILLS: { id: string; label: string }[] = [
+  { id: "ALL", label: "Toutes" },
+  { id: "60", label: "6+" },
+  { id: "70", label: "7+" },
+  { id: "75", label: "7.5+" },
+  { id: "80", label: "8+" },
+  { id: "85", label: "8.5+" },
+  { id: "90", label: "9+" },
 ];
 
 const SORT_OPTIONS: LuxurySelectOption[] = [
@@ -112,6 +150,11 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const searchParams = useSearchParams();
 
   const initialGenre = searchParams.get("genre");
+  const initialMoodParam = searchParams.get("mood");
+  const initialMoodPreset = initialMoodParam
+    ? MOOD_PRESETS.find((m) => m.id === initialMoodParam) ?? null
+    : null;
+
   const [type, setType] = useState<MediaType>(
     searchParams.get("type") === "MANGA" ? "MANGA" : "ANIME"
   );
@@ -120,10 +163,18 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
   // Multi-select Genres & Tags (Situations, Universes, Themes, Demographics)
   const [selectedGenres, setSelectedGenres] = useState<string[]>(
-    initialGenre && initialGenre !== "ALL" ? [initialGenre] : []
+    initialMoodPreset
+      ? initialMoodPreset.genres
+      : initialGenre && initialGenre !== "ALL"
+        ? [initialGenre]
+        : []
   );
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [activeMoodId, setActiveMoodId] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    initialMoodPreset ? initialMoodPreset.tags : []
+  );
+  const [activeMoodId, setActiveMoodId] = useState<string | null>(
+    initialMoodPreset ? initialMoodPreset.id : null
+  );
   const [activeCategory, setActiveCategory] = useState<TagCategory["id"]>("situations");
   const [situationGroup, setSituationGroup] = useState<SituationGroupId>("ALL");
   const [tagSearch, setTagSearch] = useState("");
@@ -133,8 +184,21 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const [season, setSeason] = useState(searchParams.get("season") ?? "ALL");
   const [format, setFormat] = useState(searchParams.get("format") ?? "ALL");
   const [status, setStatus] = useState(searchParams.get("status") ?? "ALL");
-  const [minScore, setMinScore] = useState("ALL");
-  const [sort, setSort] = useState(searchParams.get("sort") ?? "TRENDING_DESC");
+  const [minScore, setMinScore] = useState(
+    initialMoodPreset?.minScore ?? searchParams.get("minScore") ?? "ALL"
+  );
+  const [maxScore, setMaxScore] = useState(searchParams.get("maxScore") ?? "ALL");
+  const [minUnits, setMinUnits] = useState(
+    searchParams.get("minEpisodes") ?? searchParams.get("minChapters") ?? ""
+  );
+  const [maxUnits, setMaxUnits] = useState(
+    searchParams.get("maxEpisodes") ?? searchParams.get("maxChapters") ?? ""
+  );
+  const [debouncedMinUnits, setDebouncedMinUnits] = useState(minUnits);
+  const [debouncedMaxUnits, setDebouncedMaxUnits] = useState(maxUnits);
+  const [sort, setSort] = useState(
+    initialMoodPreset?.sort ?? searchParams.get("sort") ?? "TRENDING_DESC"
+  );
   const [showFilters, setShowFilters] = useState(true);
 
   const [items, setItems] = useState<MediaItem[]>(initialItems);
@@ -143,15 +207,25 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const [hasNextPage, setHasNextPage] = useState(true);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const reqIdRef = useRef(0);
 
-  // Debounce search text
+  // Debounce search text & episode/chapter custom inputs
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedMinUnits(minUnits.trim());
+      setDebouncedMaxUnits(maxUnits.trim());
+    }, 260);
+    return () => clearTimeout(t);
+  }, [minUnits, maxUnits]);
+
   const fetchResults = useCallback(
     async (targetPage: number, append: boolean) => {
+      const reqId = ++reqIdRef.current;
       if (append) setLoadingMore(true);
       else setLoading(true);
 
@@ -167,6 +241,22 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         if (selectedGenres.length > 0) qs.set("genres", selectedGenres.join(","));
         if (selectedTags.length > 0) qs.set("tags", selectedTags.join(","));
         if (minScore !== "ALL") qs.set("minScore", minScore);
+        if (maxScore !== "ALL") qs.set("maxScore", maxScore);
+        if (type === "ANIME") {
+          if (debouncedMinUnits && Number(debouncedMinUnits) > 0) {
+            qs.set("minEpisodes", debouncedMinUnits);
+          }
+          if (debouncedMaxUnits && Number(debouncedMaxUnits) > 0) {
+            qs.set("maxEpisodes", debouncedMaxUnits);
+          }
+        } else {
+          if (debouncedMinUnits && Number(debouncedMinUnits) > 0) {
+            qs.set("minChapters", debouncedMinUnits);
+          }
+          if (debouncedMaxUnits && Number(debouncedMaxUnits) > 0) {
+            qs.set("maxChapters", debouncedMaxUnits);
+          }
+        }
         if (year !== "ALL") qs.set("year", year);
         if (season !== "ALL" && type === "ANIME") qs.set("season", season);
         if (format !== "ALL") qs.set("format", format);
@@ -175,6 +265,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         const res = await fetch(`/api/anilist?${qs.toString()}`);
         if (!res.ok) throw new Error("fetch failed");
         const data = await res.json();
+        if (reqId !== reqIdRef.current) return;
 
         setItems((prev) => (append ? [...prev, ...(data.items ?? [])] : data.items ?? []));
         setHasNextPage(Boolean(data.hasNextPage));
@@ -183,8 +274,10 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       } catch {
         // keep current items on error
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (reqId === reqIdRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
     [
@@ -193,6 +286,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       selectedGenres,
       selectedTags,
       minScore,
+      maxScore,
+      debouncedMinUnits,
+      debouncedMaxUnits,
       year,
       season,
       format,
@@ -208,6 +304,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const handleTypeSwitch = (next: MediaType) => {
     setType(next);
     setFormat("ALL");
+    setMinUnits("");
+    setMaxUnits("");
     if (next === "MANGA") setSeason("ALL");
   };
 
@@ -253,7 +351,37 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     setFormat("ALL");
     setStatus("ALL");
     setMinScore("ALL");
+    setMaxScore("ALL");
+    setMinUnits("");
+    setMaxUnits("");
+    setDebouncedMinUnits("");
+    setDebouncedMaxUnits("");
     setSort("TRENDING_DESC");
+  };
+
+  const hasUnitFilter = Boolean(debouncedMinUnits || debouncedMaxUnits);
+  const lengthPresets = type === "ANIME" ? ANIME_LENGTH_PRESETS : MANGA_LENGTH_PRESETS;
+  const unitShortLabel = type === "ANIME" ? "ép." : "ch.";
+
+  const activeLengthPresetId = useMemo(() => {
+    const match = lengthPresets.find(
+      (p) => p.min === minUnits.trim() && p.max === maxUnits.trim()
+    );
+    if (match) return match.id;
+    // Also match when user came from URL ?maxEpisodes=13 without minEpisodes
+    if (!minUnits.trim() && maxUnits.trim() === "13" && type === "ANIME") {
+      return "UNDER_13";
+    }
+    return hasUnitFilter ? "CUSTOM" : "ALL";
+  }, [lengthPresets, minUnits, maxUnits, type, hasUnitFilter]);
+
+  const formatUnitRangeLabel = () => {
+    if (debouncedMinUnits && debouncedMaxUnits) {
+      return `${debouncedMinUnits} – ${debouncedMaxUnits} ${unitShortLabel}`;
+    }
+    if (debouncedMaxUnits) return `≤ ${debouncedMaxUnits} ${unitShortLabel}`;
+    if (debouncedMinUnits) return `${debouncedMinUnits}+ ${unitShortLabel}`;
+    return "";
   };
 
   const activeFilterCount =
@@ -263,7 +391,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     (season !== "ALL" ? 1 : 0) +
     (format !== "ALL" ? 1 : 0) +
     (status !== "ALL" ? 1 : 0) +
-    (minScore !== "ALL" ? 1 : 0);
+    (minScore !== "ALL" ? 1 : 0) +
+    (maxScore !== "ALL" ? 1 : 0) +
+    (hasUnitFilter ? 1 : 0);
 
   const hasActiveFilters = Boolean(debouncedSearch.trim()) || activeFilterCount > 0;
   const formats = type === "ANIME" ? ANIME_FORMATS : MANGA_FORMATS;
@@ -482,6 +612,123 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     icon={Star}
                     align="right"
                   />
+                </div>
+
+                {/* Quick Tactile Bar: Episode/Chapter Length + Score Filter */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
+                  {/* Episode / Chapter Count Filter */}
+                  <div className="xl:col-span-7 rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3.5 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
+                        <Tv className="w-3.5 h-3.5 text-accent" />
+                        <span>
+                          {type === "ANIME" ? "Nombre d'épisodes" : "Nombre de chapitres"}
+                        </span>
+                      </span>
+
+                      {/* Custom Min / Max Inputs */}
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <input
+                          type="number"
+                          min={1}
+                          max={2000}
+                          value={minUnits}
+                          onChange={(e) => setMinUnits(e.target.value)}
+                          placeholder="Min"
+                          aria-label={type === "ANIME" ? "Épisodes minimum" : "Chapitres minimum"}
+                          className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                        />
+                        <span className="text-[#656A7E]">à</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={2000}
+                          value={maxUnits}
+                          onChange={(e) => setMaxUnits(e.target.value)}
+                          placeholder="Max"
+                          aria-label={type === "ANIME" ? "Épisodes maximum" : "Chapitres maximum"}
+                          className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                        />
+                        <span className="font-mono text-[#7D8296]">{unitShortLabel}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {lengthPresets.map((preset) => {
+                        const active = activeLengthPresetId === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            title={preset.hint}
+                            onClick={() => {
+                              setMinUnits(preset.min);
+                              setMaxUnits(preset.max);
+                            }}
+                            className={cn(
+                              "px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer",
+                              active
+                                ? "bg-accent border-accent text-accent-fg shadow-accent"
+                                : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                            )}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Score / Rating Quick Filter */}
+                  <div className="xl:col-span-5 rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3.5 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
+                        <Star className="w-3.5 h-3.5 text-kinpaku fill-current" />
+                        <span>Filtrer par note (/10)</span>
+                      </span>
+
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono">
+                        <span className="text-[#7D8296]">Max :</span>
+                        {["ALL", "80", "70"].map((cap) => (
+                          <button
+                            key={cap}
+                            type="button"
+                            onClick={() => setMaxScore(cap)}
+                            className={cn(
+                              "px-2 py-0.5 rounded-md border transition-colors cursor-pointer",
+                              maxScore === cap
+                                ? "bg-kinpaku/20 border-kinpaku/45 text-kinpaku font-semibold"
+                                : "bg-white/[0.03] border-white/[0.08] text-[#8E93A6] hover:text-white"
+                            )}
+                          >
+                            {cap === "ALL" ? "Aucun" : `≤ ${Number(cap) / 10}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {QUICK_SCORE_PILLS.map((pill) => {
+                        const active = minScore === pill.id;
+                        return (
+                          <button
+                            key={pill.id}
+                            type="button"
+                            onClick={() => setMinScore(pill.id)}
+                            className={cn(
+                              "px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer inline-flex items-center gap-1",
+                              active
+                                ? "bg-kinpaku text-[#090A0F] border-kinpaku shadow-[0_6px_18px_rgba(240,185,91,0.35)]"
+                                : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                            )}
+                          >
+                            {pill.id !== "ALL" && <Star className="w-3 h-3 fill-current" />}
+                            <span>{pill.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Multi-Genre & Situations Explorer */}
@@ -784,6 +1031,31 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
                           <span>★ {Number(minScore) / 10}+</span>
                           <button type="button" onClick={() => setMinScore("ALL")} className="cursor-pointer">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+
+                      {maxScore !== "ALL" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
+                          <span>★ ≤ {Number(maxScore) / 10}</span>
+                          <button type="button" onClick={() => setMaxScore("ALL")} className="cursor-pointer">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+
+                      {hasUnitFilter && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/18 border border-sky-400/40 text-xs font-mono text-sky-200">
+                          <span>{formatUnitRangeLabel()}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMinUnits("");
+                              setMaxUnits("");
+                            }}
+                            className="cursor-pointer"
+                          >
                             <X className="w-3 h-3" />
                           </button>
                         </span>
