@@ -480,6 +480,46 @@ create policy "Users can delete their own badges"
   on public.user_badges for delete using (auth.uid() = user_id);
 
 -- ----------------------------------------------------------------------------
+-- 5E. SYSTÈME D'AMIS (friendships — demandes & amis acceptés)
+-- ----------------------------------------------------------------------------
+create table if not exists public.friendships (
+  id uuid primary key default uuid_generate_v4(),
+  requester_id uuid not null references public.profiles(id) on delete cascade,
+  addressee_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null default 'PENDING' check (status in ('PENDING', 'ACCEPTED')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(requester_id, addressee_id),
+  check (requester_id <> addressee_id)
+);
+
+create index if not exists idx_friendships_requester on public.friendships(requester_id, status);
+create index if not exists idx_friendships_addressee on public.friendships(addressee_id, status);
+
+alter table public.friendships enable row level security;
+
+drop policy if exists "Users can view their own friendships" on public.friendships;
+create policy "Users can view their own friendships"
+  on public.friendships for select using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+drop policy if exists "Users can send friend requests" on public.friendships;
+create policy "Users can send friend requests"
+  on public.friendships for insert with check (auth.uid() = requester_id);
+
+drop policy if exists "Addressees can accept friend requests" on public.friendships;
+create policy "Addressees can accept friend requests"
+  on public.friendships for update using (auth.uid() = addressee_id);
+
+drop policy if exists "Participants can remove friendships" on public.friendships;
+create policy "Participants can remove friendships"
+  on public.friendships for delete using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+do $$ begin
+  alter publication supabase_realtime add table public.friendships;
+exception when duplicate_object then null;
+end $$;
+
+-- ----------------------------------------------------------------------------
 -- 6. TRIGGERS (auto-creation du profil + updated_at)
 -- ----------------------------------------------------------------------------
 create or replace function public.handle_updated_at()

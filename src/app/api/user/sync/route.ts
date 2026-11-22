@@ -59,6 +59,11 @@ export async function PUT(request: NextRequest) {
       if (Array.isArray(body.favoriteStaff)) {
         current.favoriteStaff = body.favoriteStaff;
       }
+      if (Array.isArray(body.favoriteOrder)) {
+        current.favoriteOrder = body.favoriteOrder
+          .map((n: unknown) => Number(n))
+          .filter((n: number) => Number.isFinite(n));
+      }
       if (Array.isArray(body.unlockedBadges)) {
         current.unlockedBadges = body.unlockedBadges;
       }

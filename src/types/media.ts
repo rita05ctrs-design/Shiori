@@ -328,6 +328,32 @@ export interface DirectMessageItem {
   createdAt: string;
 }
 
+export type FriendshipStatus = "PENDING" | "ACCEPTED";
+export type FriendRelationState =
+  | "NONE"
+  | "PENDING_OUTGOING"
+  | "PENDING_INCOMING"
+  | "FRIENDS";
+
+export interface FriendshipRecord {
+  id: string;
+  requesterId: string;
+  requesterUsername: string;
+  requesterDisplayName: string;
+  requesterAvatarUrl: string | null;
+  addresseeId: string;
+  addresseeUsername: string;
+  addresseeDisplayName: string;
+  addresseeAvatarUrl: string | null;
+  status: FriendshipStatus;
+  createdAt: string;
+}
+
+export interface FriendRequestWithProfile {
+  friendship: FriendshipRecord;
+  user: PublicUserProfile;
+}
+
 export interface PersonalizedRecommendation {
   media: MediaItem;
   reason: string;

@@ -12,6 +12,7 @@ import type {
   ActivityCommentItem,
   CommunityActivityItem,
   DirectMessageItem,
+  FriendshipRecord,
   PublicUserProfile,
 } from "@/types/media";
 
@@ -22,6 +23,7 @@ export interface SocialDatabase {
   profiles: PublicUserProfile[];
   activities: CommunityActivityItem[];
   messages: DirectMessageItem[];
+  friendships: FriendshipRecord[];
 }
 
 function createSeedSocialDb(): SocialDatabase {
@@ -392,7 +394,7 @@ function createSeedSocialDb(): SocialDatabase {
     },
   ];
 
-  return { profiles, activities, messages };
+  return { profiles, activities, messages, friendships: [] };
 }
 
 function ensureDir() {
@@ -415,6 +417,7 @@ export function readSocialDb(): SocialDatabase {
       profiles: Array.isArray(parsed.profiles) ? parsed.profiles : [],
       activities: Array.isArray(parsed.activities) ? parsed.activities : [],
       messages: Array.isArray(parsed.messages) ? parsed.messages : [],
+      friendships: Array.isArray(parsed.friendships) ? parsed.friendships : [],
     };
   } catch {
     return createSeedSocialDb();

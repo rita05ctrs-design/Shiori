@@ -54,11 +54,14 @@ import type {
   CommunityActivityKind,
   EvaluatedBadge,
   FavoriteVoiceActor,
+  FriendRelationState,
+  FriendRequestWithProfile,
   LibraryEntry,
   LibraryStatus,
   MediaItem,
   MediaType,
   NotificationPrefs,
+  PublicUserProfile,
   ShioriNotification,
   ThemeSettings,
   ToastMessage,
@@ -76,6 +79,7 @@ const STORAGE_KEYS = {
   theme: THEME_STORAGE_KEY,
   anilistAutoSync: "shiori_anilist_autosync_v1",
   favoriteStaff: "shiori_favorite_staff_v1",
+  favoriteOrder: "shiori_favorite_order_v1",
   badges: "shiori_badges_v1",
   pinnedBadges: "shiori_pinned_badges_v1",
   socialCount: "shiori_social_count_v1",
@@ -146,9 +150,35 @@ interface ShioriContextValue {
   uploadAvatar: (file: File) => Promise<{ ok: boolean; url?: string; storage?: string; error?: string }>;
   updateNotificationPrefs: (prefs: Partial<NotificationPrefs>) => void;
 
-  // Favorite Voice Actors (Seiyuu) & Social / Community / Direct Messages
+  // Favorite Voice Actors (Seiyuu), Ordered Favorites (#1 -> N) & Friends / Social / DM
   favoriteStaff: FavoriteVoiceActor[];
   toggleFavoriteStaff: (staff: FavoriteVoiceActor) => void;
+  favoriteOrder: number[];
+  orderedFavorites: LibraryEntry[];
+  reorderFavorites: (nextOrderedIds: number[], scopeType?: "ALL" | MediaType) => void;
+  moveFavorite: (
+    mediaId: number,
+    direction: "up" | "down" | "top" | "bottom",
+    scopeType?: "ALL" | MediaType
+  ) => void;
+  setFavoriteRank: (
+    mediaId: number,
+    rank1Based: number,
+    scopeType?: "ALL" | MediaType
+  ) => void;
+  friends: PublicUserProfile[];
+  incomingFriendRequests: FriendRequestWithProfile[];
+  outgoingFriendRequests: FriendRequestWithProfile[];
+  refreshFriendships: () => Promise<void>;
+  getFriendRelation: (targetUserId: string, targetUsername: string) => FriendRelationState;
+  addFriend: (target: {
+    id?: string;
+    username: string;
+    displayName?: string;
+    avatarUrl?: string | null;
+  }) => Promise<{ ok: boolean; status?: string }>;
+  acceptFriend: (target: { id?: string; username: string; displayName?: string }) => Promise<void>;
+  removeFriend: (target: { id?: string; username: string; displayName?: string }) => Promise<void>;
   unreadMessagesCount: number;
   refreshUnreadMessages: () => Promise<number>;
 
@@ -234,6 +264,14 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   const [anilistAutoSync, setAnilistAutoSyncState] = useState<boolean>(true);
   const [lastAniListSync, setLastAniListSync] = useState<AniListSyncEvent | null>(null);
   const [favoriteStaff, setFavoriteStaff] = useState<FavoriteVoiceActor[]>([]);
+  const [favoriteOrder, setFavoriteOrder] = useState<number[]>([]);
+  const [friends, setFriends] = useState<PublicUserProfile[]>([]);
+  const [incomingFriendRequests, setIncomingFriendRequests] = useState<FriendRequestWithProfile[]>(
+    []
+  );
+  const [outgoingFriendRequests, setOutgoingFriendRequests] = useState<FriendRequestWithProfile[]>(
+    []
+  );
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [unlockedBadges, setUnlockedBadges] = useState<UnlockedBadgeRecord[]>([]);
   const [pinnedBadges, setPinnedBadges] = useState<string[]>([]);
@@ -312,6 +350,15 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       if (savedStaff) {
         const parsed = JSON.parse(savedStaff);
         if (Array.isArray(parsed)) setFavoriteStaff(parsed);
+      }
+      const savedFavOrder = localStorage.getItem(STORAGE_KEYS.favoriteOrder);
+      if (savedFavOrder) {
+        const parsed = JSON.parse(savedFavOrder);
+        if (Array.isArray(parsed)) {
+          setFavoriteOrder(
+            parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n))
+          );
+        }
       }
       const savedBadges = localStorage.getItem(STORAGE_KEYS.badges);
       if (savedBadges !== null) {
@@ -428,6 +475,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(data.notifications)) setNotifications(data.notifications);
           if (Array.isArray(data.activity)) setActivity(data.activity);
           if (Array.isArray(data.favoriteStaff)) setFavoriteStaff(data.favoriteStaff);
+          if (Array.isArray(data.favoriteOrder)) setFavoriteOrder(data.favoriteOrder);
           if (Array.isArray(data.unlockedBadges) && data.unlockedBadges.length > 0) {
             hasStoredBadgesRef.current = true;
             setUnlockedBadges(data.unlockedBadges);
@@ -466,6 +514,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             notificationPrefs: profile.notificationPrefs,
           },
           favoriteStaff,
+          favoriteOrder,
           unlockedBadges,
           pinnedBadges,
           socialInteractionsCount,
@@ -482,12 +531,13 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     activity,
     profile,
     favoriteStaff,
+    favoriteOrder,
     unlockedBadges,
     pinnedBadges,
     socialInteractionsCount,
   ]);
 
-  // Persist favoriteStaff to localStorage
+  // Persist favoriteStaff & favoriteOrder to localStorage
   useEffect(() => {
     if (!hydrated) return;
     try {
@@ -496,6 +546,111 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
   }, [favoriteStaff, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.favoriteOrder, JSON.stringify(favoriteOrder));
+    } catch {
+      // ignore
+    }
+  }, [favoriteOrder, hydrated]);
+
+  // Compute user's favorites ordered cleanly from #1 -> last according to favoriteOrder
+  const orderedFavorites = useMemo(() => {
+    const favs = library.filter((e) => e.isFavorite);
+    if (favs.length <= 1) return favs;
+    const rankMap = new Map<number, number>();
+    favoriteOrder.forEach((id, idx) => {
+      if (!rankMap.has(id)) rankMap.set(id, idx);
+    });
+    return [...favs].sort((a, b) => {
+      const ra = rankMap.get(a.mediaId);
+      const rb = rankMap.get(b.mediaId);
+      if (ra !== undefined && rb !== undefined) return ra - rb;
+      if (ra !== undefined) return -1;
+      if (rb !== undefined) return 1;
+      return (b.score ?? -1) - (a.score ?? -1);
+    });
+  }, [library, favoriteOrder]);
+
+  const reorderFavorites = useCallback(
+    (nextOrderedIds: number[], scopeType: "ALL" | MediaType = "ALL") => {
+      const currentFullIds = orderedFavorites.map((e) => e.mediaId);
+      if (scopeType === "ALL") {
+        const seen = new Set(nextOrderedIds);
+        const merged = [
+          ...nextOrderedIds,
+          ...currentFullIds.filter((id) => !seen.has(id)),
+        ];
+        setFavoriteOrder(merged);
+        return;
+      }
+
+      // Preserve relative slots of other mediaType items while replacing the scoped subset slots!
+      const scopedSet = new Set(
+        orderedFavorites.filter((e) => e.type === scopeType).map((e) => e.mediaId)
+      );
+      const queue = [...nextOrderedIds];
+      const nextFull = currentFullIds.map((id) => {
+        if (!scopedSet.has(id)) return id;
+        return queue.shift() ?? id;
+      });
+      for (const rem of queue) {
+        if (!nextFull.includes(rem)) nextFull.push(rem);
+      }
+      setFavoriteOrder(nextFull);
+    },
+    [orderedFavorites]
+  );
+
+  const moveFavorite = useCallback(
+    (
+      mediaId: number,
+      direction: "up" | "down" | "top" | "bottom",
+      scopeType: "ALL" | MediaType = "ALL"
+    ) => {
+      const scoped =
+        scopeType === "ALL"
+          ? orderedFavorites
+          : orderedFavorites.filter((e) => e.type === scopeType);
+      const ids = scoped.map((e) => e.mediaId);
+      const idx = ids.indexOf(mediaId);
+      if (idx === -1) return;
+
+      let targetIdx = idx;
+      if (direction === "up") targetIdx = Math.max(0, idx - 1);
+      else if (direction === "down") targetIdx = Math.min(ids.length - 1, idx + 1);
+      else if (direction === "top") targetIdx = 0;
+      else if (direction === "bottom") targetIdx = ids.length - 1;
+
+      if (targetIdx === idx) return;
+      const copy = [...ids];
+      const [moved] = copy.splice(idx, 1);
+      copy.splice(targetIdx, 0, moved);
+      reorderFavorites(copy, scopeType);
+    },
+    [orderedFavorites, reorderFavorites]
+  );
+
+  const setFavoriteRank = useCallback(
+    (mediaId: number, rank1Based: number, scopeType: "ALL" | MediaType = "ALL") => {
+      const scoped =
+        scopeType === "ALL"
+          ? orderedFavorites
+          : orderedFavorites.filter((e) => e.type === scopeType);
+      const ids = scoped.map((e) => e.mediaId);
+      const idx = ids.indexOf(mediaId);
+      if (idx === -1) return;
+      const targetIdx = Math.max(0, Math.min(ids.length - 1, Math.floor(rank1Based) - 1));
+      if (targetIdx === idx) return;
+      const copy = [...ids];
+      const [moved] = copy.splice(idx, 1);
+      copy.splice(targetIdx, 0, moved);
+      reorderFavorites(copy, scopeType);
+    },
+    [orderedFavorites, reorderFavorites]
+  );
 
   // Debounced sync of user's public profile snapshot (for /profile/[username] & /community)
   useEffect(() => {
@@ -518,16 +673,13 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           isActivityPublic: profile.isActivityPublic ?? true,
           joinedAt: profile.joinedAt,
           favoriteStaff,
-          favoriteMedia: library
-            .filter((e) => e.isFavorite)
-            .slice(0, 12)
-            .map((e) => ({
-              mediaId: e.mediaId,
-              type: e.type,
-              title: e.title,
-              coverImage: e.coverImage,
-              score: e.score,
-            })),
+          favoriteMedia: orderedFavorites.slice(0, 40).map((e) => ({
+            mediaId: e.mediaId,
+            type: e.type,
+            title: e.title,
+            coverImage: e.coverImage,
+            score: e.score,
+          })),
           stats: {
             totalEntries: library.length,
             animeCount: library.filter((e) => e.type === "ANIME").length,
@@ -552,6 +704,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     hydrated,
     profile,
     favoriteStaff,
+    orderedFavorites,
     library,
     unlockedBadges,
     pinnedBadges,
@@ -1148,6 +1301,204 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profile.id, profile.username]);
 
+  // ============================================================================
+  // Friends System — Search, Add, Accept, Remove & Realtime Sync
+  // ============================================================================
+  const refreshFriendships = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({
+        userId: profile.id,
+        username: profile.username,
+      });
+      const res = await fetch(`/api/community/friends?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data?.friends)) setFriends(data.friends);
+      if (Array.isArray(data?.incomingRequests)) {
+        setIncomingFriendRequests(data.incomingRequests);
+      }
+      if (Array.isArray(data?.outgoingRequests)) {
+        setOutgoingFriendRequests(data.outgoingRequests);
+      }
+    } catch {
+      // ignore transient errors
+    }
+  }, [profile.id, profile.username]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    void refreshFriendships();
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || profile.mode !== "supabase") return;
+
+    const channel = supabase
+      .channel(`shiori-friendships-${profile.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friendships" },
+        () => {
+          void refreshFriendships();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [hydrated, profile.id, profile.mode, refreshFriendships]);
+
+  const getFriendRelation = useCallback(
+    (targetUserId: string, targetUsername: string): FriendRelationState => {
+      const uLower = targetUsername.toLowerCase();
+      if (
+        friends.some(
+          (f) => f.id === targetUserId || f.username.toLowerCase() === uLower
+        )
+      ) {
+        return "FRIENDS";
+      }
+      if (
+        incomingFriendRequests.some(
+          (r) =>
+            r.user.id === targetUserId || r.user.username.toLowerCase() === uLower
+        )
+      ) {
+        return "PENDING_INCOMING";
+      }
+      if (
+        outgoingFriendRequests.some(
+          (r) =>
+            r.user.id === targetUserId || r.user.username.toLowerCase() === uLower
+        )
+      ) {
+        return "PENDING_OUTGOING";
+      }
+      return "NONE";
+    },
+    [friends, incomingFriendRequests, outgoingFriendRequests]
+  );
+
+  const addFriend = useCallback(
+    async (target: {
+      id?: string;
+      username: string;
+      displayName?: string;
+      avatarUrl?: string | null;
+    }) => {
+      try {
+        const res = await fetch("/api/community/friends", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "add",
+            userId: profile.id,
+            username: profile.username,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl ?? null,
+            accentColor: profile.accentColor,
+            targetUserId: target.id,
+            targetUsername: target.username,
+            targetDisplayName: target.displayName,
+            targetAvatarUrl: target.avatarUrl ?? null,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast({
+            title: "Impossible d'ajouter cet ami",
+            description: data?.error || "Réessayez dans un instant.",
+            variant: "warning",
+          });
+          return { ok: false };
+        }
+        await refreshFriendships();
+        const label = target.displayName || `@${target.username}`;
+        if (data?.status === "ACCEPTED") {
+          toast({
+            title: `${label} est maintenant votre ami !`,
+            description: "Vous pouvez retrouver vos amis dans Communauté → Amis et Messagerie.",
+            variant: "success",
+            celebrate: true,
+          });
+        } else {
+          toast({
+            title: "Demande d'ami envoyée",
+            description: `En attente de confirmation de ${label}.`,
+            variant: "info",
+          });
+        }
+        return { ok: true, status: data?.status };
+      } catch {
+        toast({ title: "Erreur réseau", variant: "warning" });
+        return { ok: false };
+      }
+    },
+    [profile, refreshFriendships, toast]
+  );
+
+  const acceptFriend = useCallback(
+    async (target: { id?: string; username: string; displayName?: string }) => {
+      try {
+        const res = await fetch("/api/community/friends", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "accept",
+            userId: profile.id,
+            username: profile.username,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl ?? null,
+            targetUserId: target.id,
+            targetUsername: target.username,
+          }),
+        });
+        if (res.ok) {
+          await refreshFriendships();
+          toast({
+            title: `${target.displayName || `@${target.username}`} ajouté à vos amis !`,
+            variant: "success",
+            celebrate: true,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [profile, refreshFriendships, toast]
+  );
+
+  const removeFriend = useCallback(
+    async (target: { id?: string; username: string; displayName?: string }) => {
+      try {
+        const res = await fetch("/api/community/friends", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "remove",
+            userId: profile.id,
+            username: profile.username,
+            targetUserId: target.id,
+            targetUsername: target.username,
+          }),
+        });
+        if (res.ok) {
+          await refreshFriendships();
+          toast({
+            title: "Relation mise à jour",
+            description: `${target.displayName || `@${target.username}`} retiré.`,
+            variant: "info",
+          });
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [profile.id, profile.username, refreshFriendships, toast]
+  );
+
   // Hydrate unread DM badge + subscribe to Supabase Realtime direct_messages!
   useEffect(() => {
     if (!hydrated) return;
@@ -1319,6 +1670,13 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       // Bidirectional AniList OAuth Sync (SaveMediaListEntry + optional favorite sync)
       void pushMutationToAniList({ action: "save", entry: merged });
       if (updates.isFavorite !== undefined && updates.isFavorite !== existing?.isFavorite) {
+        setFavoriteOrder((prev) =>
+          merged.isFavorite
+            ? prev.includes(merged.mediaId)
+              ? prev
+              : [...prev, merged.mediaId]
+            : prev.filter((id) => id !== merged.mediaId)
+        );
         void pushMutationToAniList({
           action: "favorite",
           mediaId: merged.mediaId,
@@ -1493,6 +1851,13 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         updatedAt: new Date().toISOString(),
       };
       setLibrary((prev) => prev.map((e) => (e.mediaId === mediaId ? updated : e)));
+      setFavoriteOrder((prev) =>
+        updated.isFavorite
+          ? prev.includes(mediaId)
+            ? prev
+            : [...prev, mediaId]
+          : prev.filter((id) => id !== mediaId)
+      );
       if (profile.mode === "supabase") {
         void syncEntryToCloud(profile.id, updated);
       }
@@ -1770,6 +2135,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       if (Array.isArray(data.notifications)) setNotifications(data.notifications);
       if (Array.isArray(data.activity)) setActivity(data.activity);
       if (Array.isArray(data.favoriteStaff)) setFavoriteStaff(data.favoriteStaff);
+      if (Array.isArray(data.favoriteOrder)) setFavoriteOrder(data.favoriteOrder);
       if (Array.isArray(data.unlockedBadges) && data.unlockedBadges.length > 0) {
         hasStoredBadgesRef.current = true;
         setUnlockedBadges(data.unlockedBadges);
@@ -1977,6 +2343,19 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     updateNotificationPrefs,
     favoriteStaff,
     toggleFavoriteStaff,
+    favoriteOrder,
+    orderedFavorites,
+    reorderFavorites,
+    moveFavorite,
+    setFavoriteRank,
+    friends,
+    incomingFriendRequests,
+    outgoingFriendRequests,
+    refreshFriendships,
+    getFriendRelation,
+    addFriend,
+    acceptFriend,
+    removeFriend,
     unreadMessagesCount,
     refreshUnreadMessages,
     unlockedBadges,

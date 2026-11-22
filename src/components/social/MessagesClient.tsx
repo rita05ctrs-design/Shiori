@@ -28,7 +28,7 @@ interface ConversationThread {
 }
 
 export function MessagesClient() {
-  const { profile, refreshUnreadMessages, toast } = useShiori();
+  const { profile, friends, refreshUnreadMessages, toast } = useShiori();
   const [messages, setMessages] = useState<DirectMessageItem[]>([]);
   const [members, setMembers] = useState<PublicUserProfile[]>([]);
   const [activePartnerUsername, setActivePartnerUsername] = useState<string | null>(null);
@@ -256,17 +256,28 @@ export function MessagesClient() {
     }
   };
 
+  const friendUsernames = useMemo(
+    () => new Set(friends.map((f) => f.username.toLowerCase())),
+    [friends]
+  );
+
   const selectableMembers = useMemo(() => {
-    const q = searchMember.trim().toLowerCase();
-    return members.filter((m) => {
-      if (m.username.toLowerCase() === meLower) return false;
-      if (!q) return true;
-      return (
-        m.username.toLowerCase().includes(q) ||
-        m.displayName.toLowerCase().includes(q)
-      );
-    });
-  }, [members, meLower, searchMember]);
+    const q = searchMember.trim().replace(/^@+/, "").toLowerCase();
+    return members
+      .filter((m) => {
+        if (m.username.toLowerCase() === meLower) return false;
+        if (!q) return true;
+        return (
+          m.username.toLowerCase().includes(q) ||
+          m.displayName.toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const aFriend = friendUsernames.has(a.username.toLowerCase()) ? 1 : 0;
+        const bFriend = friendUsernames.has(b.username.toLowerCase()) ? 1 : 0;
+        return bFriend - aFriend;
+      });
+  }, [members, meLower, searchMember, friendUsernames]);
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -308,26 +319,39 @@ export function MessagesClient() {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            {selectableMembers.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => {
-                  setActivePartnerUsername(m.username);
-                  setNewChatOpen(false);
-                }}
-                className="px-3 py-1.5 rounded-xl bg-obsidian/80 hover:bg-accent/20 border border-white/[0.09] hover:border-accent/45 flex items-center gap-2 text-xs text-white transition-colors cursor-pointer"
-              >
-                <UserAvatar
-                  avatarUrl={m.avatarUrl}
-                  initials={m.avatarInitials}
-                  accentColor={m.accentColor}
-                  size="xs"
-                />
-                <span className="font-medium">{m.displayName}</span>
-                <span className="font-mono text-[10.5px] text-[#858A9E]">@{m.username}</span>
-              </button>
-            ))}
+            {selectableMembers.map((m) => {
+              const isFriend = friendUsernames.has(m.username.toLowerCase());
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => {
+                    setActivePartnerUsername(m.username);
+                    setNewChatOpen(false);
+                  }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl bg-obsidian/80 hover:bg-accent/20 border flex items-center gap-2 text-xs text-white transition-colors cursor-pointer",
+                    isFriend
+                      ? "border-emerald-400/40"
+                      : "border-white/[0.09] hover:border-accent/45"
+                  )}
+                >
+                  <UserAvatar
+                    avatarUrl={m.avatarUrl}
+                    initials={m.avatarInitials}
+                    accentColor={m.accentColor}
+                    size="xs"
+                  />
+                  <span className="font-medium">{m.displayName}</span>
+                  <span className="font-mono text-[10.5px] text-[#858A9E]">@{m.username}</span>
+                  {isFriend && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9.5px] font-semibold">
+                      Ami
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

@@ -20,14 +20,16 @@ import {
   Clock,
   ArrowDownAZ,
   TrendingUp,
+  ListOrdered,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { LuxurySelect, type LuxurySelectOption } from "@/components/ui/LuxurySelect";
+import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
 import { cn, getStatusLabel, STATUS_CONFIG } from "@/lib/utils";
 import type { LibraryStatus, MediaType } from "@/types/media";
 
 type FilterTab = "ALL" | LibraryStatus;
-type SortKey = "UPDATED" | "SCORE" | "TITLE" | "PROGRESS";
+type SortKey = "UPDATED" | "FAVORITE_RANK" | "SCORE" | "TITLE" | "PROGRESS";
 
 const TABS: { id: FilterTab; label: string }[] = [
   { id: "ALL", label: "Tous" },
@@ -40,6 +42,12 @@ const TABS: { id: FilterTab; label: string }[] = [
 
 const LIBRARY_SORTS: LuxurySelectOption[] = [
   { id: "UPDATED", label: "Mis à jour récemment", icon: Clock, accent: "text-sky-400" },
+  {
+    id: "FAVORITE_RANK",
+    label: "Classement favoris (#1 → dernier)",
+    icon: ListOrdered,
+    accent: "text-rose-400",
+  },
   { id: "SCORE", label: "Ma note décroissante", icon: Star, accent: "text-[#F0B95B]" },
   { id: "PROGRESS", label: "Progression", icon: TrendingUp, accent: "text-emerald-400" },
   { id: "TITLE", label: "Titre (A → Z)", icon: ArrowDownAZ, accent: "text-violet-400" },
@@ -48,6 +56,7 @@ const LIBRARY_SORTS: LuxurySelectOption[] = [
 export default function LibraryPage() {
   const {
     library,
+    orderedFavorites,
     incrementProgress,
     toggleFavorite,
     openQuickEdit,
@@ -59,10 +68,17 @@ export default function LibraryPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>("ALL");
   const [mediaFilter, setMediaFilter] = useState<"ALL" | MediaType>("ALL");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [organizingFavorites, setOrganizingFavorites] = useState(false);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("UPDATED");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [visibleCount, setVisibleCount] = useState(36);
+
+  const favoriteRankMap = useMemo(() => {
+    const map = new Map<number, number>();
+    orderedFavorites.forEach((e, idx) => map.set(e.mediaId, idx + 1));
+    return map;
+  }, [orderedFavorites]);
 
   // Reset pagination cleanly when filters/tabs change
   React.useEffect(() => {
@@ -101,12 +117,18 @@ export default function LibraryPage() {
           : true
       )
       .sort((a, b) => {
+        if (sortBy === "FAVORITE_RANK") {
+          const ra = favoriteRankMap.get(a.mediaId) ?? Number.MAX_SAFE_INTEGER;
+          const rb = favoriteRankMap.get(b.mediaId) ?? Number.MAX_SAFE_INTEGER;
+          if (ra !== rb) return ra - rb;
+          return (b.score ?? -1) - (a.score ?? -1);
+        }
         if (sortBy === "SCORE") return (b.score ?? -1) - (a.score ?? -1);
         if (sortBy === "TITLE") return a.title.localeCompare(b.title);
         if (sortBy === "PROGRESS") return b.progress - a.progress;
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       });
-  }, [library, activeTab, mediaFilter, favoritesOnly, search, sortBy]);
+  }, [library, activeTab, mediaFilter, favoritesOnly, search, sortBy, favoriteRankMap]);
 
   const visibleEntries = useMemo(
     () => filtered.slice(0, visibleCount),
@@ -261,7 +283,15 @@ export default function LibraryPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setFavoritesOnly((v) => !v)}
+            onClick={() => {
+              const next = !favoritesOnly;
+              setFavoritesOnly(next);
+              if (next) {
+                setSortBy("FAVORITE_RANK");
+              } else if (sortBy === "FAVORITE_RANK") {
+                setSortBy("UPDATED");
+              }
+            }}
             className={cn(
               "inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border text-xs font-medium transition-all cursor-pointer",
               favoritesOnly
@@ -270,7 +300,21 @@ export default function LibraryPage() {
             )}
           >
             <Heart className={cn("w-3.5 h-3.5", favoritesOnly && "fill-current")} />
-            <span>Favoris</span>
+            <span>Favoris ({orderedFavorites.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setOrganizingFavorites((v) => !v)}
+            className={cn(
+              "inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
+              organizingFavorites
+                ? "bg-rose-500/20 border-rose-400/50 text-rose-200"
+                : "bg-surface border-white/[0.08] text-[#C8CCE0] hover:text-white hover:border-white/[0.16]"
+            )}
+          >
+            <ListOrdered className="w-3.5 h-3.5 text-rose-400" />
+            <span>{organizingFavorites ? "Fermer le classement" : "Classer mes favoris"}</span>
           </button>
 
           <LuxurySelect
@@ -312,6 +356,17 @@ export default function LibraryPage() {
           </div>
         </div>
       </div>
+
+      {/* Inline Interactive Top Favorites Organizer (#1 -> last) */}
+      {organizingFavorites && (
+        <div className="rounded-3xl card-surface border border-rose-500/25 p-5 sm:p-6">
+          <FavoritesOrganizer
+            editable
+            defaultEditMode
+            title="Mon Top Favoris (#1 → dernier)"
+          />
+        </div>
+      )}
 
       {/* Empty State */}
       {filtered.length === 0 ? (
@@ -360,17 +415,24 @@ export default function LibraryPage() {
                         <div className="absolute inset-0 z-[1] bg-gradient-to-t from-surface via-surface/45 to-black/25 pointer-events-none" />
                       </Link>
 
-                      {/* Status Pill (crisp opaque surface — zero backdrop-blur flicker on hover) */}
-                      <span
-                        className={cn(
-                          "absolute top-3 left-3 z-10 px-2.5 py-0.5 rounded-full border bg-[#0A0C14]/90 text-[10.5px] font-semibold flex items-center gap-1.5 pointer-events-none",
-                          cfg.border,
-                          cfg.color
+                      {/* Status Pill + Optional Custom Favorite Rank (#1, #2, #3...) */}
+                      <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 pointer-events-none">
+                        {sortBy === "FAVORITE_RANK" && favoriteRankMap.has(entry.mediaId) && (
+                          <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FDE047] to-[#F0B95B] text-[#090A0F] font-mono text-[10.5px] font-extrabold shadow">
+                            #{favoriteRankMap.get(entry.mediaId)}
+                          </span>
                         )}
-                      >
-                        <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
-                        {getStatusLabel(entry.status, entry.type)}
-                      </span>
+                        <span
+                          className={cn(
+                            "px-2.5 py-0.5 rounded-full border bg-[#0A0C14]/90 text-[10.5px] font-semibold flex items-center gap-1.5",
+                            cfg.border,
+                            cfg.color
+                          )}
+                        >
+                          <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+                          {getStatusLabel(entry.status, entry.type)}
+                        </span>
+                      </div>
 
                       {/* Favorite Heart */}
                       <button

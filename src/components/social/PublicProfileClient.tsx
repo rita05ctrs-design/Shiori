@@ -21,6 +21,8 @@ import { useShiori } from "@/context/ShioriContext";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { ActivityCard } from "@/components/social/ActivityCard";
 import { VoiceActorFavoritesManager } from "@/components/social/VoiceActorFavoritesManager";
+import { FriendActionButton } from "@/components/social/FriendActionButton";
+import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
 import { BadgesShowcase } from "@/components/badges/BadgesShowcase";
 import { evaluateAllBadges } from "@/lib/badges";
@@ -34,6 +36,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
   const {
     profile: currentUser,
     library,
+    orderedFavorites,
     favoriteStaff,
     hydrated,
     evaluatedBadges: ownEvaluatedBadges,
@@ -125,16 +128,13 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           isActivityPublic: currentUser.isActivityPublic ?? true,
           joinedAt: currentUser.joinedAt,
           favoriteStaff,
-          favoriteMedia: library
-            .filter((e) => e.isFavorite)
-            .slice(0, 12)
-            .map((e) => ({
-              mediaId: e.mediaId,
-              type: e.type,
-              title: e.title,
-              coverImage: e.coverImage,
-              score: e.score,
-            })),
+          favoriteMedia: orderedFavorites.slice(0, 40).map((e) => ({
+            mediaId: e.mediaId,
+            type: e.type,
+            title: e.title,
+            coverImage: e.coverImage,
+            score: e.score,
+          })),
           stats: {
             totalEntries: library.length,
             animeCount: library.filter((e) => e.type === "ANIME").length,
@@ -307,13 +307,24 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                 <span>Modifier mon profil & avatar</span>
               </Link>
             ) : (
-              <Link
-                href={`/messages?to=${encodeURIComponent(displayProfile.username)}`}
-                className="h-10 px-5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-2 transition-all"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Envoyer un message</span>
-              </Link>
+              <>
+                <FriendActionButton
+                  target={{
+                    id: displayProfile.id,
+                    username: displayProfile.username,
+                    displayName: displayProfile.displayName,
+                    avatarUrl: displayProfile.avatarUrl,
+                  }}
+                  size="md"
+                />
+                <Link
+                  href={`/messages?to=${encodeURIComponent(displayProfile.username)}`}
+                  className="h-10 px-5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-2 transition-all"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Envoyer un message</span>
+                </Link>
+              </>
             )}
           </div>
         </div>
@@ -454,54 +465,11 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         {isOwnProfile && <VoiceActorFavoritesManager compact />}
       </section>
 
-      {/* Favorite Anime & Manga */}
-      <section className="space-y-4">
-        <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-rose-400 flex items-center gap-1.5">
-            <Heart className="w-3.5 h-3.5 fill-current" />
-            <span>Coups de cœur</span>
-          </p>
-          <h2 className="text-lg sm:text-xl font-bold text-white mt-0.5">
-            Animés & Mangas favoris ({displayProfile.favoriteMedia.length})
-          </h2>
-        </div>
-
-        {displayProfile.favoriteMedia.length === 0 ? (
-          <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E]">
-            Aucun coup de cœur sélectionné pour le moment.
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5">
-            {displayProfile.favoriteMedia.map((m) => (
-              <Link
-                key={m.mediaId}
-                href={`/media/${m.mediaId}`}
-                className="group rounded-2xl card-surface border border-white/[0.08] hover:border-white/[0.2] overflow-hidden flex flex-col"
-              >
-                <div className="relative aspect-[2/3] overflow-hidden bg-[#121521]">
-                  <img
-                    src={m.coverImage}
-                    alt={m.title}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  {m.score !== null && (
-                    <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-obsidian/85 border border-white/15 font-mono text-[10.5px] font-bold text-kinpaku">
-                      ★ {m.score.toFixed(1)}
-                    </span>
-                  )}
-                </div>
-                <div className="p-2.5">
-                  <p className="text-xs font-semibold text-white group-hover:text-accent-hover line-clamp-2 leading-snug">
-                    {m.title}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      {/* Favorite Anime & Manga — Ranked #1 -> Last with Interactive Drag & Drop on Own Profile */}
+      <FavoritesOrganizer
+        editable={isOwnProfile}
+        externalFavorites={displayProfile.favoriteMedia}
+      />
 
       {/* Public Activity History */}
       <section className="space-y-4">

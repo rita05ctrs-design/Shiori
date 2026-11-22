@@ -29,6 +29,7 @@ export interface StoredAccount {
   accentColor: string;
   isActivityPublic?: boolean;
   favoriteStaff?: FavoriteVoiceActor[];
+  favoriteOrder?: number[];
   unlockedBadges?: UnlockedBadgeRecord[];
   pinnedBadges?: string[];
   socialInteractionsCount?: number;

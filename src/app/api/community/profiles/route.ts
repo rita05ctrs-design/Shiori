@@ -43,7 +43,7 @@ function mapSupabasePublicProfile(row: any): PublicUserProfile {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const q = (searchParams.get("q") ?? "").trim().toLowerCase();
+  const q = (searchParams.get("q") ?? "").trim().replace(/^@+/, "").toLowerCase();
 
   const byKey = new Map<string, PublicUserProfile>();
 
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       isActivityPublic: body?.isActivityPublic !== false,
       joinedAt: typeof body?.joinedAt === "string" ? body.joinedAt : new Date().toISOString(),
       favoriteStaff: Array.isArray(body?.favoriteStaff) ? body.favoriteStaff.slice(0, 30) : [],
-      favoriteMedia: Array.isArray(body?.favoriteMedia) ? body.favoriteMedia.slice(0, 12) : [],
+      favoriteMedia: Array.isArray(body?.favoriteMedia) ? body.favoriteMedia.slice(0, 40) : [],
       stats: {
         totalEntries: Number(body?.stats?.totalEntries ?? 0),
         animeCount: Number(body?.stats?.animeCount ?? 0),

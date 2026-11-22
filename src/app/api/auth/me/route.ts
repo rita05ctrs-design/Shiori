@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     notifications: account.notifications,
     activity: account.activity,
     favoriteStaff: account.favoriteStaff ?? [],
+    favoriteOrder: account.favoriteOrder ?? [],
     unlockedBadges: account.unlockedBadges ?? [],
     pinnedBadges: account.pinnedBadges ?? [],
     socialInteractionsCount: account.socialInteractionsCount ?? 0,
