@@ -29,6 +29,8 @@ import {
   Activity,
   Sparkles,
   TrendingUp,
+  Download,
+  ExternalLink,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { cn, formatRelativeTime, STATUS_CONFIG } from "@/lib/utils";
@@ -43,7 +45,7 @@ const STATUS_COLORS_HEX: Record<LibraryStatus, string> = {
 };
 
 export default function StatsPage() {
-  const { library, activity, profile } = useShiori();
+  const { library, activity, profile, anilistStats } = useShiori();
   const [scope, setScope] = useState<"ALL" | MediaType>("ALL");
 
   const entries = useMemo(
@@ -172,7 +174,7 @@ export default function StatsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
         <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#E5484D] mb-1.5 flex items-center gap-1.5">
+          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5 flex items-center gap-1.5">
             <TrendingUp className="w-3.5 h-3.5" />
             <span>Analytique · {profile.displayName}</span>
           </p>
@@ -184,8 +186,16 @@ export default function StatsPage() {
           </p>
         </div>
 
-        {/* Scope switcher */}
-        <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08] self-start md:self-auto">
+        {/* Scope switcher + AniList import shortcut */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+          <Link
+            href="/settings#anilist-import"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-sky-500/14 hover:bg-sky-500/24 border border-sky-400/35 text-xs font-semibold text-sky-200 hover:text-white transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Importer AniList</span>
+          </Link>
+          <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
           {[
             { id: "ALL", label: "Global" },
             { id: "ANIME", label: "Animes" },
@@ -206,15 +216,104 @@ export default function StatsPage() {
                   <motion.span
                     layoutId="stats-scope-pill"
                     transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    className="absolute inset-0 rounded-full bg-[#E5484D] shadow-[0_6px_18px_rgba(229,72,77,0.35)]"
+                    className="absolute inset-0 rounded-full bg-accent shadow-[0_6px_18px_rgb(var(--shiori-accent-rgb)/0.35)]"
                   />
                 )}
                 <span className="relative z-10">{t.label}</span>
               </button>
             );
           })}
+          </div>
         </div>
       </div>
+
+      {/* Imported AniList Official User.statistics Snapshot (if imported) */}
+      {anilistStats && (
+        <RevealSection className="rounded-2xl card-surface border-sky-500/25 p-5 sm:p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {anilistStats.anilistAvatarUrl && (
+                <img
+                  src={anilistStats.anilistAvatarUrl}
+                  alt={anilistStats.anilistUsername}
+                  className="w-10 h-10 rounded-full object-cover border border-sky-400/35 shrink-0"
+                />
+              )}
+              <div>
+                <p className="text-[10.5px] font-mono uppercase tracking-[0.16em] text-sky-400">
+                  Statistiques AniList (User.statistics)
+                </p>
+                <h2 className="text-base font-semibold text-white">
+                  @{anilistStats.anilistUsername}
+                </h2>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              {anilistStats.anilistSiteUrl && (
+                <a
+                  href={anilistStats.anilistSiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300"
+                >
+                  <span>Profil AniList</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+              <Link
+                href="/settings#anilist-import"
+                className="px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-[#D6D9E6] hover:text-white transition-colors"
+              >
+                Mettre à jour
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[10.5px] text-[#858A9E]">Animes AniList</p>
+              <p className="text-lg font-bold font-mono text-white mt-0.5">
+                {anilistStats.anime.count.toLocaleString("fr-FR")}
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[10.5px] text-[#858A9E]">Épisodes vus</p>
+              <p className="text-lg font-bold font-mono text-sky-300 mt-0.5">
+                {anilistStats.anime.episodesWatched.toLocaleString("fr-FR")}
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[10.5px] text-[#858A9E]">Temps anime</p>
+              <p className="text-lg font-bold font-mono text-white mt-0.5">
+                {(anilistStats.anime.minutesWatched / 60 / 24).toFixed(1)}j
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[10.5px] text-[#858A9E]">Mangas AniList</p>
+              <p className="text-lg font-bold font-mono text-white mt-0.5">
+                {anilistStats.manga.count.toLocaleString("fr-FR")}
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[10.5px] text-[#858A9E]">Chapitres / Tomes</p>
+              <p className="text-base font-bold font-mono text-violet-300 mt-0.5">
+                {anilistStats.manga.chaptersRead.toLocaleString("fr-FR")}{" "}
+                <span className="text-xs text-[#7D8296]">
+                  / {anilistStats.manga.volumesRead.toLocaleString("fr-FR")}
+                </span>
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-[10.5px] text-[#858A9E]">Moyenne A / M</p>
+              <p className="text-base font-bold font-mono text-[#F0B95B] mt-0.5">
+                {(anilistStats.anime.meanScore / 10).toFixed(1)}{" "}
+                <span className="text-xs text-[#7D8296]">/</span>{" "}
+                {(anilistStats.manga.meanScore / 10).toFixed(1)}
+              </p>
+            </div>
+          </div>
+        </RevealSection>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -227,7 +326,7 @@ export default function StatsPage() {
         >
           <div className="flex items-center justify-between text-[#858A9E]">
             <span className="text-xs font-medium">Titres suivis</span>
-            <Film className="w-4 h-4 text-[#E5484D]" />
+            <Film className="w-4 h-4 text-accent" />
           </div>
           <p className="mt-3 text-3xl font-bold font-mono text-white">
             <AnimatedNumber value={metrics.totalTitles} />
@@ -309,7 +408,7 @@ export default function StatsPage() {
         >
           <div className="flex items-center justify-between text-[#858A9E]">
             <span className="text-xs font-medium">Coups de cœur</span>
-            <Heart className="w-4 h-4 text-[#F45B62] fill-[#F45B62]" />
+            <Heart className="w-4 h-4 text-accent-hover fill-current" />
           </div>
           <p className="mt-3 text-3xl font-bold font-mono text-white">
             <AnimatedNumber value={metrics.favorites.length} />
@@ -326,7 +425,7 @@ export default function StatsPage() {
         <div className="lg:col-span-7 rounded-2xl card-surface p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#E5484D]">
+              <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent">
                 Évaluations
               </p>
               <h2 className="text-lg font-semibold text-white mt-0.5">
@@ -371,7 +470,7 @@ export default function StatsPage() {
                 <Bar
                   dataKey="count"
                   radius={[8, 8, 2, 2]}
-                  fill="#E5484D"
+                  fill="var(--shiori-accent)"
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -381,7 +480,7 @@ export default function StatsPage() {
         {/* Status Distribution Donut */}
         <div className="lg:col-span-5 rounded-2xl card-surface p-6 flex flex-col">
           <div className="mb-4">
-            <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#E5484D]">
+            <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent">
               Organisation
             </p>
             <h2 className="text-lg font-semibold text-white mt-0.5">
@@ -453,7 +552,7 @@ export default function StatsPage() {
         {/* Genre Affinity */}
         <div className="lg:col-span-6 rounded-2xl card-surface p-6 space-y-5">
           <div>
-            <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#E5484D]">
+            <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent">
               ADN Spectateur
             </p>
             <h2 className="text-lg font-semibold text-white mt-0.5">
@@ -472,7 +571,7 @@ export default function StatsPage() {
                     <div className="flex items-center justify-between text-xs">
                       <Link
                         href={`/discover?genre=${encodeURIComponent(g.genre)}`}
-                        className="font-medium text-[#ECEBE6] hover:text-[#F45B62] transition-colors flex items-center gap-2"
+                        className="font-medium text-[#ECEBE6] hover:text-accent-hover transition-colors flex items-center gap-2"
                       >
                         <span className="font-mono text-[10px] text-[#6E7387]">
                           0{i + 1}
@@ -501,7 +600,7 @@ export default function StatsPage() {
                           ease: CINEMA_EASE,
                         }}
                         style={{ width: `${pct}%`, transformOrigin: "left center" }}
-                        className="h-full rounded-full bg-gradient-to-r from-[#E5484D] to-[#F0B95B]"
+                        className="h-full rounded-full bg-gradient-to-r from-accent to-[#F0B95B]"
                       />
                     </div>
                   </div>
@@ -555,7 +654,7 @@ export default function StatsPage() {
           <div className="rounded-2xl card-surface p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-white flex items-center gap-2">
-                <Activity className="w-4 h-4 text-[#E5484D]" />
+                <Activity className="w-4 h-4 text-accent" />
                 <span>Activité récente</span>
               </h2>
               <span className="text-[11px] font-mono text-[#7D8296]">Temps réel</span>
@@ -596,7 +695,7 @@ export default function StatsPage() {
         <RevealSection className="rounded-2xl card-surface p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#F45B62] flex items-center gap-1.5">
+              <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent-hover flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
                 Panthéon personnel
               </p>
@@ -612,13 +711,13 @@ export default function StatsPage() {
             </Link>
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3.5">
-            {metrics.favorites.map((fav) => (
+            {metrics.favorites.slice(0, 24).map((fav) => (
               <Link
                 key={fav.mediaId}
                 href={`/media/${fav.mediaId}`}
                 className="group space-y-1.5"
               >
-                <div className="aspect-[2/3] rounded-xl overflow-hidden border border-white/10 group-hover:border-[#E5484D]/60 transition-all relative">
+                <div className="aspect-[2/3] rounded-xl overflow-hidden border border-white/10 group-hover:border-accent/60 transition-all relative">
                   <img
                     src={fav.coverImage}
                     alt={fav.title}

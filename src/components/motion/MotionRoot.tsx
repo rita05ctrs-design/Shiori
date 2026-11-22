@@ -2,13 +2,13 @@
 
 import React, { Suspense } from "react";
 import { MotionConfig } from "framer-motion";
-import { AmbientSpotlight } from "./MotionPrimitives";
 import { NavigationProgress } from "./NavigationProgress";
+import { AmbientCanvas } from "./AmbientCanvas";
 
 export function MotionRoot({ children }: { children: React.ReactNode }) {
   return (
     <MotionConfig reducedMotion="user">
-      <AmbientSpotlight />
+      <AmbientCanvas />
       <Suspense fallback={null}>
         <NavigationProgress />
       </Suspense>

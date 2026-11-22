@@ -17,9 +17,13 @@ import {
   HardDrive,
   Sparkles,
   User,
+  Flower2,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { AMBIANCE_OPTIONS } from "@/components/settings/AmbianceSettingsCard";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
+import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -34,11 +38,14 @@ export function Navbar() {
   const pathname = usePathname();
   const {
     profile,
+    isAuthenticated,
     library,
+    ambiance,
+    updateAmbiance,
+    anilistConnection,
     setCommandOpen,
-    setAuthModalOpen,
+    openAuthModal,
     signOutSupabase,
-    supabaseReady,
   } = useShiori();
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -70,8 +77,8 @@ export function Navbar() {
         className={cn(
           "fixed top-0 inset-x-0 z-50 transition-all duration-300",
           scrolled
-            ? "bg-[#07080C]/85 backdrop-blur-xl border-b border-white/[0.07] shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
-            : "bg-gradient-to-b from-[#07080C]/90 via-[#07080C]/45 to-transparent border-b border-transparent"
+            ? "bg-obsidian/85 backdrop-blur-xl border-b border-white/[0.07] shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
+            : "bg-gradient-to-b from-obsidian/90 via-obsidian/45 to-transparent border-b border-transparent"
         )}
       >
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
@@ -83,11 +90,14 @@ export function Navbar() {
               transition={{ type: "spring", stiffness: 360, damping: 20 }}
               className="relative w-8 h-9 flex items-center justify-center"
             >
-              {/* Red Silk Bookmark (Shiori) Ribbon SVG */}
+              {/* Silk Bookmark (Shiori) Ribbon SVG — adapts to user theme */}
               <svg
                 viewBox="0 0 32 36"
                 fill="none"
-                className="w-7 h-8 drop-shadow-[0_0_12px_rgba(229,72,77,0.48)]"
+                className="w-7 h-8"
+                style={{
+                  filter: "drop-shadow(0 0 12px rgb(var(--shiori-accent-rgb) / 0.48))",
+                }}
               >
                 <path
                   d="M5 4C5 2.34315 6.34315 1 8 1H24C25.6569 1 27 2.34315 27 4V33.5L16 26.2L5 33.5V4Z"
@@ -102,7 +112,7 @@ export function Navbar() {
                   x="16"
                   y="18.5"
                   textAnchor="middle"
-                  fill="#FFF7F5"
+                  fill="var(--shiori-accent-fg)"
                   fontSize="12"
                   fontFamily="serif"
                   fontWeight="600"
@@ -118,8 +128,8 @@ export function Navbar() {
                     y2="34"
                     gradientUnits="userSpaceOnUse"
                   >
-                    <stop stopColor="#F45B62" />
-                    <stop offset="1" stopColor="#B82530" />
+                    <stop stopColor="var(--shiori-accent-hover)" />
+                    <stop offset="1" stopColor="var(--shiori-accent-deep)" />
                   </linearGradient>
                 </defs>
               </svg>
@@ -163,9 +173,15 @@ export function Navbar() {
                   <Icon className="w-3.5 h-3.5 relative z-10 opacity-85" />
                   <span className="relative z-10">{item.label}</span>
                   {item.href === "/library" && watchingCount > 0 && (
-                    <span className="relative z-10 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-[#E5484D]/20 text-[#FF878B] border border-[#E5484D]/30">
+                    <motion.span
+                      key={watchingCount}
+                      initial={{ scale: 1.45 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", stiffness: 420, damping: 18 }}
+                      className="relative z-10 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-accent/22 text-accent-soft border border-accent/35"
+                    >
                       {watchingCount}
-                    </span>
+                    </motion.span>
                   )}
                 </Link>
               );
@@ -173,13 +189,13 @@ export function Navbar() {
           </nav>
 
           {/* Right Controls */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {/* Search Command Trigger */}
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
               aria-label="Rechercher un anime ou manga"
-              className="group flex items-center gap-2.5 h-9 px-3 sm:px-3.5 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.16] transition-all text-[13px] text-[#9A9EAE] hover:text-white cursor-pointer"
+              className="group flex items-center gap-2 h-9 px-3 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.16] transition-all text-[13px] text-[#9A9EAE] hover:text-white cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 text-[#9A9EAE] group-hover:text-white transition-colors" />
               <span className="hidden xl:inline">Rechercher...</span>
@@ -187,6 +203,9 @@ export function Navbar() {
                 ⌘K
               </kbd>
             </button>
+
+            {/* Quick Theme & Color Customizer Popover */}
+            <ThemeQuickPopover />
 
             {/* Notifications Bell Popover */}
             <NotificationsPopover />
@@ -201,7 +220,7 @@ export function Navbar() {
                 <div
                   className="w-6.5 h-6.5 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shadow-inner"
                   style={{
-                    background: `linear-gradient(135deg, ${profile.accentColor}, #881C24)`,
+                    background: `linear-gradient(135deg, ${profile.accentColor}, var(--shiori-accent-deep))`,
                   }}
                 >
                   {profile.avatarInitials}
@@ -218,14 +237,14 @@ export function Navbar() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 6, scale: 0.97 }}
                     transition={{ duration: 0.16 }}
-                    className="absolute right-0 mt-2.5 w-72 rounded-2xl glass-panel shadow-[0_24px_60px_rgba(0,0,0,0.65)] overflow-hidden"
+                    className="absolute right-0 mt-2.5 w-72 rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_28px_72px_rgba(0,0,0,0.92)] overflow-hidden"
                   >
-                    <div className="p-4 border-b border-white/[0.07] bg-white/[0.02]">
+                    <div className="p-4 border-b border-white/[0.08] bg-surface-solid-header">
                       <div className="flex items-center gap-3">
                         <div
                           className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold text-white shrink-0"
                           style={{
-                            background: `linear-gradient(135deg, ${profile.accentColor}, #7F1D1D)`,
+                            background: `linear-gradient(135deg, ${profile.accentColor}, var(--shiori-accent-deep))`,
                           }}
                         >
                           {profile.avatarInitials}
@@ -245,13 +264,15 @@ export function Navbar() {
                             <Cloud className="w-3.5 h-3.5 text-emerald-400" />
                             <span>Synchronisation Cloud Supabase active</span>
                           </>
+                        ) : profile.mode === "account" ? (
+                          <>
+                            <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Compte Shiori connecté & sauvegardé</span>
+                          </>
                         ) : (
                           <>
                             <HardDrive className="w-3.5 h-3.5 text-amber-400" />
-                            <span>
-                              Mode Local{" "}
-                              {supabaseReady ? "· Cloud prêt" : "· Persistance navigateur"}
-                            </span>
+                            <span>Session invité · Créez un compte</span>
                           </>
                         )}
                       </div>
@@ -283,30 +304,90 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <Settings className="w-4 h-4 text-[#9A9EAE]" />
-                        <span>Compte & Notifications</span>
+                        <span>Personnalisation & Compte</span>
                       </Link>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          setAuthModalOpen(true);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#F4B860] hover:bg-[#F0B95B]/10 transition-colors cursor-pointer"
+                      <Link
+                        href="/settings#anilist-sync"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
-                        {profile.mode === "supabase" ? (
-                          <>
-                            <User className="w-4 h-4" />
-                            <span>Gérer le compte cloud</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4" />
-                            <span>Connexion / Sync Supabase</span>
-                          </>
-                        )}
-                      </button>
+                        <span className="flex items-center gap-2.5 min-w-0">
+                          <ArrowLeftRight className="w-4 h-4 text-sky-400 shrink-0" />
+                          <span className="truncate">
+                            {anilistConnection.connected && anilistConnection.user
+                              ? `AniList · @${anilistConnection.user.name}`
+                              : "Connecter AniList"}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            "px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border shrink-0",
+                            anilistConnection.connected
+                              ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-300"
+                              : "bg-sky-500/15 border-sky-400/35 text-sky-300"
+                          )}
+                        >
+                          {anilistConnection.connected ? "SYNC" : "OAUTH"}
+                        </span>
+                      </Link>
 
-                      {profile.mode === "supabase" && (
+                      {/* 1-Click Quick Ambiance Shortcut */}
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl hover:bg-white/[0.05] transition-colors">
+                        <Link
+                          href="/settings#ambiance"
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="flex items-center gap-2.5 text-[13px] text-[#D8DBE5] hover:text-white min-w-0 flex-1"
+                        >
+                          <Flower2 className="w-4 h-4 text-accent shrink-0" />
+                          <span className="truncate">
+                            {AMBIANCE_OPTIONS.find((o) => o.id === ambiance.effect)?.label ??
+                              "Ambiance"}
+                          </span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateAmbiance({
+                              effect: ambiance.effect === "none" ? "sakura" : "none",
+                            })
+                          }
+                          className={cn(
+                            "px-2 py-0.5 rounded-md text-[10.5px] font-mono font-semibold border transition-colors cursor-pointer shrink-0",
+                            ambiance.effect === "none"
+                              ? "bg-white/[0.05] border-white/[0.1] text-[#8E93A6] hover:text-white"
+                              : "bg-accent/18 border-accent/40 text-accent-soft hover:bg-accent/28"
+                          )}
+                        >
+                          {ambiance.effect === "none" ? "OFF" : "ON"}
+                        </button>
+                      </div>
+
+                      {!isAuthenticated ? (
+                        <div className="mt-1 pt-1.5 border-t border-white/[0.06] space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              openAuthModal("signup");
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-semibold text-accent-soft bg-accent/12 hover:bg-accent/22 transition-colors cursor-pointer"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                            <span>Créer un compte</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              openAuthModal("signin");
+                            }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors cursor-pointer"
+                          >
+                            <User className="w-4 h-4 text-[#9A9EAE]" />
+                            <span>Se connecter</span>
+                          </button>
+                        </div>
+                      ) : (
                         <button
                           type="button"
                           onClick={() => {
@@ -329,7 +410,7 @@ export function Navbar() {
       </header>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-[#0A0C12]/95 backdrop-blur-xl border-t border-white/[0.08] px-2 py-1.5">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-obsidian/95 backdrop-blur-xl border-t border-white/[0.08] px-2 py-1.5">
         <div className="flex items-center justify-around">
           {NAV_ITEMS.map((item) => {
             const isActive =
@@ -341,7 +422,7 @@ export function Navbar() {
                 href={item.href}
                 className={cn(
                   "flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-colors",
-                  isActive ? "text-[#F45B62]" : "text-[#8A8FA3]"
+                  isActive ? "text-accent-hover" : "text-[#8A8FA3]"
                 )}
               >
                 <Icon className="w-4.5 h-4.5" />

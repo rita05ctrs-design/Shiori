@@ -24,7 +24,7 @@ function KindIcon({ kind }: { kind: ShioriNotification["kind"] }) {
     case "MILESTONE":
       return <Trophy className="w-3.5 h-3.5 text-[#F0B95B]" />;
     case "RECOMMENDATION":
-      return <Sparkles className="w-3.5 h-3.5 text-[#F45B62]" />;
+      return <Sparkles className="w-3.5 h-3.5 text-accent-hover" />;
     default:
       return <Info className="w-3.5 h-3.5 text-[#9A9EAE]" />;
   }
@@ -61,7 +61,7 @@ export function NotificationsPopover() {
       >
         <Bell className="w-4 h-4" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-[#E5484D] text-[10px] font-bold text-white flex items-center justify-center shadow-[0_0_10px_rgba(229,72,77,0.8)]">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full bg-accent text-[10px] font-bold text-accent-fg flex items-center justify-center shadow-[0_0_10px_rgb(var(--shiori-accent-rgb)/0.8)]">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -74,14 +74,14 @@ export function NotificationsPopover() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.97 }}
             transition={{ duration: 0.16 }}
-            className="absolute right-0 mt-2.5 w-[350px] sm:w-[390px] rounded-2xl glass-panel shadow-[0_24px_64px_rgba(0,0,0,0.72)] overflow-hidden"
+            className="absolute right-0 mt-2.5 w-[350px] sm:w-[390px] rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_28px_72px_rgba(0,0,0,0.92)] overflow-hidden"
           >
             {/* Header */}
-            <div className="px-4 py-3.5 border-b border-white/[0.07] flex items-center justify-between">
+            <div className="px-4 py-3.5 bg-surface-solid-header border-b border-white/[0.08] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-white">Notifications</span>
                 {unreadCount > 0 && (
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#E5484D]/15 text-[#FF8A8E] border border-[#E5484D]/30">
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-accent/15 text-[#FF8A8E] border border-accent/30">
                     {unreadCount} non lue{unreadCount > 1 ? "s" : ""}
                   </span>
                 )}
@@ -111,7 +111,7 @@ export function NotificationsPopover() {
             </div>
 
             {/* List */}
-            <div className="max-h-[380px] overflow-y-auto divide-y divide-white/[0.05]">
+            <div className="max-h-[380px] overflow-y-auto overscroll-contain bg-surface-solid divide-y divide-white/[0.06]">
               {notifications.length === 0 ? (
                 <div className="py-12 px-6 text-center">
                   <Bell className="w-8 h-8 text-[#4F5466] mx-auto mb-2.5" />
@@ -127,7 +127,7 @@ export function NotificationsPopover() {
                       onClick={() => markNotificationRead(n.id)}
                       className={cn(
                         "p-3.5 flex gap-3 hover:bg-white/[0.045] transition-colors cursor-pointer",
-                        !n.isRead && "bg-[#E5484D]/[0.04]"
+                        !n.isRead && "bg-accent/[0.04]"
                       )}
                     >
                       {n.coverImage ? (
@@ -147,7 +147,7 @@ export function NotificationsPopover() {
                             {n.title}
                           </p>
                           {!n.isRead && (
-                            <span className="w-2 h-2 rounded-full bg-[#E5484D] shrink-0 mt-1.5" />
+                            <span className="w-2 h-2 rounded-full bg-accent shrink-0 mt-1.5" />
                           )}
                         </div>
                         <p className="text-xs text-[#9A9EAE] mt-1 leading-relaxed line-clamp-2">
@@ -181,7 +181,7 @@ export function NotificationsPopover() {
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-2.5 border-t border-white/[0.07] bg-white/[0.02] flex items-center justify-between">
+            <div className="px-4 py-2.5 border-t border-white/[0.08] bg-surface-solid-header flex items-center justify-between">
               <Link
                 href="/settings"
                 onClick={() => setOpen(false)}
@@ -193,7 +193,7 @@ export function NotificationsPopover() {
               <Link
                 href="/calendar"
                 onClick={() => setOpen(false)}
-                className="text-xs font-medium text-[#F45B62] hover:text-[#FF7A80] transition-colors"
+                className="text-xs font-medium text-accent-hover hover:text-[#FF7A80] transition-colors"
               >
                 Voir le calendrier →
               </Link>

@@ -2,10 +2,9 @@
 
 import React from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ArrowRight, MoveHorizontal } from "lucide-react";
 import { MediaCard } from "./MediaCard";
-import { CINEMA_EASE, RevealSection } from "@/components/motion/MotionPrimitives";
+import { RevealSection } from "@/components/motion/MotionPrimitives";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { cn } from "@/lib/utils";
 import type { MediaItem } from "@/types/media";
@@ -29,10 +28,10 @@ export function MediaRail({
 }: MediaRailProps) {
   const {
     ref: scrollRef,
+    trackThumbRef,
     isDragging,
     canScrollLeft,
     canScrollRight,
-    scrollProgress,
     scrollByAmount,
     dragHandlers,
   } = useDragScroll<HTMLDivElement>();
@@ -45,7 +44,7 @@ export function MediaRail({
       <div className="flex items-end justify-between gap-4 mb-5">
         <div>
           {eyebrow && (
-            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#E5484D] mb-1">
+            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1">
               {eyebrow}
             </p>
           )}
@@ -58,12 +57,11 @@ export function MediaRail({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Subtle interactive drag hint pill */}
           <span
             className={cn(
               "hidden lg:inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-full border transition-colors select-none",
               isDragging
-                ? "bg-[#E5484D]/15 border-[#E5484D]/40 text-[#FF8C90]"
+                ? "bg-accent/15 border-accent/40 text-accent-soft"
                 : "bg-white/[0.025] border-white/[0.06] text-[#6F7489]"
             )}
           >
@@ -81,92 +79,73 @@ export function MediaRail({
             </Link>
           )}
 
-          <motion.button
+          <button
             type="button"
-            whileHover={{ scale: canScrollLeft ? 1.08 : 1 }}
-            whileTap={{ scale: canScrollLeft ? 0.9 : 1 }}
             disabled={!canScrollLeft}
             onClick={() => scrollByAmount(-1)}
             aria-label="Défiler vers la gauche"
-            className="w-8 h-8 rounded-full bg-white/[0.045] hover:bg-white/[0.12] disabled:opacity-30 border border-white/[0.08] flex items-center justify-center text-[#C2C6D4] hover:text-white transition-colors cursor-pointer disabled:cursor-default"
+            className="w-8 h-8 rounded-full bg-white/[0.045] hover:bg-white/[0.12] active:scale-90 disabled:opacity-30 border border-white/[0.08] flex items-center justify-center text-[#C2C6D4] hover:text-white transition-all cursor-pointer disabled:cursor-default"
           >
             <ChevronLeft className="w-4 h-4" />
-          </motion.button>
-          <motion.button
+          </button>
+          <button
             type="button"
-            whileHover={{ scale: canScrollRight ? 1.08 : 1 }}
-            whileTap={{ scale: canScrollRight ? 0.9 : 1 }}
             disabled={!canScrollRight}
             onClick={() => scrollByAmount(1)}
             aria-label="Défiler vers la droite"
-            className="w-8 h-8 rounded-full bg-white/[0.045] hover:bg-white/[0.12] disabled:opacity-30 border border-white/[0.08] flex items-center justify-center text-[#C2C6D4] hover:text-white transition-colors cursor-pointer disabled:cursor-default"
+            className="w-8 h-8 rounded-full bg-white/[0.045] hover:bg-white/[0.12] active:scale-90 disabled:opacity-30 border border-white/[0.08] flex items-center justify-center text-[#C2C6D4] hover:text-white transition-all cursor-pointer disabled:cursor-default"
           >
             <ChevronRight className="w-4 h-4" />
-          </motion.button>
+          </button>
         </div>
       </div>
 
       {/* Rail Wrapper with Smooth Atmospheric Edge Vignettes */}
       <div className="relative group/rail">
-        {/* Left fade mask */}
         <div
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute left-0 top-0 bottom-5 w-14 z-10 bg-gradient-to-r from-[#07080C] to-transparent transition-opacity duration-300",
+            "pointer-events-none absolute left-0 top-0 bottom-5 w-14 z-10 bg-gradient-to-r from-obsidian to-transparent transition-opacity duration-300",
             canScrollLeft ? "opacity-90" : "opacity-0"
           )}
         />
-        {/* Right fade mask */}
         <div
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute right-0 top-0 bottom-5 w-14 z-10 bg-gradient-to-l from-[#07080C] to-transparent transition-opacity duration-300",
+            "pointer-events-none absolute right-0 top-0 bottom-5 w-14 z-10 bg-gradient-to-l from-obsidian to-transparent transition-opacity duration-300",
             canScrollRight ? "opacity-90" : "opacity-0"
           )}
         />
 
-        {/* Click-and-Drag Horizontal Rail */}
+        {/* Click-and-Drag Horizontal Rail (zero per-card IntersectionObservers, zero wheel trap) */}
         <div
           ref={scrollRef}
           {...dragHandlers}
           className={cn(
-            "flex gap-4 sm:gap-5 overflow-x-auto no-scrollbar pb-4 pt-1 -mx-1 px-1 select-none",
+            "flex gap-4 sm:gap-5 overflow-x-auto overflow-y-hidden overscroll-x-contain no-scrollbar py-4 -my-3 -mx-1 px-1 select-none",
             isDragging ? "cursor-grabbing" : "cursor-grab"
           )}
         >
           {items.map((item, idx) => (
-            <motion.div
+            <div
               key={item.id}
-              initial={{ opacity: 0, y: 18, scale: 0.96 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, amount: "some", margin: "80px 0px 80px 0px" }}
-              transition={{
-                duration: 0.48,
-                delay: Math.min(idx * 0.04, 0.32),
-                ease: CINEMA_EASE,
-              }}
-              className={cn(
-                "w-[152px] sm:w-[176px] lg:w-[188px] shrink-0 transition-transform duration-200",
-                isDragging && "scale-[0.985]"
-              )}
+              className="w-[152px] sm:w-[176px] lg:w-[188px] shrink-0"
             >
               <MediaCard media={item} rank={showRank ? idx + 1 : undefined} />
-            </motion.div>
+            </div>
           ))}
         </div>
 
-        {/* Sleek Hairline Glide Track */}
+        {/* Sleek Hairline Glide Track (updated directly via ref on GPU — 0 React re-renders!) */}
         <div className="mt-1 h-[2px] w-full rounded-full bg-white/[0.05] overflow-hidden">
           <div
-            style={{
-              width: "28%",
-              transform: `translateX(${scrollProgress * 257}%)`,
-            }}
+            ref={trackThumbRef}
+            style={{ width: "28%", transform: "translate3d(0%, 0, 0)" }}
             className={cn(
-              "h-full rounded-full transition-[background-color,box-shadow] duration-200 will-change-transform",
+              "h-full rounded-full transition-colors duration-200 will-change-transform",
               isDragging
-                ? "bg-gradient-to-r from-[#E5484D] to-[#F0B95B] shadow-[0_0_10px_rgba(229,72,77,0.8)]"
-                : "bg-white/25 group-hover/rail:bg-[#E5484D]/75"
+                ? "bg-gradient-to-r from-accent to-[#F0B95B]"
+                : "bg-white/25 group-hover/rail:bg-accent/75"
             )}
           />
         </div>

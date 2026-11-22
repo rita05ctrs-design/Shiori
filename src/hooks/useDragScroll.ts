@@ -10,8 +10,8 @@ interface DragScrollOptions {
 }
 
 /**
- * Enables silky left-click-and-drag horizontal scrolling with real physics inertia,
- * automatic click-suppression after dragging, and live scroll progress tracking.
+ * Zero-re-render left-click-and-drag horizontal scrolling with smooth physics inertia.
+ * Updates the optional glide track DOM transform directly via ref (0 React renders per frame).
  */
 export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
   options: DragScrollOptions = {}
@@ -19,11 +19,12 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
   const { dragSpeed = 1.15, friction = 0.935 } = options;
 
   const ref = useRef<T | null>(null);
+  const trackThumbRef = useRef<HTMLDivElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
-  const [scrollProgress, setScrollProgress] = useState(0);
 
+  const boundsRef = useRef({ left: false, right: true });
   const stateRef = useRef({
     pointerDown: false,
     hasDragged: false,
@@ -40,9 +41,24 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     const el = ref.current;
     if (!el) return;
     const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
-    setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(maxScroll - el.scrollLeft > 4);
-    setScrollProgress(maxScroll > 0 ? Math.min(1, Math.max(0, el.scrollLeft / maxScroll)) : 0);
+    const nextLeft = el.scrollLeft > 4;
+    const nextRight = maxScroll - el.scrollLeft > 4;
+
+    // Only trigger React state updates when boundary booleans actually change
+    if (boundsRef.current.left !== nextLeft) {
+      boundsRef.current.left = nextLeft;
+      setCanScrollLeft(nextLeft);
+    }
+    if (boundsRef.current.right !== nextRight) {
+      boundsRef.current.right = nextRight;
+      setCanScrollRight(nextRight);
+    }
+
+    // Update progress track directly on GPU without causing React re-renders
+    if (trackThumbRef.current) {
+      const progress = maxScroll > 0 ? Math.min(1, Math.max(0, el.scrollLeft / maxScroll)) : 0;
+      trackThumbRef.current.style.transform = `translate3d(${progress * 257}%, 0, 0)`;
+    }
   }, []);
 
   useEffect(() => {
@@ -75,12 +91,9 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent<T>) => {
-      // Only left mouse button
       if (e.button !== 0) return;
       const el = ref.current;
       if (!el) return;
-
-      // Allow direct button interactions (like Quick Edit "+") without initiating drag
       if ((e.target as HTMLElement | null)?.closest("button")) return;
 
       stopInertia();
@@ -110,7 +123,6 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
           const now = performance.now();
           const dt = Math.max(1, now - st.lastTime);
           const instantVel = (moveEvent.clientX - st.lastX) / dt;
-          // Smooth velocity slightly to prevent jittery flicks
           st.velocity = st.velocity * 0.4 + instantVel * 0.6;
           st.lastX = moveEvent.clientX;
           st.lastTime = now;
@@ -129,7 +141,6 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
           st.suppressClickUntil = performance.now() + 200;
           setIsDragging(false);
 
-          // Launch smooth inertia glide if released with momentum
           const timeSinceLastMove = performance.now() - st.lastTime;
           if (timeSinceLastMove < 90 && Math.abs(st.velocity) > 0.08) {
             let v = Math.max(-52, Math.min(52, st.velocity * 16 * dragSpeed));
@@ -181,10 +192,10 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
 
   return {
     ref,
+    trackThumbRef,
     isDragging,
     canScrollLeft,
     canScrollRight,
-    scrollProgress,
     scrollByAmount,
     dragHandlers: {
       onMouseDown,

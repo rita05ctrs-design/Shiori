@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   motion,
-  useMotionTemplate,
   useMotionValue,
   useScroll,
   useSpring,
@@ -16,38 +15,8 @@ import { cn } from "@/lib/utils";
 export const CINEMA_EASE = [0.22, 1, 0.36, 1] as const;
 
 /**
- * Ambient atmospheric cursor aura on the dark canvas.
- * Runs purely via MotionValues (no React re-renders on mousemove).
- */
-export function AmbientSpotlight() {
-  const mouseX = useMotionValue(-600);
-  const mouseY = useMotionValue(-600);
-  const smoothX = useSpring(mouseX, { stiffness: 120, damping: 28, mass: 0.6 });
-  const smoothY = useSpring(mouseY, { stiffness: 120, damping: 28, mass: 0.6 });
-
-  useEffect(() => {
-    const handleMove = (e: PointerEvent) => {
-      if (e.pointerType !== "mouse") return;
-      mouseX.set(e.clientX);
-      mouseY.set(e.clientY);
-    };
-    window.addEventListener("pointermove", handleMove, { passive: true });
-    return () => window.removeEventListener("pointermove", handleMove);
-  }, [mouseX, mouseY]);
-
-  const background = useMotionTemplate`radial-gradient(560px circle at ${smoothX}px ${smoothY}px, rgba(229, 72, 77, 0.065), rgba(240, 185, 91, 0.02) 42%, transparent 72%)`;
-
-  return (
-    <motion.div
-      aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-[1] hidden md:block"
-      style={{ background }}
-    />
-  );
-}
-
-/**
- * Scroll-triggered editorial section reveal.
+ * Pure GPU-composited scroll-triggered section reveal (opacity + transform ONLY —
+ * zero filter:blur repaints for locked 60/120fps scrolling).
  */
 interface RevealSectionProps extends HTMLMotionProps<"div"> {
   delay?: number;
@@ -59,15 +28,15 @@ export function RevealSection({
   children,
   className,
   delay = 0,
-  yOffset = 22,
+  yOffset = 18,
   ...rest
 }: RevealSectionProps) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: yOffset, filter: "blur(4px)" }}
-      whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      initial={{ opacity: 0, y: yOffset }}
+      whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: "some", margin: "120px 0px 120px 0px" }}
-      transition={{ duration: 0.58, delay, ease: CINEMA_EASE }}
+      transition={{ duration: 0.42, delay, ease: CINEMA_EASE }}
       className={className}
       {...rest}
     >
@@ -82,8 +51,8 @@ export function RevealSection({
 export function StaggerContainer({
   children,
   className,
-  stagger = 0.045,
-  delay = 0.05,
+  stagger = 0.035,
+  delay = 0.03,
 }: {
   children: React.ReactNode;
   className?: string;
@@ -94,7 +63,7 @@ export function StaggerContainer({
     <motion.div
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, amount: 0.05 }}
+      viewport={{ once: true, amount: "some" }}
       variants={{
         hidden: {},
         visible: {
@@ -121,12 +90,11 @@ export function StaggerItem({
   return (
     <motion.div
       variants={{
-        hidden: { opacity: 0, y: 20, scale: 0.97 },
+        hidden: { opacity: 0, y: 14 },
         visible: {
           opacity: 1,
           y: 0,
-          scale: 1,
-          transition: { duration: 0.5, ease: CINEMA_EASE },
+          transition: { duration: 0.36, ease: CINEMA_EASE },
         },
       }}
       className={className}
@@ -137,12 +105,12 @@ export function StaggerItem({
 }
 
 /**
- * Scroll-linked parallax wrapper for full-bleed cinema banners.
+ * Scroll-linked parallax wrapper for full-bleed cinema banners (GPU transform only).
  */
 export function ParallaxBanner({
   children,
   className,
-  speed = 90,
+  speed = 70,
 }: {
   children: React.ReactNode;
   className?: string;
@@ -155,13 +123,12 @@ export function ParallaxBanner({
   });
 
   const y = useTransform(scrollYProgress, [0, 1], [0, speed]);
-  const scale = useTransform(scrollYProgress, [0, 1], [1, 1.09]);
-  const opacity = useTransform(scrollYProgress, [0, 0.9], [1, 0.35]);
+  const opacity = useTransform(scrollYProgress, [0, 0.92], [1, 0.4]);
 
   return (
     <div ref={ref} className={cn("relative overflow-hidden", className)}>
       <motion.div
-        style={{ y, scale, opacity }}
+        style={{ y, opacity }}
         className="w-full h-full will-change-transform"
       >
         {children}
@@ -183,9 +150,9 @@ export function AnimatedNumber({
   formatLocale?: boolean;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true, amount: 0.4 });
+  const isInView = useInView(ref, { once: true, amount: "some" });
   const motionVal = useMotionValue(0);
-  const springVal = useSpring(motionVal, { stiffness: 75, damping: 20, mass: 0.8 });
+  const springVal = useSpring(motionVal, { stiffness: 90, damping: 22, mass: 0.7 });
   const [display, setDisplay] = useState(
     decimals > 0 ? (0).toFixed(decimals) : "0"
   );

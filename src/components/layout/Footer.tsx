@@ -8,12 +8,12 @@ export function Footer() {
   const { setCommandOpen, setAuthModalOpen } = useShiori();
 
   return (
-    <footer className="mt-24 border-t border-white/[0.06] bg-[#06070A] pb-24 md:pb-12">
+    <footer className="mt-24 border-t border-white/[0.06] bg-obsidian pb-24 md:pb-12">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
           <div className="md:col-span-5">
             <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#E5484D]/15 border border-[#E5484D]/35 text-[#F45B62] font-serif text-sm font-semibold">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-accent/15 border border-accent/35 text-accent-hover font-serif text-sm font-semibold">
                 栞
               </span>
               <span className="text-base font-semibold tracking-[0.16em] uppercase text-[#F4F3EE]">

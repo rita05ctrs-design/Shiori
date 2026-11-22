@@ -38,13 +38,33 @@ export async function GET(request: NextRequest) {
     const typeParam = searchParams.get("type");
     const type: MediaType = typeParam === "MANGA" ? "MANGA" : "ANIME";
     const yearParam = searchParams.get("year");
+    const minScoreParam = searchParams.get("minScore");
     const pageParam = searchParams.get("page");
     const perPageParam = searchParams.get("perPage");
+    const genresParam = searchParams.get("genres");
+    const tagsParam = searchParams.get("tags");
+
+    const genres = genresParam
+      ? genresParam
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+    const tags = tagsParam
+      ? tagsParam
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
 
     const result = await fetchDiscover({
       search: searchParams.get("search") ?? undefined,
       type,
       genre: searchParams.get("genre") ?? undefined,
+      genres,
+      tags,
+      minScore:
+        minScoreParam && minScoreParam !== "ALL" ? Number(minScoreParam) : undefined,
       season: searchParams.get("season") ?? undefined,
       year: yearParam && yearParam !== "ALL" ? Number(yearParam) : undefined,
       format: searchParams.get("format") ?? undefined,

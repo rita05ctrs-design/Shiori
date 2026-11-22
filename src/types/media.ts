@@ -41,6 +41,11 @@ export interface MediaItem {
   season: string | null;
   seasonYear: number | null;
   startYear: number | null;
+  startDate?: {
+    year: number | null;
+    month: number | null;
+    day: number | null;
+  } | null;
   averageScore: number | null;
   meanScore: number | null;
   popularity: number | null;
@@ -141,6 +146,45 @@ export interface NotificationPrefs {
   recommendations: boolean;
 }
 
+export type AmbianceEffect =
+  | "sakura"
+  | "momiji"
+  | "snow"
+  | "fireflies"
+  | "rain"
+  | "stars"
+  | "none";
+
+export type AmbianceDensity = "subtle" | "balanced" | "immersive";
+export type AmbianceSpeed = "slow" | "normal" | "brisk";
+
+export interface AmbianceSettings {
+  effect: AmbianceEffect;
+  density: AmbianceDensity;
+  speed: AmbianceSpeed;
+}
+
+export type SurfaceAtmosphere =
+  | "obsidian"
+  | "oled"
+  | "midnight"
+  | "velvet"
+  | "slate"
+  | "tinted";
+
+export type GlowIntensity = "off" | "subtle" | "vibrant";
+export type CornerStyle = "sharp" | "editorial" | "soft";
+
+export interface ThemeSettings {
+  presetId: string;
+  accentColor: string;
+  secondaryColor: string;
+  surface: SurfaceAtmosphere;
+  glow: GlowIntensity;
+  corners: CornerStyle;
+  syncParticles: boolean;
+}
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -149,7 +193,7 @@ export interface UserProfile {
   bio: string;
   avatarInitials: string;
   accentColor: string;
-  mode: "local" | "supabase";
+  mode: "local" | "account" | "supabase";
   notificationPrefs: NotificationPrefs;
   joinedAt: string;
 }
@@ -180,4 +224,119 @@ export interface ToastMessage {
   title: string;
   description?: string;
   variant?: "default" | "success" | "info" | "warning";
+  coverImage?: string;
+  status?: LibraryStatus;
+  mediaId?: number;
+  celebrate?: boolean;
+}
+
+export interface AniListGenreStat {
+  genre: string;
+  count: number;
+  meanScore: number;
+  minutesWatched?: number;
+  chaptersRead?: number;
+}
+
+export interface AniListStatusStat {
+  status: string;
+  count: number;
+  meanScore: number;
+  minutesWatched?: number;
+  chaptersRead?: number;
+}
+
+export interface AniListFormatStat {
+  format: string;
+  count: number;
+  meanScore: number;
+  minutesWatched?: number;
+  chaptersRead?: number;
+}
+
+export interface AniListScoreStat {
+  score: number;
+  count: number;
+}
+
+export interface AniListAnimeStatistics {
+  count: number;
+  meanScore: number;
+  standardDeviation: number;
+  minutesWatched: number;
+  episodesWatched: number;
+  genres: AniListGenreStat[];
+  statuses: AniListStatusStat[];
+  formats: AniListFormatStat[];
+  scores: AniListScoreStat[];
+}
+
+export interface AniListMangaStatistics {
+  count: number;
+  meanScore: number;
+  standardDeviation: number;
+  chaptersRead: number;
+  volumesRead: number;
+  genres: AniListGenreStat[];
+  statuses: AniListStatusStat[];
+  formats: AniListFormatStat[];
+  scores: AniListScoreStat[];
+}
+
+export interface AniListUserStatsSnapshot {
+  anilistUsername: string;
+  anilistUserId: number | null;
+  anilistAvatarUrl: string | null;
+  anilistBannerUrl: string | null;
+  anilistSiteUrl: string | null;
+  anime: AniListAnimeStatistics;
+  manga: AniListMangaStatistics;
+  syncedAt: string;
+}
+
+export interface AniListImportResponse {
+  user: {
+    id: number;
+    name: string;
+    avatarUrl: string | null;
+    bannerUrl: string | null;
+    siteUrl: string | null;
+  };
+  entries: LibraryEntry[];
+  counts: {
+    anime: number;
+    manga: number;
+    favorites: number;
+    total: number;
+  };
+  statistics: AniListUserStatsSnapshot;
+  supabaseSync: {
+    authenticated: boolean;
+    entriesSaved: number;
+    statsSaved: boolean;
+    error?: string;
+  };
+}
+
+export interface AniListConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+  storage: "supabase" | "account" | "cookie" | null;
+  redirectUri: string;
+  user: {
+    id: number;
+    name: string;
+    avatarUrl: string | null;
+    siteUrl: string | null;
+  } | null;
+  connectedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface AniListSyncEvent {
+  ok: boolean;
+  title: string;
+  action: "save" | "delete" | "favorite";
+  detail: string;
+  at: string;
 }

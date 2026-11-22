@@ -162,15 +162,13 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
               alt={title}
               className="w-full h-full object-cover object-center"
             />
-            {/* Atmospheric editorial gradients */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#07080C] via-[#07080C]/78 to-[#07080C]/20" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#07080C] via-[#07080C]/35 to-[#07080C]/55" />
-            <motion.div
-              animate={{ opacity: [0.28, 0.42, 0.28] }}
-              transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute inset-0 mix-blend-soft-light"
+            {/* Atmospheric editorial gradients (static GPU layer — no idle infinite animation) */}
+            <div className="absolute inset-0 bg-gradient-to-r from-obsidian via-obsidian/78 to-obsidian/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/35 to-obsidian/55" />
+            <div
+              className="absolute inset-0 opacity-30"
               style={{
-                background: `radial-gradient(circle at 26% 42%, ${active.coverImage.color || "#E5484D"}66, transparent 62%)`,
+                background: `radial-gradient(circle at 26% 42%, ${active.coverImage.color || "#E5484D"}55, transparent 62%)`,
               }}
             />
           </motion.div>
@@ -200,9 +198,8 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                   },
                   exit: {
                     opacity: 0,
-                    y: -12,
-                    filter: "blur(4px)",
-                    transition: { duration: 0.24 },
+                    y: -10,
+                    transition: { duration: 0.2 },
                   },
                 }}
               >
@@ -214,7 +211,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                   }}
                   className="flex flex-wrap items-center gap-2 mb-4"
                 >
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E5484D]/18 border border-[#E5484D]/35 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#FF8C90]">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/35 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-soft">
                     <Sparkles className="w-3 h-3" />
                     Sélection Shiori
                   </span>
@@ -252,12 +249,11 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                 {/* Main Title */}
                 <motion.h1
                   variants={{
-                    hidden: { opacity: 0, y: 20, filter: "blur(6px)" },
+                    hidden: { opacity: 0, y: 16 },
                     visible: {
                       opacity: 1,
                       y: 0,
-                      filter: "blur(0px)",
-                      transition: { duration: 0.58, ease: CINEMA_EASE },
+                      transition: { duration: 0.45, ease: CINEMA_EASE },
                     },
                   }}
                   className="text-3xl sm:text-5xl lg:text-[56px] font-bold tracking-tight text-gradient-editorial leading-[1.06] max-w-3xl"
@@ -312,7 +308,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                   <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }}>
                     <Link
                       href={`/media/${active.id}`}
-                      className="inline-flex items-center gap-2.5 h-11 px-6 rounded-full bg-[#E5484D] hover:bg-[#F2545B] text-white text-sm font-semibold shadow-[0_12px_34px_rgba(229,72,77,0.45)] transition-colors"
+                      className="inline-flex items-center gap-2.5 h-11 px-6 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold shadow-[0_12px_34px_rgb(var(--shiori-accent-rgb)/0.45)] transition-colors"
                     >
                       <Info className="w-4 h-4" />
                       <span>Voir la fiche</span>
@@ -380,7 +376,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                     className={cn(
                       "relative group rounded-lg overflow-hidden transition-all duration-300 cursor-pointer border",
                       isSelected
-                        ? "w-14 h-20 border-[#E5484D] shadow-[0_0_24px_rgba(229,72,77,0.5)]"
+                        ? "w-14 h-20 border-accent shadow-[0_0_24px_rgb(var(--shiori-accent-rgb)/0.5)]"
                         : "w-11 h-16 border-white/[0.14] opacity-55 hover:opacity-95"
                     )}
                   >
@@ -400,7 +396,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                             ease: "linear",
                           }}
                           style={{ transformOrigin: "left center" }}
-                          className="h-full w-full bg-gradient-to-r from-[#E5484D] to-[#F0B95B]"
+                          className="h-full w-full bg-gradient-to-r from-accent to-[#F0B95B]"
                         />
                       </div>
                     )}

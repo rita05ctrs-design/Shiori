@@ -37,7 +37,7 @@ export default async function HomePage() {
           <RevealSection className="rounded-2xl card-surface p-5 sm:p-6 relative overflow-hidden">
             <div
               className="pointer-events-none absolute -right-24 -top-24 w-72 h-72 rounded-full opacity-20 blur-3xl"
-              style={{ background: "radial-gradient(circle, #E5484D, transparent 70%)" }}
+              style={{ background: "radial-gradient(circle, var(--shiori-accent), transparent 70%)" }}
             />
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 relative z-10">
               <div>
@@ -71,7 +71,7 @@ export default async function HomePage() {
                     className="w-12 h-16 rounded-lg object-cover shrink-0 border border-white/10"
                   />
                   <div className="min-w-0 flex-1">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#E5484D]/18 text-[#FF8C90] border border-[#E5484D]/30">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent/18 text-accent-soft border border-accent/30">
                       Ép. {slot.episode}
                     </span>
                     <p className="text-[13px] font-semibold text-[#F4F3EE] group-hover:text-white truncate mt-1">
@@ -120,7 +120,7 @@ export default async function HomePage() {
         {/* Subtle CTA Banner to Discover / Stats */}
         <RevealSection className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#161824] via-[#0F111A] to-[#1A1015] p-7 sm:p-9 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="max-w-xl">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-[#F45B62]">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-accent-hover">
               <Sparkles className="w-3.5 h-3.5" />
               Votre cinémathèque sur mesure
             </span>
@@ -135,7 +135,7 @@ export default async function HomePage() {
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             <Link
               href="/discover"
-              className="px-5 py-2.5 rounded-full bg-[#E5484D] hover:bg-[#F2545B] text-white text-sm font-semibold shadow-[0_10px_28px_rgba(229,72,77,0.35)] transition-all"
+              className="px-5 py-2.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold shadow-[0_10px_28px_rgb(var(--shiori-accent-rgb)/0.35)] transition-all"
             >
               Explorer le catalogue
             </Link>

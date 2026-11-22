@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -12,51 +12,95 @@ import {
   BookOpen,
   RotateCcw,
   Sparkles,
+  Flame,
+  TrendingUp,
+  Star,
+  Heart,
+  Clock,
+  Film,
+  Disc,
+  Clapperboard,
+  Layers,
+  Calendar,
+  Snowflake,
+  Flower2,
+  Sun,
+  Leaf,
+  Radio,
+  CheckCircle2,
+  Hourglass,
+  Check,
+  Compass,
+  Tag,
 } from "lucide-react";
 import { MediaCard } from "@/components/media/MediaCard";
+import { MoodCarousel } from "@/components/discover/MoodCarousel";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
-import { ALL_GENRES, cn, GENRE_LABELS_FR } from "@/lib/utils";
+import { LuxurySelect, type LuxurySelectOption } from "@/components/ui/LuxurySelect";
+import {
+  FILTER_CATEGORIES,
+  getTaxonomyLabel,
+  SITUATION_GROUPS,
+  type MoodPreset,
+  type SituationGroupId,
+  type TagCategory,
+} from "@/lib/discover-taxonomy";
+import { cn } from "@/lib/utils";
 import type { MediaItem, MediaType } from "@/types/media";
 
-const YEARS = Array.from({ length: 32 }, (_, i) => 2026 - i);
-
-const ANIME_FORMATS = [
-  { id: "ALL", label: "Tous formats" },
-  { id: "TV", label: "Série TV" },
-  { id: "MOVIE", label: "Film" },
-  { id: "OVA", label: "OVA" },
-  { id: "ONA", label: "ONA" },
-  { id: "SPECIAL", label: "Spécial" },
+const YEAR_OPTIONS: LuxurySelectOption[] = [
+  { id: "ALL", label: "Toutes années" },
+  ...Array.from({ length: 42 }, (_, i) => {
+    const y = String(2026 - i);
+    return { id: y, label: y };
+  }),
 ];
 
-const MANGA_FORMATS = [
-  { id: "ALL", label: "Tous formats" },
-  { id: "MANGA", label: "Manga" },
-  { id: "NOVEL", label: "Light Novel" },
-  { id: "ONE_SHOT", label: "One-Shot" },
+const ANIME_FORMATS: LuxurySelectOption[] = [
+  { id: "ALL", label: "Tous formats", icon: Layers },
+  { id: "TV", label: "Série TV", hint: "Saisons diffusées à la TV", icon: Tv, accent: "text-sky-400" },
+  { id: "MOVIE", label: "Film", hint: "Long-métrage cinéma", icon: Film, accent: "text-[#F0B95B]" },
+  { id: "OVA", label: "OVA", hint: "Épisodes spéciaux vidéo", icon: Disc, accent: "text-violet-400" },
+  { id: "ONA", label: "ONA", hint: "Diffusion streaming originale", icon: Clapperboard, accent: "text-emerald-400" },
+  { id: "SPECIAL", label: "Spécial", hint: "Hors-série & bonus", icon: Sparkles, accent: "text-pink-400" },
 ];
 
-const SEASONS = [
-  { id: "ALL", label: "Toutes saisons" },
-  { id: "WINTER", label: "Hiver" },
-  { id: "SPRING", label: "Printemps" },
-  { id: "SUMMER", label: "Été" },
-  { id: "FALL", label: "Automne" },
+const MANGA_FORMATS: LuxurySelectOption[] = [
+  { id: "ALL", label: "Tous formats", icon: Layers },
+  { id: "MANGA", label: "Manga", hint: "Série manga classique", icon: BookOpen, accent: "text-violet-400" },
+  { id: "NOVEL", label: "Light Novel", hint: "Roman illustré japonais", icon: Sparkles, accent: "text-[#F0B95B]" },
+  { id: "ONE_SHOT", label: "One-Shot", hint: "Histoire complète unique", icon: Film, accent: "text-sky-400" },
 ];
 
-const STATUSES = [
-  { id: "ALL", label: "Tous statuts" },
-  { id: "RELEASING", label: "En cours" },
-  { id: "FINISHED", label: "Terminé" },
-  { id: "NOT_YET_RELEASED", label: "À venir" },
+const SEASON_OPTIONS: LuxurySelectOption[] = [
+  { id: "ALL", label: "Toutes saisons", icon: Calendar },
+  { id: "WINTER", label: "Hiver", hint: "Janvier – Mars", icon: Snowflake, accent: "text-sky-300" },
+  { id: "SPRING", label: "Printemps", hint: "Avril – Juin", icon: Flower2, accent: "text-pink-300" },
+  { id: "SUMMER", label: "Été", hint: "Juillet – Septembre", icon: Sun, accent: "text-amber-300" },
+  { id: "FALL", label: "Automne", hint: "Octobre – Décembre", icon: Leaf, accent: "text-orange-400" },
 ];
 
-const SORTS = [
-  { id: "TRENDING_DESC", label: "Tendances" },
-  { id: "POPULARITY_DESC", label: "Popularité" },
-  { id: "SCORE_DESC", label: "Meilleures notes" },
-  { id: "FAVOURITES_DESC", label: "Plus aimés" },
-  { id: "START_DATE_DESC", label: "Plus récents" },
+const STATUS_OPTIONS: LuxurySelectOption[] = [
+  { id: "ALL", label: "Tous statuts", icon: Radio },
+  { id: "RELEASING", label: "En cours", hint: "Actuellement diffusé / publié", icon: Radio, accent: "text-emerald-400" },
+  { id: "FINISHED", label: "Terminé", hint: "Œuvre complète", icon: CheckCircle2, accent: "text-sky-400" },
+  { id: "NOT_YET_RELEASED", label: "À venir", hint: "Prochainement annoncé", icon: Hourglass, accent: "text-amber-400" },
+];
+
+const MIN_SCORE_OPTIONS: LuxurySelectOption[] = [
+  { id: "ALL", label: "Toutes notes", icon: Star },
+  { id: "70", label: "7.0+ · Très bon", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "75", label: "7.5+ · Remarquable", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "80", label: "8.0+ · Incontournable", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "85", label: "8.5+ · Chef-d'œuvre", icon: Star, accent: "text-[#F0B95B]" },
+];
+
+const SORT_OPTIONS: LuxurySelectOption[] = [
+  { id: "TRENDING_DESC", label: "Tendances", hint: "Les plus actifs maintenant", icon: Flame, accent: "text-accent-hover" },
+  { id: "POPULARITY_DESC", label: "Popularité", hint: "Les plus suivis", icon: TrendingUp, accent: "text-sky-400" },
+  { id: "SCORE_DESC", label: "Meilleures notes", hint: "Classement critique", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "FAVOURITES_DESC", label: "Coups de cœur", hint: "Les plus aimés", icon: Heart, accent: "text-pink-400" },
+  { id: "START_DATE_DESC", label: "Plus récents", hint: "Nouvelles sorties", icon: Clock, accent: "text-emerald-400" },
 ];
 
 interface DiscoverClientProps {
@@ -67,16 +111,29 @@ interface DiscoverClientProps {
 export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientProps) {
   const searchParams = useSearchParams();
 
+  const initialGenre = searchParams.get("genre");
   const [type, setType] = useState<MediaType>(
     searchParams.get("type") === "MANGA" ? "MANGA" : "ANIME"
   );
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [genre, setGenre] = useState(searchParams.get("genre") ?? "ALL");
+
+  // Multi-select Genres & Tags (Situations, Universes, Themes, Demographics)
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(
+    initialGenre && initialGenre !== "ALL" ? [initialGenre] : []
+  );
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [activeMoodId, setActiveMoodId] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<TagCategory["id"]>("situations");
+  const [situationGroup, setSituationGroup] = useState<SituationGroupId>("ALL");
+  const [tagSearch, setTagSearch] = useState("");
+
+  // Structured Luxury Dropdown Filters
   const [year, setYear] = useState(searchParams.get("year") ?? "ALL");
   const [season, setSeason] = useState(searchParams.get("season") ?? "ALL");
   const [format, setFormat] = useState(searchParams.get("format") ?? "ALL");
   const [status, setStatus] = useState(searchParams.get("status") ?? "ALL");
+  const [minScore, setMinScore] = useState("ALL");
   const [sort, setSort] = useState(searchParams.get("sort") ?? "TRENDING_DESC");
   const [showFilters, setShowFilters] = useState(true);
 
@@ -89,7 +146,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
   // Debounce search text
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 320);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -107,7 +164,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
           perPage: "24",
         });
         if (debouncedSearch.trim()) qs.set("search", debouncedSearch.trim());
-        if (genre !== "ALL") qs.set("genre", genre);
+        if (selectedGenres.length > 0) qs.set("genres", selectedGenres.join(","));
+        if (selectedTags.length > 0) qs.set("tags", selectedTags.join(","));
+        if (minScore !== "ALL") qs.set("minScore", minScore);
         if (year !== "ALL") qs.set("year", year);
         if (season !== "ALL" && type === "ANIME") qs.set("season", season);
         if (format !== "ALL") qs.set("format", format);
@@ -128,10 +187,20 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         setLoadingMore(false);
       }
     },
-    [type, debouncedSearch, genre, year, season, format, status, sort]
+    [
+      type,
+      debouncedSearch,
+      selectedGenres,
+      selectedTags,
+      minScore,
+      year,
+      season,
+      format,
+      status,
+      sort,
+    ]
   );
 
-  // Refetch whenever filters change
   useEffect(() => {
     void fetchResults(1, false);
   }, [fetchResults]);
@@ -142,40 +211,119 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     if (next === "MANGA") setSeason("ALL");
   };
 
+  const toggleGenre = (id: string) => {
+    setActiveMoodId(null);
+    setSelectedGenres((prev) =>
+      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
+    );
+  };
+
+  const toggleTag = (id: string) => {
+    setActiveMoodId(null);
+    setSelectedTags((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectMood = (mood: MoodPreset | null) => {
+    if (!mood) {
+      setActiveMoodId(null);
+      setSelectedGenres([]);
+      setSelectedTags([]);
+      setMinScore("ALL");
+      setSort("TRENDING_DESC");
+      return;
+    }
+    setActiveMoodId(mood.id);
+    setSelectedGenres(mood.genres);
+    setSelectedTags(mood.tags);
+    setMinScore(mood.minScore ?? "ALL");
+    if (mood.sort) setSort(mood.sort);
+  };
+
   const resetAll = () => {
     setSearch("");
     setDebouncedSearch("");
-    setGenre("ALL");
+    setActiveMoodId(null);
+    setSelectedGenres([]);
+    setSelectedTags([]);
+    setTagSearch("");
     setYear("ALL");
     setSeason("ALL");
     setFormat("ALL");
     setStatus("ALL");
+    setMinScore("ALL");
     setSort("TRENDING_DESC");
   };
 
-  const hasActiveFilters =
-    Boolean(debouncedSearch.trim()) ||
-    genre !== "ALL" ||
-    year !== "ALL" ||
-    season !== "ALL" ||
-    format !== "ALL" ||
-    status !== "ALL";
+  const activeFilterCount =
+    selectedGenres.length +
+    selectedTags.length +
+    (year !== "ALL" ? 1 : 0) +
+    (season !== "ALL" ? 1 : 0) +
+    (format !== "ALL" ? 1 : 0) +
+    (status !== "ALL" ? 1 : 0) +
+    (minScore !== "ALL" ? 1 : 0);
 
+  const hasActiveFilters = Boolean(debouncedSearch.trim()) || activeFilterCount > 0;
   const formats = type === "ANIME" ? ANIME_FORMATS : MANGA_FORMATS;
+
+  // Compute counts per category tab
+  const categoryCounts = useMemo(() => {
+    const counts: Record<TagCategory["id"], number> = {
+      genres: selectedGenres.length,
+      situations: 0,
+      universes: 0,
+      themes: 0,
+      demographics: 0,
+    };
+    for (const cat of FILTER_CATEGORIES) {
+      if (cat.id === "genres") continue;
+      counts[cat.id] = cat.items.filter((i) => selectedTags.includes(i.id)).length;
+    }
+    return counts;
+  }, [selectedGenres, selectedTags]);
+
+  // If user types in mini tag search, search across ALL categories cleanly
+  const tagSearchTrimmed = tagSearch.trim().toLowerCase();
+  const visibleCategory =
+    FILTER_CATEGORIES.find((c) => c.id === activeCategory) ?? FILTER_CATEGORIES[0];
+
+  const searchedAllItems = useMemo(() => {
+    if (!tagSearchTrimmed) return null;
+    const matches: { id: string; label: string; isGenre: boolean; catLabel: string }[] = [];
+    for (const cat of FILTER_CATEGORIES) {
+      for (const item of cat.items) {
+        if (
+          item.label.toLowerCase().includes(tagSearchTrimmed) ||
+          item.id.toLowerCase().includes(tagSearchTrimmed)
+        ) {
+          matches.push({
+            id: item.id,
+            label: item.label,
+            isGenre: cat.id === "genres",
+            catLabel: cat.label,
+          });
+        }
+      }
+    }
+    return matches;
+  }, [tagSearchTrimmed]);
 
   return (
     <div className="pt-24 pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-7">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
         <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#E5484D] mb-1.5">
-            Catalogue mondial en direct
+          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5 flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5" />
+            <span>Catalogue mondial en direct</span>
           </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
             Découvrir {type === "ANIME" ? "les Animes" : "les Mangas"}
           </h1>
           <p className="text-sm text-[#8A8FA4] mt-1.5">
-            Recherche instantanée et filtres multi-critères pour trouver votre prochaine obsession.
+            Cumulez plusieurs genres, situations, univers et thèmes pour trouver exactement votre prochaine pépite.
           </p>
         </div>
 
@@ -198,7 +346,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                   <motion.span
                     layoutId="discover-type-pill"
                     transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                    className="absolute inset-0 rounded-full bg-[#E5484D] shadow-[0_6px_20px_rgba(229,72,77,0.38)]"
+                    className="absolute inset-0 rounded-full bg-accent shadow-[0_6px_20px_rgb(var(--shiori-accent-rgb)/0.38)]"
                   />
                 )}
                 <Icon className="w-3.5 h-3.5 relative z-10" />
@@ -209,202 +357,461 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         </div>
       </div>
 
-      {/* Search + Filters Panel */}
-      <div className="rounded-2xl card-surface p-4 sm:p-5 space-y-4">
+      {/* Slidable Curated Moods Carousel ("Vos envies du moment") */}
+      <MoodCarousel activeMoodId={activeMoodId} onSelectMood={handleSelectMood} />
+
+      {/* Luxury Filter Studio Panel */}
+      <div className="rounded-3xl card-surface border-white/[0.09] p-4 sm:p-6 space-y-5 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+        {/* Top Row: Search + Luxury Sort + Filter Drawer Toggle */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4.5 h-4.5 text-[#E5484D] absolute left-4 top-1/2 -translate-y-1/2" />
+          <div className="relative flex-1 group">
+            <Search className="w-4.5 h-4.5 text-accent absolute left-4 top-1/2 -translate-y-1/2 transition-transform group-focus-within:scale-110" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Rechercher un ${type === "ANIME" ? "anime" : "manga"} (ex: Frieren, Berserk, Dandadan, Chainsaw Man)...`}
-              className="w-full h-11 pl-11 pr-10 rounded-xl bg-[#08090E] border border-white/[0.09] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-[#E5484D]/70"
+              placeholder={`Rechercher un ${type === "ANIME" ? "anime" : "manga"} (ex: Frieren, Berserk, Solo Leveling, Re:ZERO)...`}
+              className="w-full h-11 pl-11 pr-10 rounded-xl bg-[#080A10] border border-white/[0.09] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/70 focus:shadow-[0_0_24px_rgb(var(--shiori-accent-rgb)/0.14)] transition-all"
             />
             {search && (
-              <button
+              <motion.button
                 type="button"
+                whileTap={{ scale: 0.85 }}
                 onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#7D8296] hover:text-white cursor-pointer"
+                aria-label="Effacer la recherche"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/[0.08] text-[#7D8296] hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
-              </button>
+              </motion.button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <select
+          <div className="flex items-center gap-2.5">
+            <LuxurySelect
               value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              aria-label="Trier par"
-              className="h-11 px-3.5 rounded-xl bg-[#08090E] border border-white/[0.09] text-xs font-medium text-[#E0E2EC] focus:outline-none focus:border-[#E5484D] cursor-pointer"
-            >
-              {SORTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  Tri : {s.label}
-                </option>
-              ))}
-            </select>
+              onChange={setSort}
+              options={SORT_OPTIONS}
+              defaultValue="TRENDING_DESC"
+              align="right"
+              className="w-48"
+            />
 
-            <button
+            <motion.button
               type="button"
+              whileHover={{ y: -1 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setShowFilters((v) => !v)}
               className={cn(
-                "inline-flex items-center gap-2 h-11 px-4 rounded-xl border text-xs font-medium transition-colors cursor-pointer",
+                "inline-flex items-center gap-2 h-10 px-4 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
                 showFilters
-                  ? "bg-white/[0.09] border-white/[0.16] text-white"
-                  : "bg-[#08090E] border-white/[0.09] text-[#9A9EAE] hover:text-white"
+                  ? "bg-white/[0.1] border-white/[0.2] text-white"
+                  : "bg-[#090B12] border-white/[0.09] text-[#A2A6B8] hover:text-white"
               )}
             >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[#FF8A8E]" />
               <span>Filtres</span>
-            </button>
+              {activeFilterCount > 0 && (
+                <motion.span
+                  key={activeFilterCount}
+                  initial={{ scale: 0.6 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 18 }}
+                  className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-[10px] font-mono text-accent-fg flex items-center justify-center"
+                >
+                  {activeFilterCount}
+                </motion.span>
+              )}
+            </motion.button>
           </div>
         </div>
 
-        {/* Filter Controls */}
+        {/* Collapsible Luxury Filters Body */}
         <AnimatePresence initial={false}>
           {showFilters && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.28, ease: CINEMA_EASE }}
-              className="overflow-hidden"
+              transition={{ duration: 0.32, ease: CINEMA_EASE }}
+              className="overflow-visible"
             >
-              <div className="pt-3 border-t border-white/[0.06] space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-[10.5px] font-mono uppercase tracking-wider text-[#7A7F94] mb-1.5">
-                  Format
-                </label>
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-[#08090E] border border-white/[0.08] text-xs text-[#E4E6F0] focus:outline-none focus:border-[#E5484D] cursor-pointer"
-                >
-                  {formats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10.5px] font-mono uppercase tracking-wider text-[#7A7F94] mb-1.5">
-                  Année
-                </label>
-                <select
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-[#08090E] border border-white/[0.08] text-xs text-[#E4E6F0] focus:outline-none focus:border-[#E5484D] cursor-pointer"
-                >
-                  <option value="ALL">Toutes années</option>
-                  {YEARS.map((y) => (
-                    <option key={y} value={String(y)}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {type === "ANIME" && (
-                <div>
-                  <label className="block text-[10.5px] font-mono uppercase tracking-wider text-[#7A7F94] mb-1.5">
-                    Saison
-                  </label>
-                  <select
-                    value={season}
-                    onChange={(e) => setSeason(e.target.value)}
-                    className="w-full h-9 px-3 rounded-lg bg-[#08090E] border border-white/[0.08] text-xs text-[#E4E6F0] focus:outline-none focus:border-[#E5484D] cursor-pointer"
-                  >
-                    {SEASONS.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[10.5px] font-mono uppercase tracking-wider text-[#7A7F94] mb-1.5">
-                  Diffusion
-                </label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg bg-[#08090E] border border-white/[0.08] text-xs text-[#E4E6F0] focus:outline-none focus:border-[#E5484D] cursor-pointer"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Genre Chips */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10.5px] font-mono uppercase tracking-wider text-[#7A7F94]">
-                  Genres
-                </span>
-                {hasActiveFilters && (
-                  <button
-                    type="button"
-                    onClick={resetAll}
-                    className="inline-flex items-center gap-1 text-[11px] text-[#F45B62] hover:text-[#FF858A] cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Réinitialiser les filtres</span>
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setGenre("ALL")}
+              <div className="pt-4 border-t border-white/[0.07] space-y-5">
+                {/* 5 Custom Animated Glass Dropdowns (ZERO native <select>) */}
+                <div
                   className={cn(
-                    "px-3 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer",
-                    genre === "ALL"
-                      ? "bg-[#E5484D] border-[#E5484D] text-white"
-                      : "bg-white/[0.03] border-white/[0.07] text-[#9A9EAE] hover:text-white hover:bg-white/[0.07]"
+                    "grid grid-cols-2 sm:grid-cols-3 gap-3",
+                    type === "ANIME" ? "lg:grid-cols-5" : "lg:grid-cols-4"
                   )}
                 >
-                  Tous
-                </button>
-                {ALL_GENRES.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setGenre(genre === g ? "ALL" : g)}
-                    className={cn(
-                      "px-3 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer",
-                      genre === g
-                        ? "bg-[#E5484D] border-[#E5484D] text-white"
-                        : "bg-white/[0.03] border-white/[0.07] text-[#9A9EAE] hover:text-white hover:bg-white/[0.07]"
+                  <LuxurySelect
+                    label="Format"
+                    value={format}
+                    onChange={setFormat}
+                    options={formats}
+                    icon={Layers}
+                  />
+                  <LuxurySelect
+                    label="Année"
+                    value={year}
+                    onChange={setYear}
+                    options={YEAR_OPTIONS}
+                    icon={Calendar}
+                    columns={4}
+                  />
+                  {type === "ANIME" && (
+                    <LuxurySelect
+                      label="Saison"
+                      value={season}
+                      onChange={setSeason}
+                      options={SEASON_OPTIONS}
+                      icon={Sparkles}
+                    />
+                  )}
+                  <LuxurySelect
+                    label="Diffusion"
+                    value={status}
+                    onChange={setStatus}
+                    options={STATUS_OPTIONS}
+                    icon={Radio}
+                  />
+                  <LuxurySelect
+                    label="Note minimale"
+                    value={minScore}
+                    onChange={setMinScore}
+                    options={MIN_SCORE_OPTIONS}
+                    icon={Star}
+                    align="right"
+                  />
+                </div>
+
+                {/* Multi-Genre & Situations Explorer */}
+                <div className="rounded-2xl bg-[#090B12]/90 border border-white/[0.07] p-4 space-y-4">
+                  {/* Category Tabs + Quick Tag Search */}
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                      {FILTER_CATEGORIES.map((cat) => {
+                        const isActive = activeCategory === cat.id && !tagSearchTrimmed;
+                        const count = categoryCounts[cat.id];
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveCategory(cat.id);
+                              setTagSearch("");
+                            }}
+                            className={cn(
+                              "relative px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex items-center gap-1.5 transition-colors cursor-pointer",
+                              isActive
+                                ? "text-white"
+                                : "text-[#8C91A6] hover:text-[#ECEBE6]"
+                            )}
+                          >
+                            {isActive && (
+                              <motion.span
+                                layoutId="discover-taxonomy-tab"
+                                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                className="absolute inset-0 rounded-lg bg-white/[0.11] border border-white/[0.12]"
+                              />
+                            )}
+                            <span className="relative z-10">{cat.label}</span>
+                            {count > 0 && (
+                              <span className="relative z-10 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-accent text-accent-fg">
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Quick Tag Search */}
+                    <div className="relative w-full lg:w-64 shrink-0">
+                      <Tag className="w-3.5 h-3.5 text-[#757A8F] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={tagSearch}
+                        onChange={(e) => setTagSearch(e.target.value)}
+                        placeholder="Chercher un genre ou situation..."
+                        className="w-full h-9 pl-8 pr-8 rounded-lg bg-[#0F121C] border border-white/[0.08] text-xs text-white placeholder:text-[#63687B] focus:outline-none focus:border-accent/60"
+                      />
+                      {tagSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setTagSearch("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7D8296] hover:text-white cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Category Description + Situations Sub-Group Filter */}
+                  <div className="space-y-3">
+                    <p className="text-[11.5px] text-[#7D8296]">
+                      {tagSearchTrimmed
+                        ? `Résultats pour « ${tagSearch.trim()} » dans toutes les catégories (${searchedAllItems?.length ?? 0})`
+                        : visibleCategory.description}
+                    </p>
+
+                    {!tagSearchTrimmed && activeCategory === "situations" && (
+                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                        {SITUATION_GROUPS.map((grp) => {
+                          const isGrpActive = situationGroup === grp.id;
+                          const grpCount =
+                            grp.id === "ALL"
+                              ? visibleCategory.items.length
+                              : visibleCategory.items.filter((i) => i.group === grp.id).length;
+                          const selectedInGrp =
+                            grp.id === "ALL"
+                              ? visibleCategory.items.filter((i) => selectedTags.includes(i.id)).length
+                              : visibleCategory.items.filter(
+                                  (i) => i.group === grp.id && selectedTags.includes(i.id)
+                                ).length;
+
+                          return (
+                            <motion.button
+                              key={grp.id}
+                              type="button"
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => setSituationGroup(grp.id)}
+                              className={cn(
+                                "px-3 py-1 rounded-lg text-[11px] font-medium border whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer shrink-0",
+                                isGrpActive
+                                  ? "bg-violet-500/20 border-violet-400/50 text-violet-100"
+                                  : "bg-white/[0.02] border-white/[0.06] text-[#8E93A6] hover:text-white hover:bg-white/[0.06]"
+                              )}
+                            >
+                              <span>{grp.label}</span>
+                              <span className="font-mono text-[10px] opacity-65">
+                                {grpCount}
+                              </span>
+                              {selectedInGrp > 0 && grp.id !== "ALL" && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-violet-300" />
+                              )}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
                     )}
-                  >
-                    {GENRE_LABELS_FR[g] ?? g}
-                  </button>
-                ))}
-              </div>
-            </div>
+                  </div>
+
+                  {/* Animated Multi-Select Pills Grid */}
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={
+                        tagSearchTrimmed
+                          ? `search-${tagSearchTrimmed}`
+                          : activeCategory === "situations"
+                            ? `situations-${situationGroup}`
+                            : activeCategory
+                      }
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.18, ease: CINEMA_EASE }}
+                      className="flex flex-wrap gap-2"
+                    >
+                      {searchedAllItems ? (
+                        searchedAllItems.length === 0 ? (
+                          <span className="text-xs text-[#6E7387] py-2">
+                            Aucun genre ou situation ne correspond à &laquo; {tagSearch} &raquo;.
+                          </span>
+                        ) : (
+                          searchedAllItems.map((m) => {
+                            const selected = m.isGenre
+                              ? selectedGenres.includes(m.id)
+                              : selectedTags.includes(m.id);
+                            return (
+                              <motion.button
+                                key={`${m.isGenre ? "g" : "t"}-${m.id}`}
+                                type="button"
+                                whileHover={{ y: -1 }}
+                                whileTap={{ scale: 0.93 }}
+                                onClick={() =>
+                                  m.isGenre ? toggleGenre(m.id) : toggleTag(m.id)
+                                }
+                                className={cn(
+                                  "px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer",
+                                  selected
+                                    ? m.isGenre
+                                      ? "bg-accent border-accent-hover text-accent-fg shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.4)]"
+                                      : "bg-violet-500/25 border-violet-400/60 text-violet-100 shadow-[0_4px_16px_rgba(139,92,246,0.3)]"
+                                    : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:bg-white/[0.08]"
+                                )}
+                              >
+                                {selected && <Check className="w-3 h-3" />}
+                                <span>{m.label}</span>
+                                <span className="text-[10px] opacity-60 font-mono">
+                                  · {m.catLabel}
+                                </span>
+                              </motion.button>
+                            );
+                          })
+                        )
+                      ) : (
+                        visibleCategory.items
+                          .filter((item) =>
+                            activeCategory === "situations" && situationGroup !== "ALL"
+                              ? item.group === situationGroup
+                              : true
+                          )
+                          .map((item) => {
+                            const isGenreCat = visibleCategory.id === "genres";
+                            const selected = isGenreCat
+                              ? selectedGenres.includes(item.id)
+                              : selectedTags.includes(item.id);
+
+                            return (
+                              <motion.button
+                                key={item.id}
+                                type="button"
+                                whileHover={{ y: -1.5 }}
+                                whileTap={{ scale: 0.93 }}
+                                onClick={() =>
+                                  isGenreCat ? toggleGenre(item.id) : toggleTag(item.id)
+                                }
+                                className={cn(
+                                  "px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer",
+                                  selected
+                                    ? isGenreCat
+                                      ? "bg-accent border-accent-hover text-accent-fg shadow-[0_6px_18px_rgb(var(--shiori-accent-rgb)/0.42)]"
+                                      : "bg-violet-500/25 border-violet-400/60 text-violet-100 shadow-[0_6px_18px_rgba(139,92,246,0.3)]"
+                                    : "bg-white/[0.03] border-white/[0.075] text-[#B8BCCB] hover:text-white hover:border-white/[0.18] hover:bg-white/[0.07]"
+                                )}
+                              >
+                                {selected && <Check className="w-3 h-3" />}
+                                <span>{item.label}</span>
+                              </motion.button>
+                            );
+                          })
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+
+                {/* Active Combined Filter Chips Bar */}
+                <AnimatePresence>
+                  {hasActiveFilters && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="flex flex-wrap items-center gap-2 pt-1"
+                    >
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#7A7F94] mr-1">
+                        Actifs :
+                      </span>
+
+                      {selectedGenres.map((g) => (
+                        <motion.span
+                          key={`active-g-${g}`}
+                          layout
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-[#FF979B]"
+                        >
+                          <span>{getTaxonomyLabel(g)}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleGenre(g)}
+                            className="hover:text-white cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </motion.span>
+                      ))}
+
+                      {selectedTags.map((t) => (
+                        <motion.span
+                          key={`active-t-${t}`}
+                          layout
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/18 border border-violet-400/40 text-xs font-medium text-violet-200"
+                        >
+                          <span>{getTaxonomyLabel(t)}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleTag(t)}
+                            className="hover:text-white cursor-pointer"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </motion.span>
+                      ))}
+
+                      {format !== "ALL" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
+                          <span>Format : {formats.find((f) => f.id === format)?.label ?? format}</span>
+                          <button type="button" onClick={() => setFormat("ALL")} className="cursor-pointer">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+
+                      {year !== "ALL" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs font-mono text-white">
+                          <span>{year}</span>
+                          <button type="button" onClick={() => setYear("ALL")} className="cursor-pointer">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+
+                      {season !== "ALL" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
+                          <span>{SEASON_OPTIONS.find((s) => s.id === season)?.label}</span>
+                          <button type="button" onClick={() => setSeason("ALL")} className="cursor-pointer">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+
+                      {status !== "ALL" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
+                          <span>{STATUS_OPTIONS.find((s) => s.id === status)?.label}</span>
+                          <button type="button" onClick={() => setStatus("ALL")} className="cursor-pointer">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+
+                      {minScore !== "ALL" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
+                          <span>★ {Number(minScore) / 10}+</span>
+                          <button type="button" onClick={() => setMinScore("ALL")} className="cursor-pointer">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={resetAll}
+                        className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white hover:bg-accent/20 transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Tout effacer</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Results meta bar */}
+      {/* Results Meta Bar */}
       <div className="flex items-center justify-between text-xs text-[#858A9E]">
         <div className="flex items-center gap-2">
           {loading ? (
             <span className="inline-flex items-center gap-2 text-white">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#E5484D]" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
               Actualisation du catalogue...
             </span>
           ) : (
@@ -414,12 +821,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
             </span>
           )}
         </div>
-        {genre !== "ALL" && (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E5484D]/15 text-[#FF8C90] border border-[#E5484D]/30">
-            Genre : {GENRE_LABELS_FR[genre] ?? genre}
-            <button type="button" onClick={() => setGenre("ALL")} className="ml-1 cursor-pointer">
-              <X className="w-3 h-3" />
-            </button>
+        {selectedGenres.length + selectedTags.length > 1 && (
+          <span className="text-[11px] font-mono text-[#7D8296] hidden sm:inline">
+            Mode combiné : {selectedGenres.length + selectedTags.length} critères actifs
           </span>
         )}
       </div>
@@ -439,53 +843,44 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         <div className="rounded-2xl card-surface py-16 px-6 text-center">
           <Sparkles className="w-8 h-8 text-[#52576B] mx-auto mb-3" />
           <h3 className="text-base font-semibold text-white">Aucun résultat trouvé</h3>
-          <p className="text-sm text-[#868B9F] mt-1">
-            Essayez d&apos;élargir votre recherche ou de réinitialiser vos filtres.
+          <p className="text-sm text-[#868B9F] mt-1 max-w-md mx-auto">
+            Cette combinaison de filtres est très précise. Retirez un critère ou réinitialisez pour élargir les résultats.
           </p>
           <button
             type="button"
             onClick={resetAll}
-            className="mt-5 px-5 py-2 rounded-full bg-[#E5484D] text-white text-xs font-semibold hover:bg-[#F2545B] cursor-pointer"
+            className="mt-5 px-5 py-2 rounded-full bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hover cursor-pointer"
           >
-            Réinitialiser
+            Tout réinitialiser
           </button>
         </div>
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5">
-            {items.map((item, idx) => (
-              <motion.div
-                key={`${item.id}-${item.type}`}
-                initial={{ opacity: 0, y: 16, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{
-                  duration: 0.38,
-                  delay: Math.min((idx % 24) * 0.025, 0.35),
-                  ease: CINEMA_EASE,
-                }}
-              >
-                <MediaCard media={item} />
-              </motion.div>
+            {items.map((item) => (
+              <MediaCard key={`${item.id}-${item.type}`} media={item} />
             ))}
           </div>
 
           {hasNextPage && (
             <div className="pt-4 flex justify-center">
-              <button
+              <motion.button
                 type="button"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
                 disabled={loadingMore}
                 onClick={() => void fetchResults(page + 1, true)}
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-sm font-medium text-white transition-all cursor-pointer disabled:opacity-50"
               >
                 {loadingMore ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-[#E5484D]" />
+                    <Loader2 className="w-4 h-4 animate-spin text-accent" />
                     <span>Chargement...</span>
                   </>
                 ) : (
                   <span>Charger plus de titres</span>
                 )}
-              </button>
+              </motion.button>
             </div>
           )}
         </>

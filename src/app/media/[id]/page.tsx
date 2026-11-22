@@ -17,7 +17,7 @@ export default async function MediaDetailPage({
   if (!media) {
     return (
       <div className="pt-36 pb-24 max-w-xl mx-auto px-4 text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#E5484D]">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">
           404 · Œuvre introuvable
         </p>
         <h1 className="text-3xl font-bold text-white mt-2">
@@ -28,7 +28,7 @@ export default async function MediaDetailPage({
         </p>
         <Link
           href="/discover"
-          className="mt-6 inline-flex items-center px-5 py-2.5 rounded-full bg-[#E5484D] hover:bg-[#F2545B] text-white text-sm font-semibold transition-colors"
+          className="mt-6 inline-flex items-center px-5 py-2.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold transition-colors"
         >
           Retourner au catalogue
         </Link>

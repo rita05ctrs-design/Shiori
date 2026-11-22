@@ -6,21 +6,17 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Star,
-  Heart,
-  Play,
-  Plus,
-  Minus,
   Check,
   Clock,
   Users,
   Bookmark,
   ExternalLink,
-  SlidersHorizontal,
   Tv,
   BookOpen,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { MediaCard } from "@/components/media/MediaCard";
+import { LibraryTrackerCard } from "@/components/media/LibraryTrackerCard";
 import {
   CINEMA_EASE,
   ParallaxBanner,
@@ -35,19 +31,9 @@ import {
   formatScore,
   formatSeason,
   getDisplayTitle,
-  getStatusLabel,
-  STATUS_CONFIG,
   stripHtml,
 } from "@/lib/utils";
-import type { LibraryStatus, MediaDetail } from "@/types/media";
-
-const STATUSES: LibraryStatus[] = [
-  "WATCHING",
-  "COMPLETED",
-  "ON_HOLD",
-  "PLAN_TO_WATCH",
-  "DROPPED",
-];
+import type { MediaDetail } from "@/types/media";
 
 const RELATION_FR: Record<string, string> = {
   PREQUEL: "Préquelle",
@@ -67,14 +53,7 @@ interface MediaDetailClientProps {
 }
 
 export function MediaDetailClient({ media }: MediaDetailClientProps) {
-  const {
-    getEntry,
-    upsertEntry,
-    incrementProgress,
-    toggleFavorite,
-    openQuickEdit,
-    openTrailer,
-  } = useShiori();
+  const { getEntry, upsertEntry } = useShiori();
 
   const entry = getEntry(media.id);
   const title = getDisplayTitle(media);
@@ -83,17 +62,12 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
 
   const totalUnits = media.type === "MANGA" ? media.chapters : media.episodes;
   const unitLabel = media.type === "MANGA" ? "Chapitre" : "Épisode";
-  const unitShort = media.type === "MANGA" ? "Ch." : "Ép.";
 
   // Score distribution normalization
   const maxDistAmount = Math.max(
     1,
     ...media.scoreDistribution.map((s) => s.amount)
   );
-
-  const handleQuickStatus = (status: LibraryStatus) => {
-    upsertEntry(media, { status });
-  };
 
   const handleSetEpisode = (epNum: number) => {
     upsertEntry(media, {
@@ -119,7 +93,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
       {/* Full-Bleed Scroll-Parallax Atmospheric Banner */}
       <ParallaxBanner
         speed={95}
-        className="h-[320px] sm:h-[400px] lg:h-[440px] w-full bg-[#0E1017]"
+        className="h-[320px] sm:h-[400px] lg:h-[440px] w-full bg-surface"
       >
         <img
           src={media.bannerImage || media.coverImage.extraLarge}
@@ -129,8 +103,8 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             !media.bannerImage && "blur-xl scale-110 opacity-45"
           )}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07080C] via-[#07080C]/55 to-[#07080C]/35" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#07080C]/85 via-transparent to-[#07080C]/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/55 to-obsidian/35" />
+        <div className="absolute inset-0 bg-gradient-to-r from-obsidian/85 via-transparent to-obsidian/40" />
 
         {/* Back link */}
         <div className="absolute top-20 inset-x-0 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 z-10">
@@ -163,120 +137,8 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
               />
             </motion.div>
 
-            {/* Primary Tracking Actions Card */}
-            <div className="rounded-2xl card-surface p-4 space-y-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#858A9E]">
-                  Suivi Shiori
-                </span>
-                {entry && (
-                  <button
-                    type="button"
-                    onClick={() => toggleFavorite(media.id)}
-                    aria-label="Favori"
-                    className={cn(
-                      "w-8 h-8 rounded-full border flex items-center justify-center transition-all cursor-pointer",
-                      entry.isFavorite
-                        ? "bg-[#E5484D]/20 border-[#E5484D]/50 text-[#FF7E82]"
-                        : "bg-white/[0.04] border-white/[0.09] text-[#8E93A6] hover:text-white"
-                    )}
-                  >
-                    <Heart
-                      className={cn("w-3.5 h-3.5", entry.isFavorite && "fill-current")}
-                    />
-                  </button>
-                )}
-              </div>
-
-              {/* Status Select */}
-              <select
-                value={entry?.status ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value as LibraryStatus;
-                  if (val) handleQuickStatus(val);
-                }}
-                aria-label="Statut dans ma bibliothèque"
-                className={cn(
-                  "w-full h-10 px-3.5 rounded-xl border text-xs font-semibold focus:outline-none cursor-pointer transition-colors",
-                  entry
-                    ? `${STATUS_CONFIG[entry.status].bg} ${STATUS_CONFIG[entry.status].border} ${STATUS_CONFIG[entry.status].color}`
-                    : "bg-[#E5484D] border-[#E5484D] text-white"
-                )}
-              >
-                {!entry && (
-                  <option value="" className="bg-[#10121B] text-white">
-                    + Ajouter à ma bibliothèque
-                  </option>
-                )}
-                {STATUSES.map((s) => (
-                  <option key={s} value={s} className="bg-[#10121B] text-white">
-                    {getStatusLabel(s, media.type)}
-                  </option>
-                ))}
-              </select>
-
-              {/* Inline Progress Stepper if tracked */}
-              {entry && (
-                <div className="space-y-2.5 pt-1">
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-[#8E93A6]">Progression</span>
-                    <span className="text-white font-semibold">
-                      {unitShort} {entry.progress}
-                      {totalUnits ? ` / ${totalUnits}` : ""}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => incrementProgress(media.id, -1)}
-                      disabled={entry.progress <= 0}
-                      className="w-9 h-9 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => incrementProgress(media.id, 1)}
-                      disabled={Boolean(totalUnits && entry.progress >= totalUnits)}
-                      className="flex-1 h-9 rounded-xl bg-[#E5484D] hover:bg-[#F2545B] disabled:opacity-40 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>+1 {unitLabel.toLowerCase()}</span>
-                    </button>
-                  </div>
-
-                  {entry.score !== null && (
-                    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#F0B95B]/10 border border-[#F0B95B]/25 text-xs">
-                      <span className="text-[#D4BC8B]">Ma note</span>
-                      <span className="font-mono font-semibold text-[#F0B95B] flex items-center gap-1">
-                        <Star className="w-3.5 h-3.5 fill-current" />
-                        {entry.score.toFixed(1)} / 10
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => openQuickEdit(media)}
-                className="w-full h-9 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] text-xs font-medium text-[#D6D9E5] hover:text-white flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>{entry ? "Note, dates & critique" : "Configurer l'ajout"}</span>
-              </button>
-
-              {media.trailer && (
-                <button
-                  type="button"
-                  onClick={() => openTrailer(media.trailer!.id, title)}
-                  className="w-full h-9 rounded-xl bg-[#F0B95B]/12 hover:bg-[#F0B95B]/22 border border-[#F0B95B]/30 text-xs font-semibold text-[#F0B95B] flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Voir la bande-annonce</span>
-                </button>
-              )}
-            </div>
+            {/* Primary Animated Tracking Card */}
+            <LibraryTrackerCard media={media} title={title} />
 
             {/* Metadata Card */}
             <div className="rounded-2xl card-surface p-4 space-y-3 text-xs">
@@ -393,7 +255,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                   </span>
                 )}
                 {media.nextAiringEpisode && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E5484D]/18 border border-[#E5484D]/35 text-xs font-mono text-[#FF8C90]">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/18 border border-accent/35 text-xs font-mono text-accent-soft">
                     <Clock className="w-3.5 h-3.5" />
                     Ép. {media.nextAiringEpisode.episode} ·{" "}
                     {formatCountdown(media.nextAiringEpisode.airingAt)}
@@ -419,7 +281,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                   <Link
                     key={g}
                     href={`/discover?genre=${encodeURIComponent(g)}&type=${media.type}`}
-                    className="px-3 py-1 rounded-full bg-white/[0.05] hover:bg-[#E5484D]/20 border border-white/[0.08] hover:border-[#E5484D]/40 text-xs text-[#D6D9E6] hover:text-white transition-all"
+                    className="px-3 py-1 rounded-full bg-white/[0.05] hover:bg-accent/20 border border-white/[0.08] hover:border-accent/40 text-xs text-[#D6D9E6] hover:text-accent-fg transition-all"
                   >
                     {g}
                   </Link>
@@ -429,7 +291,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
 
             {/* Synopsis */}
             <section className="rounded-2xl card-surface p-6">
-              <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-[#E5484D] mb-3">
+              <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent mb-3">
                 Synopsis
               </h2>
               <p
@@ -444,7 +306,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 <button
                   type="button"
                   onClick={() => setExpandedSynopsis((v) => !v)}
-                  className="mt-3 text-xs font-semibold text-[#F45B62] hover:text-[#FF858A] cursor-pointer"
+                  className="mt-3 text-xs font-semibold text-accent-hover hover:text-[#FF858A] cursor-pointer"
                 >
                   {expandedSynopsis ? "Réduire" : "Lire le synopsis complet"}
                 </button>
@@ -468,7 +330,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             <section className="rounded-2xl card-surface p-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                 <div>
-                  <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-[#E5484D]">
+                  <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent">
                     Progression rapide
                   </h2>
                   <p className="text-sm text-[#9A9EAE] mt-0.5">
@@ -493,7 +355,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                       className={cn(
                         "h-9 rounded-lg font-mono text-xs font-medium border transition-all flex items-center justify-center gap-1 cursor-pointer",
                         isCurrent
-                          ? "bg-[#E5484D] border-[#F45B62] text-white shadow-[0_0_16px_rgba(229,72,77,0.45)]"
+                          ? "bg-accent border-accent-hover text-accent-fg shadow-[0_0_16px_rgb(var(--shiori-accent-rgb)/0.45)]"
                           : watched
                             ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-300 hover:bg-emerald-500/25"
                             : "bg-white/[0.03] border-white/[0.07] text-[#9A9EAE] hover:bg-white/[0.09] hover:text-white"
@@ -535,7 +397,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                               className={cn(
                                 "w-full rounded-t-md transition-all",
                                 bucket.score >= 80
-                                  ? "bg-gradient-to-t from-[#E5484D]/75 to-[#F45B62]"
+                                  ? "bg-gradient-to-t from-accent/75 to-accent-hover"
                                   : bucket.score >= 60
                                     ? "bg-white/25 group-hover:bg-white/40"
                                     : "bg-white/12"
@@ -647,7 +509,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                           className="w-12 h-16 rounded-lg object-cover shrink-0 border border-white/10 group-hover:scale-105 transition-transform duration-300"
                         />
                         <div className="min-w-0">
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-[#F45B62]">
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-accent-hover">
                             {RELATION_FR[rel.relationType] ?? rel.relationType}
                           </span>
                           <p className="text-xs font-semibold text-[#F4F3EE] group-hover:text-white line-clamp-2 mt-0.5">

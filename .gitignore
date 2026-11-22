@@ -24,6 +24,9 @@ yarn-error.log*
 .env
 .env*.local
 
+# local shiori account database
+/.shiori-data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

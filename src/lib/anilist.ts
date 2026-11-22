@@ -45,6 +45,13 @@ export function normalizeMedia(raw: any): MediaItem {
     season: raw?.season ?? null,
     seasonYear: raw?.seasonYear ?? raw?.startDate?.year ?? null,
     startYear: raw?.startDate?.year ?? raw?.seasonYear ?? null,
+    startDate: raw?.startDate
+      ? {
+          year: raw.startDate.year ?? null,
+          month: raw.startDate.month ?? null,
+          day: raw.startDate.day ?? null,
+        }
+      : null,
     averageScore: raw?.averageScore ?? null,
     meanScore: raw?.meanScore ?? null,
     popularity: raw?.popularity ?? null,
@@ -195,7 +202,7 @@ const MEDIA_FRAGMENT = `
   duration
   season
   seasonYear
-  startDate { year }
+  startDate { year month day }
   averageScore
   meanScore
   popularity
@@ -351,6 +358,9 @@ export interface DiscoverParams {
   search?: string;
   type?: MediaType;
   genre?: string;
+  genres?: string[];
+  tags?: string[];
+  minScore?: number;
   season?: string;
   year?: number;
   format?: string;
@@ -373,6 +383,9 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     search,
     type = "ANIME",
     genre,
+    genres,
+    tags,
+    minScore,
     season,
     year,
     format,
@@ -382,6 +395,14 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     perPage = 24,
   } = params;
 
+  const genreList = Array.from(
+    new Set([
+      ...(genres ?? []).filter((g) => g && g !== "ALL"),
+      ...(genre && genre !== "ALL" ? [genre] : []),
+    ])
+  );
+  const tagList = Array.from(new Set((tags ?? []).filter((t) => t && t !== "ALL")));
+
   try {
     const query = `
       query (
@@ -389,7 +410,9 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
         $perPage: Int,
         $search: String,
         $type: MediaType,
-        $genre: String,
+        $genres: [String],
+        $tags: [String],
+        $minScore: Int,
         $season: MediaSeason,
         $seasonYear: Int,
         $format: MediaFormat,
@@ -401,7 +424,9 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
           media(
             search: $search,
             type: $type,
-            genre: $genre,
+            genre_in: $genres,
+            tag_in: $tags,
+            averageScore_greater: $minScore,
             season: $season,
             seasonYear: $seasonYear,
             format: $format,
@@ -422,7 +447,9 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
       sort: [search && sort === "TRENDING_DESC" ? "SEARCH_MATCH" : sort],
     };
     if (search?.trim()) variables.search = search.trim();
-    if (genre && genre !== "ALL") variables.genre = genre;
+    if (genreList.length > 0) variables.genres = genreList;
+    if (tagList.length > 0) variables.tags = tagList;
+    if (minScore && minScore > 0) variables.minScore = minScore;
     if (season && season !== "ALL" && type === "ANIME") variables.season = season;
     if (year && !Number.isNaN(year)) variables.seasonYear = year;
     if (format && format !== "ALL") variables.format = format;
@@ -450,8 +477,13 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
           m.genres.some((g) => g.toLowerCase().includes(q))
       );
     }
-    if (genre && genre !== "ALL") {
-      filtered = filtered.filter((m) => m.genres.includes(genre));
+    if (genreList.length > 0) {
+      filtered = filtered.filter((m) =>
+        genreList.every((g) => m.genres.includes(g))
+      );
+    }
+    if (minScore && minScore > 0) {
+      filtered = filtered.filter((m) => (m.averageScore ?? 0) >= minScore);
     }
     if (format && format !== "ALL") {
       filtered = filtered.filter((m) => m.format === format);
@@ -563,18 +595,15 @@ export async function fetchMediaDetail(id: number): Promise<MediaDetail | null> 
 export async function fetchWeeklySchedule(): Promise<AiringScheduleItem[]> {
   const seed = getSeedData();
   try {
-    const now = new Date();
-    // Monday 00:00 of the current week to Sunday 23:59
-    const day = now.getDay(); // 0=Sun..6=Sat
-    const diffToMon = (day + 6) % 7;
-    const startOfWeek = new Date(now);
-    startOfWeek.setHours(0, 0, 0, 0);
-    startOfWeek.setDate(startOfWeek.getDate() - diffToMon);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(endOfWeek.getDate() + 7);
+    // Rolling 7-day window starting from Today 00:00 -> Today + 7 days
+    // so upcoming episodes for the next 7 days are ALWAYS visible (even on Sunday!)
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endWindow = new Date(startOfToday);
+    endWindow.setDate(endWindow.getDate() + 7);
 
-    const startSec = Math.floor(startOfWeek.getTime() / 1000);
-    const endSec = Math.floor(endOfWeek.getTime() / 1000);
+    const startSec = Math.floor(startOfToday.getTime() / 1000);
+    const endSec = Math.floor(endWindow.getTime() / 1000);
 
     const query = `
       query ($start: Int, $end: Int) {
@@ -590,6 +619,18 @@ export async function fetchWeeklySchedule(): Promise<AiringScheduleItem[]> {
             media { ${MEDIA_FRAGMENT} isAdult }
           }
         }
+        page3: Page(page: 3, perPage: 50) {
+          airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) {
+            id airingAt episode timeUntilAiring
+            media { ${MEDIA_FRAGMENT} isAdult }
+          }
+        }
+        page4: Page(page: 4, perPage: 50) {
+          airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: TIME) {
+            id airingAt episode timeUntilAiring
+            media { ${MEDIA_FRAGMENT} isAdult }
+          }
+        }
       }
     `;
 
@@ -597,6 +638,8 @@ export async function fetchWeeklySchedule(): Promise<AiringScheduleItem[]> {
     const combined = [
       ...(data.page1?.airingSchedules ?? []),
       ...(data.page2?.airingSchedules ?? []),
+      ...(data.page3?.airingSchedules ?? []),
+      ...(data.page4?.airingSchedules ?? []),
     ];
 
     const filtered: AiringScheduleItem[] = combined
@@ -614,5 +657,124 @@ export async function fetchWeeklySchedule(): Promise<AiringScheduleItem[]> {
     return filtered.length > 0 ? filtered : seed.airing;
   } catch {
     return seed.airing;
+  }
+}
+
+export interface SeasonalBucket {
+  id: string;
+  label: string;
+  sublabel: string;
+  isCurrent?: boolean;
+  isNext?: boolean;
+  items: MediaItem[];
+}
+
+const SEASON_ORDER = ["WINTER", "SPRING", "SUMMER", "FALL"] as const;
+const SEASON_FR_MAP: Record<string, string> = {
+  WINTER: "Hiver",
+  SPRING: "Printemps",
+  SUMMER: "Été",
+  FALL: "Automne",
+};
+
+function getCurrentSeasonIndex(month0: number): number {
+  if (month0 <= 2) return 0; // WINTER
+  if (month0 <= 5) return 1; // SPRING
+  if (month0 <= 8) return 2; // SUMMER
+  return 3; // FALL
+}
+
+export async function fetchSeasonalCalendarData(): Promise<SeasonalBucket[]> {
+  const now = new Date();
+  const baseYear = now.getFullYear();
+  const baseIdx = getCurrentSeasonIndex(now.getMonth());
+
+  // Compute Current season + next 4 upcoming seasons dynamically
+  const targets = Array.from({ length: 5 }, (_, offset) => {
+    const total = baseIdx + offset;
+    const season = SEASON_ORDER[total % 4];
+    const year = baseYear + Math.floor(total / 4);
+    return {
+      key: `s${offset}`,
+      id: `${season}_${year}`,
+      season,
+      year,
+      label: `${SEASON_FR_MAP[season]} ${year}`,
+      sublabel:
+        offset === 0
+          ? "Saison en cours"
+          : offset === 1
+            ? "Prochaine saison"
+            : "À venir",
+      isCurrent: offset === 0,
+      isNext: offset === 1,
+    };
+  });
+
+  try {
+    const query = `
+      query {
+        ${targets
+          .map(
+            (t) => `
+          ${t.key}: Page(page: 1, perPage: 24) {
+            media(
+              type: ANIME
+              season: ${t.season}
+              seasonYear: ${t.year}
+              sort: POPULARITY_DESC
+              isAdult: false
+            ) {
+              ${MEDIA_FRAGMENT}
+            }
+          }`
+          )
+          .join("\n")}
+        tba: Page(page: 1, perPage: 24) {
+          media(
+            type: ANIME
+            status: NOT_YET_RELEASED
+            sort: POPULARITY_DESC
+            isAdult: false
+          ) {
+            ${MEDIA_FRAGMENT}
+          }
+        }
+      }
+    `;
+
+    const data = await queryAniList(query, {}, 600);
+
+    const buckets: SeasonalBucket[] = targets.map((t) => ({
+      id: t.id,
+      label: t.label,
+      sublabel: t.sublabel,
+      isCurrent: t.isCurrent,
+      isNext: t.isNext,
+      items: (data?.[t.key]?.media ?? []).map(normalizeMedia),
+    }));
+
+    // Announced TBA (unreleased anime without an exact upcoming season, or top anticipated)
+    const tbaRaw: MediaItem[] = (data?.tba?.media ?? []).map(normalizeMedia);
+    const tbaOnly = tbaRaw.filter((m) => !m.season || !m.seasonYear);
+    buckets.push({
+      id: "ANNOUNCED",
+      label: "Annoncés",
+      sublabel: "Prochainement (TBA)",
+      items: tbaOnly.length >= 6 ? tbaOnly : tbaRaw,
+    });
+
+    return buckets;
+  } catch {
+    const seed = getSeedData();
+    return [
+      {
+        id: targets[0].id,
+        label: targets[0].label,
+        sublabel: "Saison en cours",
+        isCurrent: true,
+        items: seed.trending,
+      },
+    ];
   }
 }

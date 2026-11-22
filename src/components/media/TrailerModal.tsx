@@ -36,7 +36,7 @@ export function TrailerModal() {
           >
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.08]">
               <div className="flex items-center gap-2 min-w-0">
-                <Play className="w-4 h-4 text-[#E5484D] fill-current shrink-0" />
+                <Play className="w-4 h-4 text-accent fill-current shrink-0" />
                 <span className="text-sm font-medium text-white truncate">
                   Bande-annonce — {trailerVideo.title}
                 </span>

@@ -10,6 +10,7 @@ import { ToastContainer } from "@/components/layout/ToastContainer";
 import { QuickEditModal } from "@/components/media/QuickEditModal";
 import { TrailerModal } from "@/components/media/TrailerModal";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -44,9 +45,13 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
+      suppressHydrationWarning
       className={`${plusJakarta.variable} ${cormorant.variable} ${jetbrainsMono.variable} dark`}
     >
-      <body className="font-sans antialiased bg-[#07080C] text-[#F4F3EE] min-h-screen flex flex-col">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
+      <body className="font-sans antialiased bg-obsidian text-[#F4F3EE] min-h-screen flex flex-col">
         <ShioriProvider>
           <MotionRoot>
             <Navbar />

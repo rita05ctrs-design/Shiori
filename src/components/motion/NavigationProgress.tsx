@@ -91,8 +91,12 @@ export function NavigationProgress() {
               initial={{ scaleX: 0.08 }}
               animate={{ scaleX: progress }}
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              style={{ transformOrigin: "left center" }}
-              className="h-full w-full bg-gradient-to-r from-[#E5484D] via-[#FF7A66] to-[#F0B95B] shadow-[0_0_16px_rgba(229,72,77,0.95),0_0_6px_rgba(240,185,91,0.8)]"
+              style={{
+                transformOrigin: "left center",
+                boxShadow:
+                  "0 0 16px rgb(var(--shiori-accent-rgb) / 0.95), 0 0 6px rgb(var(--shiori-secondary-rgb) / 0.8)",
+              }}
+              className="h-full w-full bg-gradient-to-r from-accent via-accent-hover to-kinpaku"
             />
           </motion.div>
         )}
@@ -102,7 +106,7 @@ export function NavigationProgress() {
       <motion.div
         aria-hidden="true"
         style={{ scaleX: smoothScroll, transformOrigin: "left center" }}
-        className="fixed top-16 inset-x-0 z-[49] h-[1.5px] bg-gradient-to-r from-[#E5484D]/80 via-[#F45B62]/90 to-[#F0B95B]/80 pointer-events-none opacity-75"
+        className="fixed top-16 inset-x-0 z-[49] h-[1.5px] bg-gradient-to-r from-accent/80 via-accent-hover/90 to-kinpaku/80 pointer-events-none opacity-75"
       />
     </>
   );

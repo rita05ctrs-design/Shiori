@@ -1,11 +1,40 @@
 -- ============================================================================
--- SHIORI (栞) — Supabase PostgreSQL Schema
+-- SHIORI (栞) — Supabase PostgreSQL Schema (Idempotent)
 -- Architecture complète pour comptes utilisateurs, bibliothèque synchronisée,
--- activité, listes personnalisées et notifications temps réel.
+-- statistiques AniList importées, activité et notifications temps réel.
 -- ============================================================================
 
 -- Extension UUID
 create extension if not exists "uuid-ossp";
+
+-- ----------------------------------------------------------------------------
+-- TYPES ENUM (création idempotente)
+-- ----------------------------------------------------------------------------
+do $$ begin
+  create type public.media_type as enum ('ANIME', 'MANGA');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.library_status as enum (
+    'WATCHING',
+    'COMPLETED',
+    'ON_HOLD',
+    'DROPPED',
+    'PLAN_TO_WATCH'
+  );
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.notification_kind as enum (
+    'AIRING',
+    'MILESTONE',
+    'RECOMMENDATION',
+    'SYSTEM'
+  );
+exception when duplicate_object then null;
+end $$;
 
 -- ----------------------------------------------------------------------------
 -- 1. PROFILES (liés à auth.users)
@@ -24,33 +53,47 @@ create table if not exists public.profiles (
     "milestones": true,
     "recommendations": false
   }'::jsonb,
+  anilist_access_token text,
+  anilist_user_id integer,
+  anilist_username text,
+  anilist_avatar_url text,
+  anilist_site_url text,
+  anilist_token_expires_at timestamptz,
+  anilist_connected_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+-- Migration idempotente si la table profiles existe déjà
+alter table public.profiles add column if not exists anilist_access_token text;
+alter table public.profiles add column if not exists anilist_user_id integer;
+alter table public.profiles add column if not exists anilist_username text;
+alter table public.profiles add column if not exists anilist_avatar_url text;
+alter table public.profiles add column if not exists anilist_site_url text;
+alter table public.profiles add column if not exists anilist_token_expires_at timestamptz;
+alter table public.profiles add column if not exists anilist_connected_at timestamptz;
+
+-- Sécurité : ne jamais exposer anilist_access_token au rôle anon
+revoke select (anilist_access_token) on public.profiles from anon;
+
 alter table public.profiles enable row level security;
 
-create policy "Public profiles are viewable by everyone"
-  on public.profiles for select using (true);
+drop policy if exists "Public profiles are viewable by everyone" on public.profiles;
+drop policy if exists "Users can view their own profile" on public.profiles;
+create policy "Users can view their own profile"
+  on public.profiles for select using (auth.uid() = id);
 
+drop policy if exists "Users can insert their own profile" on public.profiles;
 create policy "Users can insert their own profile"
   on public.profiles for insert with check (auth.uid() = id);
 
+drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
   on public.profiles for update using (auth.uid() = id);
 
 -- ----------------------------------------------------------------------------
--- 2. LIBRARY ENTRIES (Anime & Manga tracking)
+-- 2. LIBRARY ENTRIES (Anime & Manga tracking + import AniList)
 -- ----------------------------------------------------------------------------
-create type public.media_type as enum ('ANIME', 'MANGA');
-create type public.library_status as enum (
-  'WATCHING',
-  'COMPLETED',
-  'ON_HOLD',
-  'DROPPED',
-  'PLAN_TO_WATCH'
-);
-
 create table if not exists public.library_entries (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -83,28 +126,67 @@ create index if not exists idx_library_user_updated on public.library_entries(us
 
 alter table public.library_entries enable row level security;
 
+drop policy if exists "Users can view their own library entries" on public.library_entries;
 create policy "Users can view their own library entries"
   on public.library_entries for select using (auth.uid() = user_id);
 
+drop policy if exists "Users can insert their own library entries" on public.library_entries;
 create policy "Users can insert their own library entries"
   on public.library_entries for insert with check (auth.uid() = user_id);
 
+drop policy if exists "Users can update their own library entries" on public.library_entries;
 create policy "Users can update their own library entries"
   on public.library_entries for update using (auth.uid() = user_id);
 
+drop policy if exists "Users can delete their own library entries" on public.library_entries;
 create policy "Users can delete their own library entries"
   on public.library_entries for delete using (auth.uid() = user_id);
 
 -- ----------------------------------------------------------------------------
--- 3. NOTIFICATIONS
+-- 3. USER ANILIST STATS (User.statistics anime & manga importées par pseudo)
 -- ----------------------------------------------------------------------------
-create type public.notification_kind as enum (
-  'AIRING',
-  'MILESTONE',
-  'RECOMMENDATION',
-  'SYSTEM'
+create table if not exists public.user_anilist_stats (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  anilist_username text not null,
+  anilist_user_id integer,
+  anilist_avatar_url text,
+  anilist_banner_url text,
+  anilist_site_url text,
+  anime_count integer not null default 0,
+  anime_episodes_watched integer not null default 0,
+  anime_minutes_watched integer not null default 0,
+  anime_mean_score numeric(5,2) not null default 0,
+  manga_count integer not null default 0,
+  manga_chapters_read integer not null default 0,
+  manga_volumes_read integer not null default 0,
+  manga_mean_score numeric(5,2) not null default 0,
+  anime_stats jsonb not null default '{}'::jsonb,
+  manga_stats jsonb not null default '{}'::jsonb,
+  synced_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
+alter table public.user_anilist_stats enable row level security;
+
+drop policy if exists "Users can view their own anilist stats" on public.user_anilist_stats;
+create policy "Users can view their own anilist stats"
+  on public.user_anilist_stats for select using (auth.uid() = user_id);
+
+drop policy if exists "Users can insert their own anilist stats" on public.user_anilist_stats;
+create policy "Users can insert their own anilist stats"
+  on public.user_anilist_stats for insert with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update their own anilist stats" on public.user_anilist_stats;
+create policy "Users can update their own anilist stats"
+  on public.user_anilist_stats for update using (auth.uid() = user_id);
+
+drop policy if exists "Users can delete their own anilist stats" on public.user_anilist_stats;
+create policy "Users can delete their own anilist stats"
+  on public.user_anilist_stats for delete using (auth.uid() = user_id);
+
+-- ----------------------------------------------------------------------------
+-- 4. NOTIFICATIONS
+-- ----------------------------------------------------------------------------
 create table if not exists public.notifications (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -122,17 +204,24 @@ create index if not exists idx_notifications_user_unread
 
 alter table public.notifications enable row level security;
 
+drop policy if exists "Users can view their own notifications" on public.notifications;
 create policy "Users can view their own notifications"
   on public.notifications for select using (auth.uid() = user_id);
 
+drop policy if exists "Users can insert their own notifications" on public.notifications;
+create policy "Users can insert their own notifications"
+  on public.notifications for insert with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update their own notifications" on public.notifications;
 create policy "Users can update their own notifications"
   on public.notifications for update using (auth.uid() = user_id);
 
+drop policy if exists "Users can delete their own notifications" on public.notifications;
 create policy "Users can delete their own notifications"
   on public.notifications for delete using (auth.uid() = user_id);
 
 -- ----------------------------------------------------------------------------
--- 4. ACTIVITY LOG (historique de progression pour la page Stats)
+-- 5. ACTIVITY LOG (historique de progression pour la page Stats)
 -- ----------------------------------------------------------------------------
 create table if not exists public.activity_events (
   id uuid primary key default uuid_generate_v4(),
@@ -150,14 +239,16 @@ create index if not exists idx_activity_user_created
 
 alter table public.activity_events enable row level security;
 
+drop policy if exists "Users can view their own activity" on public.activity_events;
 create policy "Users can view their own activity"
   on public.activity_events for select using (auth.uid() = user_id);
 
+drop policy if exists "Users can insert their own activity" on public.activity_events;
 create policy "Users can insert their own activity"
   on public.activity_events for insert with check (auth.uid() = user_id);
 
 -- ----------------------------------------------------------------------------
--- 5. TRIGGERS (auto-creation du profil + updated_at)
+-- 6. TRIGGERS (auto-creation du profil + updated_at)
 -- ----------------------------------------------------------------------------
 create or replace function public.handle_updated_at()
 returns trigger as $$
@@ -167,12 +258,19 @@ begin
 end;
 $$ language plpgsql;
 
+drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
   before update on public.profiles
   for each row execute function public.handle_updated_at();
 
+drop trigger if exists set_library_updated_at on public.library_entries;
 create trigger set_library_updated_at
   before update on public.library_entries
+  for each row execute function public.handle_updated_at();
+
+drop trigger if exists set_anilist_stats_updated_at on public.user_anilist_stats;
+create trigger set_anilist_stats_updated_at
+  before update on public.user_anilist_stats
   for each row execute function public.handle_updated_at();
 
 create or replace function public.handle_new_user()
