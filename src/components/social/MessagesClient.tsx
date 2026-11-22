@@ -44,8 +44,37 @@ export function MessagesClient() {
   const [searchMember, setSearchMember] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [realtimeLive, setRealtimeLive] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const composerInputRef = useRef<HTMLInputElement>(null);
+  const newChatPickerRef = useRef<HTMLDivElement>(null);
   const inFlightRef = useRef(false);
+
+  // Close floating "Nouvelle discussion" popover on outside click / Escape
+  useEffect(() => {
+    if (!newChatOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (newChatPickerRef.current && !newChatPickerRef.current.contains(e.target as Node)) {
+        setNewChatOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNewChatOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [newChatOpen]);
+
+  const selectPartner = useCallback((partnerId: string) => {
+    setActivePartnerId(partnerId);
+    setNewChatOpen(false);
+    requestAnimationFrame(() => {
+      composerInputRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
 
   const currentUserId = serverActorId || profile.id;
 
@@ -371,9 +400,12 @@ export function MessagesClient() {
       .catch(() => {});
   }, [activeThread, currentUserId, profile.username, refreshUnreadMessages]);
 
+  // Scroll ONLY the internal chat box to the newest message (never scroll the window/page!)
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [threadMessages.length]);
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [threadMessages.length, activePartnerId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -412,6 +444,9 @@ export function MessagesClient() {
         return [...prev, created];
       });
       setDraft("");
+      requestAnimationFrame(() => {
+        composerInputRef.current?.focus({ preventScroll: true });
+      });
     } finally {
       setSending(false);
     }
@@ -438,7 +473,7 @@ export function MessagesClient() {
   }, [memberById, currentUserId, searchMember, friendIds]);
 
   return (
-    <div className="pt-24 pb-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <div className="pt-24 pb-12 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5 [overflow-anchor:none]">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
@@ -456,72 +491,77 @@ export function MessagesClient() {
           </h1>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setNewChatOpen((v) => !v)}
-          className="h-9 px-4 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>{newChatOpen ? "Fermer la liste" : "Nouvelle discussion"}</span>
-        </button>
+        {/* Floating "Nouvelle discussion" Picker (0px vertical layout shift!) */}
+        <div ref={newChatPickerRef} className="relative self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setNewChatOpen((v) => !v)}
+            className="h-9 px-4 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>{newChatOpen ? "Fermer la liste" : "Nouvelle discussion"}</span>
+          </button>
+
+          {newChatOpen && (
+            <div className="absolute right-0 top-full mt-2 z-40 w-[min(92vw,420px)] rounded-2xl bg-[#0D101A]/98 border border-accent/35 shadow-[0_24px_60px_rgba(0,0,0,0.8)] p-4 space-y-3">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-[#7D8296] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchMember}
+                  onChange={(e) => setSearchMember(e.target.value)}
+                  placeholder="Choisir un ami ou membre à qui écrire..."
+                  className="w-full h-9 pl-9 pr-3 rounded-xl bg-obsidian/90 border border-white/[0.1] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto overscroll-contain pr-0.5">
+                {selectableMembers.length === 0 ? (
+                  <p className="text-xs text-[#858A9E] py-2">Aucun membre trouvé.</p>
+                ) : (
+                  selectableMembers.map((m) => {
+                    const isFriend = friendIds.has(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => selectPartner(m.id)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl bg-obsidian/85 hover:bg-accent/20 border flex items-center gap-2 text-xs text-white transition-colors cursor-pointer",
+                          isFriend
+                            ? "border-emerald-400/40"
+                            : "border-white/[0.09] hover:border-accent/45"
+                        )}
+                      >
+                        <UserAvatar
+                          avatarUrl={m.avatarUrl}
+                          initials={m.avatarInitials}
+                          accentColor={m.accentColor}
+                          size="xs"
+                        />
+                        <span className="font-medium">{m.displayName}</span>
+                        <span className="font-mono text-[10.5px] text-[#858A9E]">
+                          @{m.username}
+                        </span>
+                        {isFriend && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9.5px] font-semibold">
+                            Ami
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* New Chat Member Picker Drawer */}
-      {newChatOpen && (
-        <div className="rounded-2xl card-surface border border-accent/30 p-4 space-y-3">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-[#7D8296] absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchMember}
-              onChange={(e) => setSearchMember(e.target.value)}
-              placeholder="Choisir un membre à qui écrire..."
-              className="w-full h-9 pl-9 pr-3 rounded-xl bg-obsidian/80 border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {selectableMembers.map((m) => {
-              const isFriend = friendIds.has(m.id);
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => {
-                    setActivePartnerId(m.id);
-                    setNewChatOpen(false);
-                  }}
-                  className={cn(
-                    "px-3 py-1.5 rounded-xl bg-obsidian/80 hover:bg-accent/20 border flex items-center gap-2 text-xs text-white transition-colors cursor-pointer",
-                    isFriend
-                      ? "border-emerald-400/40"
-                      : "border-white/[0.09] hover:border-accent/45"
-                  )}
-                >
-                  <UserAvatar
-                    avatarUrl={m.avatarUrl}
-                    initials={m.avatarInitials}
-                    accentColor={m.accentColor}
-                    size="xs"
-                  />
-                  <span className="font-medium">{m.displayName}</span>
-                  <span className="font-mono text-[10.5px] text-[#858A9E]">@{m.username}</span>
-                  {isFriend && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[9.5px] font-semibold">
-                      Ami
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Main Two-Pane Inbox */}
-      <div className="grid grid-cols-1 md:grid-cols-12 rounded-3xl card-surface border border-white/[0.09] overflow-hidden min-h-[540px]">
+      {/* Main Two-Pane Inbox (viewport-fitted so header + composer stay visible with zero page jump) */}
+      <div className="grid grid-cols-1 md:grid-cols-12 rounded-3xl card-surface border border-white/[0.09] overflow-hidden md:h-[clamp(440px,calc(100dvh-13.5rem),600px)] min-h-[440px]">
         {/* LEFT: Conversations List (strictly 1 row per unique partnerId) */}
-        <aside className="md:col-span-4 border-b md:border-b-0 md:border-r border-white/[0.08] bg-obsidian/55 flex flex-col">
-          <div className="p-4 border-b border-white/[0.07] flex items-center justify-between gap-2">
+        <aside className="md:col-span-4 border-b md:border-b-0 md:border-r border-white/[0.08] bg-obsidian/55 flex flex-col min-h-0">
+          <div className="p-4 border-b border-white/[0.07] flex items-center justify-between gap-2 shrink-0">
             <p className="text-xs font-semibold text-white">
               Conversations ({conversations.length})
             </p>
@@ -530,7 +570,7 @@ export function MessagesClient() {
               {realtimeLive ? "Live" : "Sync 3s"}
             </span>
           </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-white/[0.05]">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y divide-white/[0.05]">
             {conversations.length === 0 ? (
               <div className="p-6 text-center text-xs text-[#858A9E]">
                 Aucune conversation pour le moment. Cliquez sur « Nouvelle discussion » pour
@@ -543,7 +583,7 @@ export function MessagesClient() {
                   <button
                     key={conv.partnerId}
                     type="button"
-                    onClick={() => setActivePartnerId(conv.partnerId)}
+                    onClick={() => selectPartner(conv.partnerId)}
                     className={cn(
                       "w-full p-3.5 text-left transition-colors flex items-center gap-3 cursor-pointer",
                       selected ? "bg-accent/14 border-l-2 border-accent" : "hover:bg-white/[0.04]"
@@ -586,7 +626,7 @@ export function MessagesClient() {
         </aside>
 
         {/* RIGHT: Active Chat Thread */}
-        <div className="md:col-span-8 flex flex-col bg-surface/40">
+        <div className="md:col-span-8 flex flex-col bg-surface/40 min-h-0">
           {!activeThread ? (
             <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-2">
               <MessageSquare className="w-8 h-8 text-accent opacity-80" />
@@ -632,7 +672,10 @@ export function MessagesClient() {
               </div>
 
               {/* Messages Stream */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-3 max-h-[420px]">
+              <div
+                ref={messagesContainerRef}
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-3"
+              >
                 {threadMessages.length === 0 ? (
                   <p className="text-center text-xs text-[#858A9E] py-10">
                     Aucun message encore avec {activeThread.partnerDisplayName}. Dites bonjour !
@@ -680,7 +723,6 @@ export function MessagesClient() {
                     );
                   })
                 )}
-                <div ref={endRef} />
               </div>
 
               {/* Composer */}
@@ -689,6 +731,7 @@ export function MessagesClient() {
                 className="p-3.5 border-t border-white/[0.08] bg-obsidian/70 flex items-center gap-2.5"
               >
                 <input
+                  ref={composerInputRef}
                   type="text"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
