@@ -8,6 +8,7 @@ import {
   Search,
   UserPlus,
   ExternalLink,
+  Check,
   CheckCheck,
   Radio,
 } from "lucide-react";
@@ -27,19 +28,30 @@ interface ConversationThread {
   unreadCount: number;
 }
 
+const POLL_INTERVAL_MS = 3000;
+
 export function MessagesClient() {
   const { profile, friends, refreshUnreadMessages, toast } = useShiori();
+  const [serverActorId, setServerActorId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DirectMessageItem[]>([]);
   const [members, setMembers] = useState<PublicUserProfile[]>([]);
-  const [activePartnerUsername, setActivePartnerUsername] = useState<string | null>(null);
+  const [partnerProfiles, setPartnerProfiles] = useState<PublicUserProfile[]>([]);
+  // Strictly track the active conversation by unique user ID (never username/displayName!)
+  const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
+  const [pendingToParam, setPendingToParam] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [searchMember, setSearchMember] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [realtimeLive, setRealtimeLive] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const inFlightRef = useRef(false);
+
+  const currentUserId = serverActorId || profile.id;
 
   const loadInbox = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       const params = new URLSearchParams({
         userId: profile.id,
@@ -51,106 +63,253 @@ export function MessagesClient() {
       ]);
       if (msgRes.ok) {
         const d = await msgRes.json();
-        if (Array.isArray(d?.messages)) setMessages(d.messages);
+        if (typeof d?.actorId === "string" && d.actorId) {
+          setServerActorId(d.actorId);
+        }
+        if (Array.isArray(d?.messages)) {
+          setMessages(d.messages);
+        }
+        if (Array.isArray(d?.partnerProfiles)) {
+          setPartnerProfiles(d.partnerProfiles);
+        }
       }
       if (memRes.ok) {
         const d = await memRes.json();
-        if (Array.isArray(d?.profiles)) setMembers(d.profiles);
+        if (Array.isArray(d?.profiles)) {
+          setMembers(d.profiles);
+        }
       }
     } catch {
       // ignore transient errors
+    } finally {
+      inFlightRef.current = false;
     }
   }, [profile.id, profile.username]);
 
+  // Initial load
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
 
-  // Read ?to=<username> on initial mount so "Envoyer un message" from a profile opens that thread!
+  // Read ?to=<username_or_id> on initial mount so "Envoyer un message" opens that user's thread
   useEffect(() => {
     if (typeof window === "undefined") return;
     const to = new URLSearchParams(window.location.search).get("to");
     if (to && to.trim()) {
-      setActivePartnerUsername(to.trim().replace(/^@/, ""));
+      setPendingToParam(to.trim().replace(/^@+/, ""));
     }
   }, []);
 
-  // Subscribe to Supabase Realtime for live incoming direct_messages!
+  // Build unified live profile index strictly keyed by unique user ID (from public_profiles + community directory)
+  const memberById = useMemo(() => {
+    const map = new Map<string, PublicUserProfile>();
+    for (const m of members) {
+      map.set(m.id, m);
+    }
+    // `partnerProfiles` comes directly from `public.public_profiles` by ID in GET /api/messages
+    for (const p of partnerProfiles) {
+      map.set(p.id, p);
+    }
+    for (const f of friends) {
+      if (!map.has(f.id)) map.set(f.id, f);
+    }
+    return map;
+  }, [members, partnerProfiles, friends]);
+
+  const memberByIdRef = useRef(memberById);
+  useEffect(() => {
+    memberByIdRef.current = memberById;
+  }, [memberById]);
+
+  // Resolve ?to=<username_or_id> to canonical partnerId once profiles/messages load
+  useEffect(() => {
+    if (!pendingToParam) return;
+    const lower = pendingToParam.toLowerCase();
+    for (const p of memberById.values()) {
+      if (p.id === pendingToParam || p.username.toLowerCase() === lower) {
+        if (p.id !== currentUserId) {
+          setActivePartnerId(p.id);
+        }
+        setPendingToParam(null);
+        return;
+      }
+    }
+  }, [pendingToParam, memberById, currentUserId]);
+
+  // 1) Supabase Realtime subscription to INSERT & UPDATE on `public.direct_messages`
+  //    for instant 0ms message arrival & live read/unread status updates!
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-    if (!supabase || profile.mode !== "supabase") return;
+    if (!supabase || profile.mode !== "supabase") {
+      setRealtimeLive(false);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mapRealtimeRow = (row: any): DirectMessageItem => {
+      const senderId = String(row.sender_id);
+      const recipientId = String(row.recipient_id);
+      const liveSender = memberByIdRef.current.get(senderId);
+      const liveRecipient = memberByIdRef.current.get(recipientId);
+      return {
+        id: String(row.id),
+        senderId,
+        recipientId,
+        senderUsername: liveSender?.username ?? String(row.sender_username ?? ""),
+        senderDisplayName:
+          liveSender?.displayName ?? String(row.sender_display_name ?? row.sender_username ?? ""),
+        senderAvatarUrl:
+          liveSender !== undefined ? liveSender.avatarUrl : (row.sender_avatar_url ?? null),
+        recipientUsername: liveRecipient?.username ?? String(row.recipient_username ?? ""),
+        recipientDisplayName:
+          liveRecipient?.displayName ??
+          String(row.recipient_display_name ?? row.recipient_username ?? ""),
+        recipientAvatarUrl:
+          liveRecipient !== undefined
+            ? liveRecipient.avatarUrl
+            : (row.recipient_avatar_url ?? null),
+        body: String(row.body ?? ""),
+        isRead: Boolean(row.is_read),
+        createdAt: String(row.created_at ?? new Date().toISOString()),
+      };
+    };
 
     const channel = supabase
-      .channel(`shiori-dm-inbox-${profile.id}`)
+      .channel(`shiori-dm-realtime-${currentUserId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "direct_messages" },
-        () => {
+        { event: "INSERT", schema: "public", table: "direct_messages" },
+        (payload) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = payload.new as any;
+          if (!row?.id) return;
+          if (row.sender_id !== currentUserId && row.recipient_id !== currentUserId) return;
+
+          const incoming = mapRealtimeRow(row);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === incoming.id)) return prev;
+            return [...prev, incoming].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
+          // Sync latest profile snapshot & navbar unread badge
           void loadInbox();
           void refreshUnreadMessages();
         }
       )
-      .subscribe((status) => setRealtimeLive(status === "SUBSCRIBED"));
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "direct_messages" },
+        (payload) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const row = payload.new as any;
+          if (!row?.id) return;
+          if (row.sender_id !== currentUserId && row.recipient_id !== currentUserId) return;
+
+          const updatedId = String(row.id);
+          const nextIsRead = Boolean(row.is_read);
+          const nextBody = typeof row.body === "string" ? row.body : undefined;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === updatedId
+                ? { ...m, isRead: nextIsRead, ...(nextBody !== undefined ? { body: nextBody } : {}) }
+                : m
+            )
+          );
+          void refreshUnreadMessages();
+        }
+      )
+      .subscribe((status) => {
+        setRealtimeLive(status === "SUBSCRIBED");
+      });
 
     return () => {
+      setRealtimeLive(false);
       void supabase.removeChannel(channel);
     };
-  }, [profile.id, profile.mode, loadInbox, refreshUnreadMessages]);
+  }, [currentUserId, profile.mode, loadInbox, refreshUnreadMessages]);
 
-  const meLower = profile.username.toLowerCase();
+  // 2) Fallback live polling every 3 seconds while /messages is open (pauses when tab is hidden)
+  useEffect(() => {
+    const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void loadInbox();
+      void refreshUnreadMessages();
+    };
 
-  // Build conversations list
+    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    const onVisibility = () => {
+      if (!document.hidden) tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [loadInbox, refreshUnreadMessages]);
+
+  // Group ALL conversations strictly by the other user's unique ID (`otherUserId`)
+  // and always display their current name, @username & avatar from `public.public_profiles`!
   const conversations = useMemo<ConversationThread[]>(() => {
     const map = new Map<string, ConversationThread>();
-    const memberByUsername = new Map<string, PublicUserProfile>();
-    for (const m of members) {
-      memberByUsername.set(m.username.toLowerCase(), m);
-    }
 
     for (const msg of messages) {
-      const iAmSender =
-        msg.senderId === profile.id || msg.senderUsername.toLowerCase() === meLower;
-      const partnerId = iAmSender ? msg.recipientId : msg.senderId;
-      const partnerUsername = iAmSender ? msg.recipientUsername : msg.senderUsername;
-      const partnerDisplayName = iAmSender ? msg.recipientDisplayName : msg.senderDisplayName;
-      const partnerAvatarUrl = iAmSender ? msg.recipientAvatarUrl : msg.senderAvatarUrl;
-      const key = partnerUsername.toLowerCase();
-      if (key === meLower) continue;
+      const iAmSender = msg.senderId === currentUserId;
+      const otherUserId = iAmSender ? msg.recipientId : msg.senderId;
+      if (!otherUserId || otherUserId === currentUserId) continue;
 
-      const memMeta = memberByUsername.get(key);
-      const existing = map.get(key) ?? {
-        partnerId: memMeta?.id ?? partnerId,
-        partnerUsername: memMeta?.username ?? partnerUsername,
-        partnerDisplayName: memMeta?.displayName ?? partnerDisplayName,
-        partnerAvatarUrl: memMeta?.avatarUrl ?? partnerAvatarUrl,
-        partnerAccentColor: memMeta?.accentColor ?? "#E5484D",
+      const liveProfile = memberById.get(otherUserId);
+      const fallbackUsername = iAmSender ? msg.recipientUsername : msg.senderUsername;
+      const fallbackDisplayName = iAmSender ? msg.recipientDisplayName : msg.senderDisplayName;
+      const fallbackAvatarUrl = iAmSender ? msg.recipientAvatarUrl : msg.senderAvatarUrl;
+
+      const existing = map.get(otherUserId) ?? {
+        partnerId: otherUserId,
+        partnerUsername: liveProfile?.username || fallbackUsername || "membre",
+        partnerDisplayName:
+          liveProfile?.displayName || fallbackDisplayName || fallbackUsername || "Membre Shiori",
+        partnerAvatarUrl:
+          liveProfile !== undefined ? liveProfile.avatarUrl : fallbackAvatarUrl,
+        partnerAccentColor: liveProfile?.accentColor ?? "#E5484D",
         lastMessage: null,
         unreadCount: 0,
       };
 
-      existing.lastMessage = msg;
+      // Always keep current live profile metadata up to date
+      if (liveProfile) {
+        existing.partnerUsername = liveProfile.username;
+        existing.partnerDisplayName = liveProfile.displayName;
+        existing.partnerAvatarUrl = liveProfile.avatarUrl;
+        existing.partnerAccentColor = liveProfile.accentColor;
+      }
+
+      if (
+        !existing.lastMessage ||
+        new Date(msg.createdAt).getTime() >=
+          new Date(existing.lastMessage.createdAt).getTime()
+      ) {
+        existing.lastMessage = msg;
+      }
       if (!iAmSender && !msg.isRead) {
         existing.unreadCount += 1;
       }
-      map.set(key, existing);
+      map.set(otherUserId, existing);
     }
 
-    // Ensure ?to= partner appears in conversation list even before first message is sent
-    if (activePartnerUsername && activePartnerUsername.toLowerCase() !== meLower) {
-      const k = activePartnerUsername.toLowerCase();
-      if (!map.has(k)) {
-        const mem = memberByUsername.get(k);
-        if (mem) {
-          map.set(k, {
-            partnerId: mem.id,
-            partnerUsername: mem.username,
-            partnerDisplayName: mem.displayName,
-            partnerAvatarUrl: mem.avatarUrl,
-            partnerAccentColor: mem.accentColor,
-            lastMessage: null,
-            unreadCount: 0,
-          });
-        }
+    // Ensure selected partner (e.g. from ?to= or "Nouvelle discussion") appears even before first message
+    if (activePartnerId && activePartnerId !== currentUserId && !map.has(activePartnerId)) {
+      const mem = memberById.get(activePartnerId);
+      if (mem) {
+        map.set(activePartnerId, {
+          partnerId: mem.id,
+          partnerUsername: mem.username,
+          partnerDisplayName: mem.displayName,
+          partnerAvatarUrl: mem.avatarUrl,
+          partnerAccentColor: mem.accentColor,
+          lastMessage: null,
+          unreadCount: 0,
+        });
       }
     }
 
@@ -159,52 +318,50 @@ export function MessagesClient() {
       const tb = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : Date.now();
       return tb - ta;
     });
-  }, [messages, members, profile.id, meLower, activePartnerUsername]);
+  }, [messages, memberById, currentUserId, activePartnerId]);
 
   // Auto-select first conversation if none selected
   useEffect(() => {
-    if (!activePartnerUsername && conversations.length > 0) {
-      setActivePartnerUsername(conversations[0].partnerUsername);
+    if (!activePartnerId && !pendingToParam && conversations.length > 0) {
+      setActivePartnerId(conversations[0].partnerId);
     }
-  }, [activePartnerUsername, conversations]);
+  }, [activePartnerId, pendingToParam, conversations]);
 
   const activeThread = useMemo(
-    () =>
-      conversations.find(
-        (c) => c.partnerUsername.toLowerCase() === (activePartnerUsername ?? "").toLowerCase()
-      ) ?? null,
-    [conversations, activePartnerUsername]
+    () => conversations.find((c) => c.partnerId === activePartnerId) ?? null,
+    [conversations, activePartnerId]
   );
 
+  // Filter active thread messages strictly by user UUIDs (never username!)
   const threadMessages = useMemo(() => {
     if (!activeThread) return [];
-    const targetLower = activeThread.partnerUsername.toLowerCase();
+    const meId = currentUserId;
+    const otherId = activeThread.partnerId;
     return messages.filter(
       (m) =>
-        m.senderUsername.toLowerCase() === targetLower ||
-        m.recipientUsername.toLowerCase() === targetLower ||
-        m.senderId === activeThread.partnerId ||
-        m.recipientId === activeThread.partnerId
+        (m.senderId === meId && m.recipientId === otherId) ||
+        (m.senderId === otherId && m.recipientId === meId)
     );
-  }, [messages, activeThread]);
+  }, [messages, activeThread, currentUserId]);
 
-  // Auto-mark unread messages from active partner as read
+  // Auto-mark unread messages from active partner as read (strictly by partnerId)
   useEffect(() => {
     if (!activeThread || activeThread.unreadCount === 0) return;
+    const partnerId = activeThread.partnerId;
+
     fetch("/api/messages", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        partnerId: activeThread.partnerId,
-        partnerUsername: activeThread.partnerUsername,
-        userId: profile.id,
+        partnerId,
+        userId: currentUserId,
         username: profile.username,
       }),
     })
       .then(() => {
         setMessages((prev) =>
           prev.map((m) =>
-            m.senderUsername.toLowerCase() === activeThread.partnerUsername.toLowerCase()
+            m.senderId === partnerId && m.recipientId === currentUserId
               ? { ...m, isRead: true }
               : m
           )
@@ -212,7 +369,7 @@ export function MessagesClient() {
         void refreshUnreadMessages();
       })
       .catch(() => {});
-  }, [activeThread, profile.id, profile.username, refreshUnreadMessages]);
+  }, [activeThread, currentUserId, profile.username, refreshUnreadMessages]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -249,23 +406,24 @@ export function MessagesClient() {
         });
         return;
       }
-      setMessages((prev) => [...prev, data.message as DirectMessageItem]);
+      const created = data.message as DirectMessageItem;
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === created.id)) return prev;
+        return [...prev, created];
+      });
       setDraft("");
     } finally {
       setSending(false);
     }
   };
 
-  const friendUsernames = useMemo(
-    () => new Set(friends.map((f) => f.username.toLowerCase())),
-    [friends]
-  );
+  const friendIds = useMemo(() => new Set(friends.map((f) => f.id)), [friends]);
 
   const selectableMembers = useMemo(() => {
     const q = searchMember.trim().replace(/^@+/, "").toLowerCase();
-    return members
+    return Array.from(memberById.values())
       .filter((m) => {
-        if (m.username.toLowerCase() === meLower) return false;
+        if (m.id === currentUserId) return false;
         if (!q) return true;
         return (
           m.username.toLowerCase().includes(q) ||
@@ -273,11 +431,11 @@ export function MessagesClient() {
         );
       })
       .sort((a, b) => {
-        const aFriend = friendUsernames.has(a.username.toLowerCase()) ? 1 : 0;
-        const bFriend = friendUsernames.has(b.username.toLowerCase()) ? 1 : 0;
+        const aFriend = friendIds.has(a.id) ? 1 : 0;
+        const bFriend = friendIds.has(b.id) ? 1 : 0;
         return bFriend - aFriend;
       });
-  }, [members, meLower, searchMember, friendUsernames]);
+  }, [memberById, currentUserId, searchMember, friendIds]);
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -287,7 +445,10 @@ export function MessagesClient() {
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1 flex items-center gap-1.5">
             <Radio className="w-3.5 h-3.5" />
             <span>
-              Messagerie Privée · {realtimeLive ? "Supabase Realtime actif" : "Chiffrement session"}
+              Messagerie Privée ·{" "}
+              {realtimeLive
+                ? "Supabase Realtime en direct"
+                : "Synchronisation temps réel (3s)"}
             </span>
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-gradient-editorial">
@@ -320,13 +481,13 @@ export function MessagesClient() {
           </div>
           <div className="flex flex-wrap gap-2">
             {selectableMembers.map((m) => {
-              const isFriend = friendUsernames.has(m.username.toLowerCase());
+              const isFriend = friendIds.has(m.id);
               return (
                 <button
                   key={m.id}
                   type="button"
                   onClick={() => {
-                    setActivePartnerUsername(m.username);
+                    setActivePartnerId(m.id);
                     setNewChatOpen(false);
                   }}
                   className={cn(
@@ -358,12 +519,16 @@ export function MessagesClient() {
 
       {/* Main Two-Pane Inbox */}
       <div className="grid grid-cols-1 md:grid-cols-12 rounded-3xl card-surface border border-white/[0.09] overflow-hidden min-h-[540px]">
-        {/* LEFT: Conversations List */}
+        {/* LEFT: Conversations List (strictly 1 row per unique partnerId) */}
         <aside className="md:col-span-4 border-b md:border-b-0 md:border-r border-white/[0.08] bg-obsidian/55 flex flex-col">
-          <div className="p-4 border-b border-white/[0.07]">
+          <div className="p-4 border-b border-white/[0.07] flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-white">
               Conversations ({conversations.length})
             </p>
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {realtimeLive ? "Live" : "Sync 3s"}
+            </span>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-white/[0.05]">
             {conversations.length === 0 ? (
@@ -373,14 +538,12 @@ export function MessagesClient() {
               </div>
             ) : (
               conversations.map((conv) => {
-                const selected =
-                  activeThread?.partnerUsername.toLowerCase() ===
-                  conv.partnerUsername.toLowerCase();
+                const selected = activeThread?.partnerId === conv.partnerId;
                 return (
                   <button
-                    key={conv.partnerUsername}
+                    key={conv.partnerId}
                     type="button"
-                    onClick={() => setActivePartnerUsername(conv.partnerUsername)}
+                    onClick={() => setActivePartnerId(conv.partnerId)}
                     className={cn(
                       "w-full p-3.5 text-left transition-colors flex items-center gap-3 cursor-pointer",
                       selected ? "bg-accent/14 border-l-2 border-accent" : "hover:bg-white/[0.04]"
@@ -476,9 +639,7 @@ export function MessagesClient() {
                   </p>
                 ) : (
                   threadMessages.map((m) => {
-                    const isMine =
-                      m.senderId === profile.id ||
-                      m.senderUsername.toLowerCase() === meLower;
+                    const isMine = m.senderId === currentUserId;
                     return (
                       <div
                         key={m.id}
@@ -496,11 +657,23 @@ export function MessagesClient() {
                           <div
                             className={cn(
                               "flex items-center justify-end gap-1 text-[10px]",
-                              isMine ? "opacity-80" : "text-[#7D8296]"
+                              isMine ? "opacity-85" : "text-[#7D8296]"
                             )}
                           >
                             <span>{formatRelativeTime(m.createdAt)}</span>
-                            {isMine && <CheckCheck className="w-3 h-3" />}
+                            {isMine &&
+                              (m.isRead ? (
+                                <span
+                                  title="Lu"
+                                  className="inline-flex items-center gap-0.5 text-sky-200 font-medium"
+                                >
+                                  <CheckCheck className="w-3.5 h-3.5" />
+                                </span>
+                              ) : (
+                                <span title="Envoyé" className="inline-flex items-center opacity-70">
+                                  <Check className="w-3 h-3" />
+                                </span>
+                              ))}
                           </div>
                         </div>
                       </div>

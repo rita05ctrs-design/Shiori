@@ -1,17 +1,95 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  ensureServerSupabaseProfile,
+  getAllLocalCommunityProfiles,
   makeId,
   readSocialDb,
   resolveServerActor,
   writeSocialDb,
 } from "@/lib/server/social-store";
-import type { DirectMessageItem } from "@/types/media";
+import type { DirectMessageItem, PublicUserProfile } from "@/types/media";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(v: string): boolean {
+  return UUID_RE.test(v);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPublicProfileRow(row: any): PublicUserProfile {
+  const displayName = String(row.display_name || row.username || "Membre Shiori");
+  const s = row.stats_summary && typeof row.stats_summary === "object" ? row.stats_summary : {};
+  return {
+    id: String(row.id),
+    username: String(row.username),
+    displayName,
+    avatarUrl: row.avatar_url ?? null,
+    avatarInitials: displayName.slice(0, 2).toUpperCase(),
+    bio: String(row.bio ?? ""),
+    accentColor: String(row.accent_color || "#E5484D"),
+    isActivityPublic: row.is_activity_public !== false,
+    joinedAt: row.joined_at ?? row.created_at ?? new Date().toISOString(),
+    favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
+    favoriteMedia: Array.isArray(row.favorite_media) ? row.favorite_media : [],
+    stats: {
+      totalEntries: Number(s.totalEntries ?? 0),
+      animeCount: Number(s.animeCount ?? 0),
+      mangaCount: Number(s.mangaCount ?? 0),
+      episodesWatched: Number(s.episodesWatched ?? 0),
+      chaptersRead: Number(s.chaptersRead ?? 0),
+      completedCount: Number(s.completedCount ?? 0),
+      meanScore: typeof s.meanScore === "number" ? s.meanScore : null,
+    },
+    unlockedBadges: Array.isArray(row.unlocked_badges) ? row.unlocked_badges : [],
+    pinnedBadges: Array.isArray(row.pinned_badges) ? row.pinned_badges.slice(0, 3) : [],
+    source: "supabase",
+  };
+}
+
+/**
+ * Resolves live profiles strictly by unique user ID from `public.public_profiles`
+ * (with local community profile fallback for non-UUID showcase profiles).
+ */
+async function loadProfilesByIds(ids: string[]): Promise<Map<string, PublicUserProfile>> {
+  const map = new Map<string, PublicUserProfile>();
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (uniqueIds.length === 0) return map;
+
+  const uuidIds = uniqueIds.filter(isUuid);
+  if (uuidIds.length > 0) {
+    try {
+      const supabase = await getSupabaseServerClient();
+      if (supabase) {
+        const { data, error } = await supabase
+          .from("public_profiles")
+          .select("*")
+          .in("id", uuidIds);
+        if (!error && Array.isArray(data)) {
+          for (const row of data) {
+            const p = mapPublicProfileRow(row);
+            map.set(p.id, p);
+          }
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // Fill any remaining IDs from local community profiles
+  const localProfiles = getAllLocalCommunityProfiles();
+  for (const p of localProfiles) {
+    if (!map.has(p.id) && uniqueIds.includes(p.id)) {
+      map.set(p.id, p);
+    }
+  }
+
+  return map;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,8 +100,8 @@ export async function GET(request: NextRequest) {
 
   const merged = new Map<string, DirectMessageItem>();
 
-  // 1) Fetch from Supabase `direct_messages` when authenticated via Supabase
-  if (actor.source === "supabase") {
+  // 1) Fetch from Supabase `direct_messages` strictly by actor UUID
+  if (actor.source === "supabase" && isUuid(actor.id)) {
     try {
       const supabase = await getSupabaseServerClient();
       if (supabase) {
@@ -32,7 +110,7 @@ export async function GET(request: NextRequest) {
           .select("*")
           .or(`sender_id.eq.${actor.id},recipient_id.eq.${actor.id}`)
           .order("created_at", { ascending: true })
-          .limit(300);
+          .limit(500);
 
         if (!error && Array.isArray(data)) {
           for (const m of data) {
@@ -40,11 +118,11 @@ export async function GET(request: NextRequest) {
               id: String(m.id),
               senderId: String(m.sender_id),
               recipientId: String(m.recipient_id),
-              senderUsername: String(m.sender_username),
-              senderDisplayName: String(m.sender_display_name),
+              senderUsername: String(m.sender_username ?? ""),
+              senderDisplayName: String(m.sender_display_name ?? m.sender_username ?? ""),
               senderAvatarUrl: m.sender_avatar_url ?? null,
-              recipientUsername: String(m.recipient_username),
-              recipientDisplayName: String(m.recipient_display_name),
+              recipientUsername: String(m.recipient_username ?? ""),
+              recipientDisplayName: String(m.recipient_display_name ?? m.recipient_username ?? ""),
               recipientAvatarUrl: m.recipient_avatar_url ?? null,
               body: String(m.body),
               isRead: Boolean(m.is_read),
@@ -58,36 +136,50 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2) Merge local direct messages involving this user
+  // 2) Merge local direct messages involving this exact actor.id
   const db = readSocialDb();
-  const actorUserLower = actor.username.toLowerCase();
   for (const m of db.messages) {
-    const involvesMe =
-      m.senderId === actor.id ||
-      m.recipientId === actor.id ||
-      m.senderUsername.toLowerCase() === actorUserLower ||
-      m.recipientUsername.toLowerCase() === actorUserLower;
-
+    const involvesMe = m.senderId === actor.id || m.recipientId === actor.id;
     if (involvesMe && !merged.has(m.id)) {
       merged.set(m.id, m);
     }
   }
 
-  const messages = Array.from(merged.values()).sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
+  // 3) Hydrate live current username, displayName & avatarUrl from `public.public_profiles`
+  // strictly via senderId / recipientId so renamed users NEVER split into duplicate threads!
+  const rawMessages = Array.from(merged.values());
+  const allParticipantIds: string[] = [];
+  for (const m of rawMessages) {
+    allParticipantIds.push(m.senderId, m.recipientId);
+  }
+  const profilesById = await loadProfilesByIds(allParticipantIds);
+
+  const messages: DirectMessageItem[] = rawMessages
+    .map((m) => {
+      const liveSender = profilesById.get(m.senderId);
+      const liveRecipient = profilesById.get(m.recipientId);
+      return {
+        ...m,
+        senderUsername: liveSender?.username ?? m.senderUsername,
+        senderDisplayName: liveSender?.displayName ?? m.senderDisplayName,
+        senderAvatarUrl: liveSender !== undefined ? liveSender.avatarUrl : m.senderAvatarUrl,
+        recipientUsername: liveRecipient?.username ?? m.recipientUsername,
+        recipientDisplayName: liveRecipient?.displayName ?? m.recipientDisplayName,
+        recipientAvatarUrl:
+          liveRecipient !== undefined ? liveRecipient.avatarUrl : m.recipientAvatarUrl,
+      };
+    })
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const unreadCount = messages.filter(
-    (m) =>
-      !m.isRead &&
-      (m.recipientId === actor.id ||
-        m.recipientUsername.toLowerCase() === actorUserLower)
+    (m) => !m.isRead && m.recipientId === actor.id
   ).length;
 
   return NextResponse.json({
     actorId: actor.id,
     actorUsername: actor.username,
     messages,
+    partnerProfiles: Array.from(profilesById.values()),
     unreadCount,
   });
 }
@@ -104,11 +196,7 @@ export async function POST(request: NextRequest) {
     }
 
     const recipientId = String(body?.recipientId ?? "").trim();
-    const recipientUsername = String(body?.recipientUsername ?? "").trim();
-    const recipientDisplayName = String(body?.recipientDisplayName || recipientUsername).trim();
-    const recipientAvatarUrl = body?.recipientAvatarUrl ?? null;
-
-    if (!recipientId || !recipientUsername) {
+    if (!recipientId) {
       return NextResponse.json({ error: "Destinataire manquant." }, { status: 400 });
     }
 
@@ -119,48 +207,74 @@ export async function POST(request: NextRequest) {
       avatarUrl: body?.senderAvatarUrl,
     });
 
-    if (
-      recipientId === actor.id ||
-      recipientUsername.toLowerCase() === actor.username.toLowerCase()
-    ) {
+    if (recipientId === actor.id) {
       return NextResponse.json(
         { error: "Vous ne pouvez pas vous envoyer un message à vous-même." },
         { status: 400 }
       );
     }
 
+    // Resolve recipient's latest live profile by unique ID from `public.public_profiles`
+    const profileMap = await loadProfilesByIds([actor.id, recipientId]);
+    const liveRecipient = profileMap.get(recipientId);
+    const liveActor = profileMap.get(actor.id);
+
+    const senderUsername = liveActor?.username ?? actor.username;
+    const senderDisplayName = liveActor?.displayName ?? actor.displayName;
+    const senderAvatarUrl = liveActor !== undefined ? liveActor.avatarUrl : actor.avatarUrl;
+
+    const recipientUsername =
+      liveRecipient?.username || String(body?.recipientUsername ?? "").trim() || "membre";
+    const recipientDisplayName =
+      liveRecipient?.displayName ||
+      String(body?.recipientDisplayName || recipientUsername).trim();
+    const recipientAvatarUrl =
+      liveRecipient !== undefined ? liveRecipient.avatarUrl : (body?.recipientAvatarUrl ?? null);
+
     let messageId = makeId("dm");
-    const createdAt = new Date().toISOString();
+    let createdAt = new Date().toISOString();
     let savedToSupabase = false;
 
-    if (actor.source === "supabase" && UUID_RE.test(recipientId)) {
-      try {
-        const supabase = await getSupabaseServerClient();
-        if (supabase) {
-          const { data: inserted, error } = await supabase
-            .from("direct_messages")
-            .insert({
-              sender_id: actor.id,
-              recipient_id: recipientId,
-              sender_username: actor.username,
-              sender_display_name: actor.displayName,
-              sender_avatar_url: actor.avatarUrl,
-              recipient_username: recipientUsername,
-              recipient_display_name: recipientDisplayName,
-              recipient_avatar_url: recipientAvatarUrl,
-              body: text,
-              is_read: false,
-            })
-            .select("id")
-            .single();
+    if (actor.source === "supabase" && isUuid(actor.id) && isUuid(recipientId)) {
+      const supabase = await getSupabaseServerClient();
+      if (supabase) {
+        await ensureServerSupabaseProfile(supabase, {
+          id: actor.id,
+          username: senderUsername,
+          displayName: senderDisplayName,
+          avatarUrl: senderAvatarUrl,
+          accentColor: actor.accentColor,
+        });
 
-          if (!error && inserted?.id) {
-            messageId = String(inserted.id);
-            savedToSupabase = true;
-          }
+        const { data: inserted, error } = await supabase
+          .from("direct_messages")
+          .insert({
+            sender_id: actor.id,
+            recipient_id: recipientId,
+            sender_username: senderUsername,
+            sender_display_name: senderDisplayName,
+            sender_avatar_url: senderAvatarUrl,
+            recipient_username: recipientUsername,
+            recipient_display_name: recipientDisplayName,
+            recipient_avatar_url: recipientAvatarUrl,
+            body: text,
+            is_read: false,
+          })
+          .select("id, created_at")
+          .single();
+
+        if (error) {
+          return NextResponse.json(
+            { error: error.message || "Erreur Supabase lors de l'envoi du message." },
+            { status: 500 }
+          );
         }
-      } catch {
-        // graceful local fallback
+
+        if (inserted?.id) {
+          messageId = String(inserted.id);
+          if (inserted.created_at) createdAt = String(inserted.created_at);
+          savedToSupabase = true;
+        }
       }
     }
 
@@ -168,9 +282,9 @@ export async function POST(request: NextRequest) {
       id: messageId,
       senderId: actor.id,
       recipientId,
-      senderUsername: actor.username,
-      senderDisplayName: actor.displayName,
-      senderAvatarUrl: actor.avatarUrl,
+      senderUsername,
+      senderDisplayName,
+      senderAvatarUrl,
       recipientUsername,
       recipientDisplayName,
       recipientAvatarUrl,
@@ -179,9 +293,15 @@ export async function POST(request: NextRequest) {
       createdAt,
     };
 
-    const db = readSocialDb();
-    db.messages.push(msg);
-    writeSocialDb(db);
+    try {
+      const db = readSocialDb();
+      if (!db.messages.some((existing) => existing.id === msg.id)) {
+        db.messages.push(msg);
+        writeSocialDb(db);
+      }
+    } catch {
+      // non-fatal on serverless FS
+    }
 
     return NextResponse.json({ ok: true, message: msg, savedToSupabase });
   } catch {
@@ -193,14 +313,17 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
     const partnerId = String(body?.partnerId ?? "").trim();
-    const partnerUsername = String(body?.partnerUsername ?? "").trim().toLowerCase();
+
+    if (!partnerId) {
+      return NextResponse.json({ error: "Identifiant partenaire manquant." }, { status: 400 });
+    }
 
     const actor = await resolveServerActor({
       userId: body?.userId,
       username: body?.username,
     });
 
-    if (actor.source === "supabase" && UUID_RE.test(partnerId)) {
+    if (actor.source === "supabase" && isUuid(actor.id) && isUuid(partnerId)) {
       try {
         const supabase = await getSupabaseServerClient();
         if (supabase) {
@@ -216,21 +339,19 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const db = readSocialDb();
-    const actorLower = actor.username.toLowerCase();
-    let changed = false;
-    for (const m of db.messages) {
-      const toMe =
-        m.recipientId === actor.id || m.recipientUsername.toLowerCase() === actorLower;
-      const fromPartner =
-        (partnerId && m.senderId === partnerId) ||
-        (partnerUsername && m.senderUsername.toLowerCase() === partnerUsername);
-      if (toMe && fromPartner && !m.isRead) {
-        m.isRead = true;
-        changed = true;
+    try {
+      const db = readSocialDb();
+      let changed = false;
+      for (const m of db.messages) {
+        if (m.recipientId === actor.id && m.senderId === partnerId && !m.isRead) {
+          m.isRead = true;
+          changed = true;
+        }
       }
+      if (changed) writeSocialDb(db);
+    } catch {
+      // non-fatal
     }
-    if (changed) writeSocialDb(db);
 
     return NextResponse.json({ ok: true });
   } catch {
