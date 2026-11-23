@@ -30,9 +30,11 @@ import {
   CheckCircle2,
   Hourglass,
   Check,
-  Compass,
   Tag,
+  EyeOff,
+  Eye,
 } from "lucide-react";
+import { useShiori } from "@/context/ShioriContext";
 import { MediaCard } from "@/components/media/MediaCard";
 import { MoodCarousel } from "@/components/discover/MoodCarousel";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
@@ -148,6 +150,8 @@ interface DiscoverClientProps {
 
 export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientProps) {
   const searchParams = useSearchParams();
+  const { library } = useShiori();
+  const [hideInLibrary, setHideInLibrary] = useState(false);
 
   const initialGenre = searchParams.get("genre");
   const initialMoodParam = searchParams.get("mood");
@@ -199,7 +203,17 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const [sort, setSort] = useState(
     initialMoodPreset?.sort ?? searchParams.get("sort") ?? "TRENDING_DESC"
   );
-  const [showFilters, setShowFilters] = useState(true);
+  const hasInitialAdvancedParams = Boolean(
+    searchParams.get("year") ||
+      searchParams.get("season") ||
+      searchParams.get("format") ||
+      searchParams.get("status") ||
+      searchParams.get("minScore") ||
+      searchParams.get("minEpisodes") ||
+      searchParams.get("minChapters")
+  );
+  const [showFilters, setShowFilters] = useState(hasInitialAdvancedParams);
+  const [showMoods, setShowMoods] = useState(Boolean(initialMoodPreset));
 
   const [items, setItems] = useState<MediaItem[]>(initialItems);
   const [total, setTotal] = useState<number>(initialTotal);
@@ -440,20 +454,40 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     return matches;
   }, [tagSearchTrimmed]);
 
+  const libraryIds = useMemo(
+    () => new Set(library.map((e) => e.mediaId)),
+    [library]
+  );
+
+  const visibleItems = useMemo(
+    () => (hideInLibrary ? items.filter((item) => !libraryIds.has(item.id)) : items),
+    [items, hideInLibrary, libraryIds]
+  );
+
+  const hiddenCount = items.length - visibleItems.length;
+
+  const QUICK_GENRES = [
+    { id: "Action", label: "Action" },
+    { id: "Adventure", label: "Aventure" },
+    { id: "Drama", label: "Drame" },
+    { id: "Fantasy", label: "Fantaisie" },
+    { id: "Romance", label: "Romance" },
+    { id: "Sci-Fi", label: "Sci-Fi" },
+    { id: "Comedy", label: "Comédie" },
+    { id: "Slice of Life", label: "Tranche de vie" },
+    { id: "Thriller", label: "Thriller" },
+  ];
+
   return (
-    <div className="pt-24 pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-7">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
+      {/* Compact Header — immediate focus on search & posters */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5 flex items-center gap-1.5">
-            <Compass className="w-3.5 h-3.5" />
-            <span>Catalogue mondial en direct</span>
-          </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
             Découvrir {type === "ANIME" ? "les Animes" : "les Mangas"}
           </h1>
-          <p className="text-sm text-[#8A8FA4] mt-1.5">
-            Cumulez plusieurs genres, situations, univers et thèmes pour trouver exactement votre prochaine pépite.
+          <p className="text-sm text-[#8A8FA4] mt-1">
+            Recherchez un titre ou parcourez par genre pour l&apos;ajouter à votre bibliothèque.
           </p>
         </div>
 
@@ -487,21 +521,18 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         </div>
       </div>
 
-      {/* Slidable Curated Moods Carousel ("Vos envies du moment") */}
-      <MoodCarousel activeMoodId={activeMoodId} onSelectMood={handleSelectMood} />
-
-      {/* Luxury Filter Studio Panel */}
-      <div className="rounded-3xl card-surface border-white/[0.09] p-4 sm:p-6 space-y-5 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-        {/* Top Row: Search + Luxury Sort + Filter Drawer Toggle */}
-        <div className="flex flex-col sm:flex-row gap-3">
+      {/* Primary Search & Controls Strip — puts posters right above the fold */}
+      <div className="rounded-2xl card-surface border-white/[0.09] p-3.5 sm:p-4 space-y-3.5">
+        {/* Top Row: Search + Sort + Envies + Filtres avancés */}
+        <div className="flex flex-col sm:flex-row gap-2.5">
           <div className="relative flex-1 group">
-            <Search className="w-4.5 h-4.5 text-accent absolute left-4 top-1/2 -translate-y-1/2 transition-transform group-focus-within:scale-110" />
+            <Search className="w-4 h-4 text-accent absolute left-3.5 top-1/2 -translate-y-1/2 transition-transform group-focus-within:scale-110" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Rechercher un ${type === "ANIME" ? "anime" : "manga"} (ex: Frieren, Berserk, Solo Leveling, Re:ZERO)...`}
-              className="w-full h-11 pl-11 pr-10 rounded-xl bg-[#080A10] border border-white/[0.09] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/70 focus:shadow-[0_0_24px_rgb(var(--shiori-accent-rgb)/0.14)] transition-all"
+              placeholder={`Rechercher un ${type === "ANIME" ? "anime" : "manga"} (ex: Frieren, Berserk, One Piece)...`}
+              className="w-full h-10 pl-10 pr-9 rounded-xl bg-[#080A10] border border-white/[0.09] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/70 transition-all"
             />
             {search && (
               <motion.button
@@ -509,22 +540,36 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 whileTap={{ scale: 0.85 }}
                 onClick={() => setSearch("")}
                 aria-label="Effacer la recherche"
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/[0.08] text-[#7D8296] hover:text-white cursor-pointer"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/[0.08] text-[#7D8296] hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </motion.button>
             )}
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <LuxurySelect
               value={sort}
               onChange={setSort}
               options={SORT_OPTIONS}
               defaultValue="TRENDING_DESC"
               align="right"
-              className="w-48"
+              className="flex-1 sm:flex-none min-w-[155px] sm:w-44"
             />
+
+            <button
+              type="button"
+              onClick={() => setShowMoods((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
+                showMoods || activeMoodId
+                  ? "bg-accent/18 border-accent/45 text-accent-soft"
+                  : "bg-[#090B12] border-white/[0.09] text-[#A2A6B8] hover:text-white"
+              )}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Envies</span>
+            </button>
 
             <motion.button
               type="button"
@@ -532,13 +577,13 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               whileTap={{ scale: 0.96 }}
               onClick={() => setShowFilters((v) => !v)}
               className={cn(
-                "inline-flex items-center gap-2 h-10 px-4 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
-                showFilters
+                "inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
+                showFilters || activeFilterCount > 0
                   ? "bg-white/[0.1] border-white/[0.2] text-white"
                   : "bg-[#090B12] border-white/[0.09] text-[#A2A6B8] hover:text-white"
               )}
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-[#FF8A8E]" />
+              <SlidersHorizontal className="w-3.5 h-3.5 text-accent-soft" />
               <span>Filtres</span>
               {activeFilterCount > 0 && (
                 <motion.span
@@ -555,7 +600,70 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
           </div>
         </div>
 
-        {/* Collapsible Luxury Filters Body */}
+        {/* 1-Click Quick Genres Row (90% of discovery in 1 tap) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedGenres([]);
+              setSelectedTags([]);
+              setActiveMoodId(null);
+            }}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 cursor-pointer transition-colors",
+              selectedGenres.length === 0 && selectedTags.length === 0
+                ? "bg-white text-[#090A0F] border-white font-semibold"
+                : "bg-white/[0.03] border-white/[0.08] text-[#9A9EAE] hover:text-white"
+            )}
+          >
+            Tous
+          </button>
+          {QUICK_GENRES.map((g) => {
+            const selected = selectedGenres.includes(g.id);
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => toggleGenre(g.id)}
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 cursor-pointer transition-colors",
+                  selected
+                    ? "bg-accent border-accent text-accent-fg font-semibold"
+                    : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.16]"
+                )}
+              >
+                {g.label}
+              </button>
+            );
+          })}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetAll}
+              className="ml-auto px-2.5 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Effacer</span>
+            </button>
+          )}
+        </div>
+
+        {/* On-Demand Moods Carousel (collapsed by default so posters appear immediately!) */}
+        <AnimatePresence initial={false}>
+          {showMoods && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25, ease: CINEMA_EASE }}
+              className="overflow-hidden pt-3 border-t border-white/[0.07]"
+            >
+              <MoodCarousel activeMoodId={activeMoodId} onSelectMood={handleSelectMood} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Collapsible Advanced Filters Studio (collapsed by default!) */}
         <AnimatePresence initial={false}>
           {showFilters && (
             <motion.div
@@ -937,149 +1045,151 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     </motion.div>
                   </AnimatePresence>
                 </div>
-
-                {/* Active Combined Filter Chips Bar */}
-                <AnimatePresence>
-                  {hasActiveFilters && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      className="flex flex-wrap items-center gap-2 pt-1"
-                    >
-                      <span className="text-[11px] font-mono uppercase tracking-wider text-[#7A7F94] mr-1">
-                        Actifs :
-                      </span>
-
-                      {selectedGenres.map((g) => (
-                        <motion.span
-                          key={`active-g-${g}`}
-                          layout
-                          initial={{ scale: 0.8, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          exit={{ scale: 0.8, opacity: 0 }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-[#FF979B]"
-                        >
-                          <span>{getTaxonomyLabel(g)}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleGenre(g)}
-                            className="hover:text-white cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </motion.span>
-                      ))}
-
-                      {selectedTags.map((t) => (
-                        <motion.span
-                          key={`active-t-${t}`}
-                          layout
-                          initial={{ scale: 0.8, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          exit={{ scale: 0.8, opacity: 0 }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/18 border border-violet-400/40 text-xs font-medium text-violet-200"
-                        >
-                          <span>{getTaxonomyLabel(t)}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleTag(t)}
-                            className="hover:text-white cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </motion.span>
-                      ))}
-
-                      {format !== "ALL" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
-                          <span>Format : {formats.find((f) => f.id === format)?.label ?? format}</span>
-                          <button type="button" onClick={() => setFormat("ALL")} className="cursor-pointer">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-
-                      {year !== "ALL" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs font-mono text-white">
-                          <span>{year}</span>
-                          <button type="button" onClick={() => setYear("ALL")} className="cursor-pointer">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-
-                      {season !== "ALL" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
-                          <span>{SEASON_OPTIONS.find((s) => s.id === season)?.label}</span>
-                          <button type="button" onClick={() => setSeason("ALL")} className="cursor-pointer">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-
-                      {status !== "ALL" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
-                          <span>{STATUS_OPTIONS.find((s) => s.id === status)?.label}</span>
-                          <button type="button" onClick={() => setStatus("ALL")} className="cursor-pointer">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-
-                      {minScore !== "ALL" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
-                          <span>★ {Number(minScore) / 10}+</span>
-                          <button type="button" onClick={() => setMinScore("ALL")} className="cursor-pointer">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-
-                      {maxScore !== "ALL" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
-                          <span>★ ≤ {Number(maxScore) / 10}</span>
-                          <button type="button" onClick={() => setMaxScore("ALL")} className="cursor-pointer">
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-
-                      {hasUnitFilter && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/18 border border-sky-400/40 text-xs font-mono text-sky-200">
-                          <span>{formatUnitRangeLabel()}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMinUnits("");
-                              setMaxUnits("");
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </span>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={resetAll}
-                        className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white hover:bg-accent/20 transition-colors cursor-pointer"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Tout effacer</span>
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Active Combined Filter Chips Bar — stays visible even when filter drawer is closed */}
+        <AnimatePresence>
+          {hasActiveFilters && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-white/[0.07]"
+            >
+              <span className="text-[11px] font-medium text-[#7A7F94] mr-0.5">
+                Filtres actifs :
+              </span>
+
+              {selectedGenres.map((g) => (
+                <motion.span
+                  key={`active-g-${g}`}
+                  layout
+                  initial={{ scale: 0.85, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.85, opacity: 0 }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-white"
+                >
+                  <span>{getTaxonomyLabel(g)}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleGenre(g)}
+                    aria-label={`Retirer ${getTaxonomyLabel(g)}`}
+                    className="text-accent-soft hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </motion.span>
+              ))}
+
+              {selectedTags.map((t) => (
+                <motion.span
+                  key={`active-t-${t}`}
+                  layout
+                  initial={{ scale: 0.85, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.85, opacity: 0 }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/18 border border-violet-400/40 text-xs font-medium text-violet-100"
+                >
+                  <span>{getTaxonomyLabel(t)}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleTag(t)}
+                    aria-label={`Retirer ${getTaxonomyLabel(t)}`}
+                    className="text-violet-300 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </motion.span>
+              ))}
+
+              {format !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
+                  <span>{formats.find((f) => f.id === format)?.label ?? format}</span>
+                  <button type="button" onClick={() => setFormat("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {year !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs font-mono text-white">
+                  <span>{year}</span>
+                  <button type="button" onClick={() => setYear("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {season !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
+                  <span>{SEASON_OPTIONS.find((s) => s.id === season)?.label}</span>
+                  <button type="button" onClick={() => setSeason("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {status !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
+                  <span>{STATUS_OPTIONS.find((s) => s.id === status)?.label}</span>
+                  <button type="button" onClick={() => setStatus("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {minScore !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
+                  <span>★ {Number(minScore) / 10}+</span>
+                  <button type="button" onClick={() => setMinScore("ALL")} className="hover:text-white cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {maxScore !== "ALL" && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
+                  <span>★ ≤ {Number(maxScore) / 10}</span>
+                  <button type="button" onClick={() => setMaxScore("ALL")} className="hover:text-white cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              {hasUnitFilter && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500/18 border border-sky-400/40 text-xs font-mono text-sky-200">
+                  <span>{formatUnitRangeLabel()}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMinUnits("");
+                      setMaxUnits("");
+                    }}
+                    className="hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={resetAll}
+                className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white hover:bg-accent/20 transition-colors cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Tout effacer</span>
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
       {/* Results Meta Bar */}
-      <div className="flex items-center justify-between text-xs text-[#858A9E]">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#858A9E]">
         <div className="flex items-center gap-2">
           {loading ? (
             <span className="inline-flex items-center gap-2 text-white">
@@ -1088,16 +1198,36 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
             </span>
           ) : (
             <span>
-              <strong className="text-white font-mono">{items.length}</strong> affichés
+              <strong className="text-white font-mono">{visibleItems.length}</strong> affichés
               {total > items.length ? ` sur ${total.toLocaleString("fr-FR")} œuvres` : ""}
+              {hideInLibrary && hiddenCount > 0 && (
+                <span className="ml-1.5 text-accent-soft">
+                  ({hiddenCount} déjà dans ma bibliothèque masqué{hiddenCount > 1 ? "s" : ""})
+                </span>
+              )}
             </span>
           )}
         </div>
-        {selectedGenres.length + selectedTags.length > 1 && (
-          <span className="text-[11px] font-mono text-[#7D8296] hidden sm:inline">
-            Mode combiné : {selectedGenres.length + selectedTags.length} critères actifs
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {selectedGenres.length + selectedTags.length > 1 && (
+            <span className="text-[11px] font-mono text-[#7D8296] hidden sm:inline">
+              Mode combiné : {selectedGenres.length + selectedTags.length} critères actifs
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setHideInLibrary((v) => !v)}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors cursor-pointer",
+              hideInLibrary
+                ? "bg-accent/18 border-accent/45 text-accent-soft"
+                : "bg-white/[0.04] hover:bg-white/[0.09] border-white/[0.09] text-[#C8CCE0] hover:text-white"
+            )}
+          >
+            {hideInLibrary ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            <span>Masquer ma bibliothèque</span>
+          </button>
+        </div>
       </div>
 
       {/* Results Grid */}
@@ -1111,25 +1241,38 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
             </div>
           ))}
         </div>
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <div className="rounded-2xl card-surface py-16 px-6 text-center">
           <Sparkles className="w-8 h-8 text-[#52576B] mx-auto mb-3" />
           <h3 className="text-base font-semibold text-white">Aucun résultat trouvé</h3>
           <p className="text-sm text-[#868B9F] mt-1 max-w-md mx-auto">
-            Cette combinaison de filtres est très précise. Retirez un critère ou réinitialisez pour élargir les résultats.
+            {hideInLibrary && items.length > 0
+              ? "Toutes les œuvres de cette page figurent déjà dans votre bibliothèque. Chargez la suite ou désactivez le filtre."
+              : "Cette combinaison de filtres est très précise. Retirez un critère ou réinitialisez pour élargir les résultats."}
           </p>
-          <button
-            type="button"
-            onClick={resetAll}
-            className="mt-5 px-5 py-2 rounded-full bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hover cursor-pointer"
-          >
-            Tout réinitialiser
-          </button>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            {hideInLibrary && items.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setHideInLibrary(false)}
+                className="px-5 py-2 rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-white/[0.12] text-white text-xs font-semibold cursor-pointer"
+              >
+                Afficher ma bibliothèque
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={resetAll}
+              className="px-5 py-2 rounded-full bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hover cursor-pointer"
+            >
+              Tout réinitialiser
+            </button>
+          </div>
         </div>
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <MediaCard key={`${item.id}-${item.type}`} media={item} />
             ))}
           </div>

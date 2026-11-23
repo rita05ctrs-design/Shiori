@@ -6,6 +6,11 @@ import {
   normalizeContentLanguage,
   sanitizeSynopsisHtml,
 } from "@/lib/i18n";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/server/rate-limit";
 import type { ContentLanguage } from "@/types/media";
 
 export const runtime = "nodejs";
@@ -162,8 +167,20 @@ async function translateSynopsisOnTheFly(
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const limit = checkRateLimit(`translate:${ip}`, 45, 60_000);
+    if (!limit.ok) {
+      return rateLimitResponse(limit.retryAfterSec);
+    }
+
     const body = await request.json();
     const rawText = typeof body?.text === "string" ? body.text.trim() : "";
+    if (rawText.length > 12_000) {
+      return NextResponse.json(
+        { ok: false, error: "Texte trop long pour la traduction (max 12 000 caractères)." },
+        { status: 400 }
+      );
+    }
     const mediaId =
       typeof body?.mediaId === "number" && Number.isFinite(body.mediaId) && body.mediaId > 0
         ? Math.floor(body.mediaId)

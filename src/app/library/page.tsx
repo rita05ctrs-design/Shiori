@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   LayoutGrid,
   List as ListIcon,
+  Table2,
   Plus,
   Minus,
   Star,
@@ -21,58 +22,199 @@ import {
   ArrowDownAZ,
   TrendingUp,
   ListOrdered,
+  FolderHeart,
+  Filter,
+  RotateCcw,
+  FileSpreadsheet,
+  StickyNote,
+  Calendar,
+  MoreHorizontal,
+  Tag,
+  Building2,
+  Layers,
+  Film,
+  Disc,
+  Clapperboard,
+  Snowflake,
+  Flower2,
+  Sun,
+  Leaf,
+  X,
+  CheckCircle2,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import { LuxurySelect, type LuxurySelectOption } from "@/components/ui/LuxurySelect";
 import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
-import { cn, getStatusLabel, STATUS_CONFIG } from "@/lib/utils";
+import { CollectionsManagerPanel } from "@/components/library/CollectionsManagerPanel";
+import {
+  DEFAULT_LIBRARY_FILTERS,
+  filterAndSortLibrary,
+  getProgressPercent,
+  libraryToCsv,
+  type LibraryFilterState,
+  type LibrarySortKey,
+  type ProgressFilter,
+  type ScoreFilter,
+} from "@/lib/library-utils";
+import { cn, formatFormat, getStatusLabel, STATUS_CONFIG } from "@/lib/utils";
 import type { LibraryStatus, MediaType } from "@/types/media";
 
 type FilterTab = "ALL" | LibraryStatus;
-type SortKey = "UPDATED" | "FAVORITE_RANK" | "SCORE" | "TITLE" | "PROGRESS";
+type ViewMode = "grid" | "list" | "table";
 
 const TABS: { id: FilterTab; label: string }[] = [
   { id: "ALL", label: "Tous" },
-  { id: "WATCHING", label: "Watching" },
-  { id: "COMPLETED", label: "Completed" },
-  { id: "ON_HOLD", label: "On Hold" },
-  { id: "DROPPED", label: "Dropped" },
-  { id: "PLAN_TO_WATCH", label: "Plan to Watch" },
+  { id: "WATCHING", label: "En cours" },
+  { id: "COMPLETED", label: "Terminés" },
+  { id: "PLAN_TO_WATCH", label: "À voir" },
+  { id: "ON_HOLD", label: "En pause" },
+  { id: "DROPPED", label: "Abandonnés" },
 ];
 
 const LIBRARY_SORTS: LuxurySelectOption[] = [
-  { id: "UPDATED", label: "Mis à jour récemment", icon: Clock, accent: "text-sky-400" },
+  { id: "UPDATED", label: "Récents", icon: Clock, accent: "text-sky-400" },
   {
     id: "FAVORITE_RANK",
-    label: "Classement favoris (#1 → dernier)",
+    label: "Classement favoris",
     icon: ListOrdered,
     accent: "text-rose-400",
   },
-  { id: "SCORE", label: "Ma note décroissante", icon: Star, accent: "text-[#F0B95B]" },
+  { id: "SCORE", label: "Meilleures notes", icon: Star, accent: "text-[#F0B95B]" },
   { id: "PROGRESS", label: "Progression", icon: TrendingUp, accent: "text-emerald-400" },
+  { id: "YEAR", label: "Année", icon: Calendar, accent: "text-amber-400" },
   { id: "TITLE", label: "Titre (A → Z)", icon: ArrowDownAZ, accent: "text-violet-400" },
 ];
+
+const LIBRARY_SEASON_OPTIONS: LuxurySelectOption[] = [
+  { id: "ALL", label: "Toutes les saisons", icon: Sparkles },
+  { id: "WINTER", label: "Hiver", hint: "Janvier – Mars", icon: Snowflake, accent: "text-sky-300" },
+  { id: "SPRING", label: "Printemps", hint: "Avril – Juin", icon: Flower2, accent: "text-pink-300" },
+  { id: "SUMMER", label: "Été", hint: "Juillet – Septembre", icon: Sun, accent: "text-amber-300" },
+  { id: "FALL", label: "Automne", hint: "Octobre – Décembre", icon: Leaf, accent: "text-orange-400" },
+];
+
+const SCORE_PILLS: { id: ScoreFilter; label: string; short: string }[] = [
+  { id: "ALL", label: "Toutes notes", short: "Toutes" },
+  { id: "9", label: "9.0+", short: "9+" },
+  { id: "8", label: "8.0+", short: "8+" },
+  { id: "7", label: "7.0+", short: "7+" },
+  { id: "6", label: "6.0+", short: "6+" },
+  { id: "UNRATED", label: "Non notées", short: "Sans note" },
+];
+
+const PROGRESS_PILLS: { id: ProgressFilter; label: string; short: string }[] = [
+  { id: "ALL", label: "Toute progression", short: "Toute" },
+  { id: "STARTED", label: "Débutées (> 0)", short: "Débutées" },
+  { id: "ALMOST_DONE", label: "Bientôt terminées (≥ 75%)", short: "≥ 75 %" },
+  { id: "COMPLETE", label: "Complètes", short: "Complètes" },
+  { id: "NOT_STARTED", label: "Non commencées (0)", short: "À 0" },
+];
+
+function getFormatMeta(format: string): {
+  icon: React.ComponentType<{ className?: string }>;
+  accent: string;
+} {
+  switch (format) {
+    case "TV":
+    case "TV_SHORT":
+      return { icon: Tv, accent: "text-sky-400" };
+    case "MOVIE":
+      return { icon: Film, accent: "text-[#F0B95B]" };
+    case "MANGA":
+    case "NOVEL":
+    case "ONE_SHOT":
+      return { icon: BookOpen, accent: "text-violet-400" };
+    case "OVA":
+      return { icon: Disc, accent: "text-pink-400" };
+    case "ONA":
+      return { icon: Clapperboard, accent: "text-emerald-400" };
+    default:
+      return { icon: Layers, accent: "text-[#9A9EAE]" };
+  }
+}
 
 export default function LibraryPage() {
   const {
     library,
     orderedFavorites,
+    collections,
+    displayPrefs,
     incrementProgress,
     toggleFavorite,
     openQuickEdit,
     removeEntry,
     exportLibraryJson,
+    setCommandOpen,
     toast,
   } = useShiori();
 
-  const [activeTab, setActiveTab] = useState<FilterTab>("ALL");
-  const [mediaFilter, setMediaFilter] = useState<"ALL" | MediaType>("ALL");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [filters, setFilters] = useState<LibraryFilterState>(DEFAULT_LIBRARY_FILTERS);
+  const [sortBy, setSortBy] = useState<LibrarySortKey>("UPDATED");
+  const [view, setView] = useState<ViewMode>("grid");
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [organizingFavorites, setOrganizingFavorites] = useState(false);
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("UPDATED");
-  const [view, setView] = useState<"grid" | "list">("grid");
+  const [managingCollections, setManagingCollections] = useState(false);
+  const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(36);
+  const toolsRef = useRef<HTMLDivElement>(null);
+
+  // Sync deep links like /library?favorites=1 or /library?status=WATCHING or /library?type=MANGA
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const favParam = params.get("favorites");
+    const statusParam = params.get("status");
+    const typeParam = params.get("type");
+    const patch: Partial<LibraryFilterState> = {};
+
+    if (favParam === "1" || favParam === "true") {
+      patch.favoritesOnly = true;
+      setSortBy("FAVORITE_RANK");
+    }
+    if (
+      statusParam === "WATCHING" ||
+      statusParam === "COMPLETED" ||
+      statusParam === "ON_HOLD" ||
+      statusParam === "DROPPED" ||
+      statusParam === "PLAN_TO_WATCH"
+    ) {
+      patch.status = statusParam;
+    }
+    if (typeParam === "ANIME" || typeParam === "MANGA") {
+      patch.mediaType = typeParam;
+    }
+    if (Object.keys(patch).length > 0) {
+      setFilters((prev) => ({ ...prev, ...patch }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!toolsMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) {
+        setToolsMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setToolsMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [toolsMenuOpen]);
+
+  const updateFilters = (patch: Partial<LibraryFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+  };
+
+  const resetAllFilters = () => {
+    setFilters(DEFAULT_LIBRARY_FILTERS);
+    setSortBy("UPDATED");
+  };
 
   const favoriteRankMap = useMemo(() => {
     const map = new Map<number, number>();
@@ -80,14 +222,103 @@ export default function LibraryPage() {
     return map;
   }, [orderedFavorites]);
 
-  // Reset pagination cleanly when filters/tabs change
+  // Dynamic facet options with real library counts for sleek LuxurySelect dropdowns
+  const filterOptions = useMemo(() => {
+    const genreCounts = new Map<string, number>();
+    const studioCounts = new Map<string, number>();
+    const years = new Set<number>();
+    const formatCounts = new Map<string, number>();
+
+    for (const e of library) {
+      for (const g of e.genres) {
+        if (g) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
+      }
+      if (e.studio) {
+        studioCounts.set(e.studio, (studioCounts.get(e.studio) ?? 0) + 1);
+      }
+      if (e.seasonYear && e.seasonYear > 1950) years.add(e.seasonYear);
+      if (e.format) {
+        formatCounts.set(e.format, (formatCounts.get(e.format) ?? 0) + 1);
+      }
+    }
+
+    const genreOptions: LuxurySelectOption[] = [
+      { id: "ALL", label: "Tous les genres", icon: Tag },
+      ...Array.from(genreCounts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([g, count]) => ({ id: g, label: g, count, icon: Tag })),
+    ];
+
+    const yearOptions: LuxurySelectOption[] = [
+      { id: "ALL", label: "Toutes les années" },
+      ...Array.from(years)
+        .sort((a, b) => b - a)
+        .map((y) => ({ id: String(y), label: String(y) })),
+    ];
+
+    const studioOptions: LuxurySelectOption[] = [
+      { id: "ALL", label: "Tous les studios", icon: Building2 },
+      ...Array.from(studioCounts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([s, count]) => ({ id: s, label: s, count, icon: Building2 })),
+    ];
+
+    const formatOptions: LuxurySelectOption[] = [
+      { id: "ALL", label: "Tous les formats", icon: Layers },
+      ...Array.from(formatCounts.entries())
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([f, count]) => {
+          const meta = getFormatMeta(f);
+          return {
+            id: f,
+            label: formatFormat(f),
+            count,
+            icon: meta.icon,
+            accent: meta.accent,
+          };
+        }),
+    ];
+
+    const collectionOptions: LuxurySelectOption[] = [
+      { id: "ALL", label: "Toutes les collections", icon: FolderHeart },
+      ...collections.map((c) => ({
+        id: c.id,
+        label: c.name,
+        count: c.mediaIds.length,
+        icon: FolderHeart,
+        accent: "text-violet-400",
+      })),
+    ];
+
+    return {
+      genreOptions,
+      yearOptions,
+      studioOptions,
+      formatOptions,
+      collectionOptions,
+    };
+  }, [library, collections]);
+
+  const activeAdvancedCount = useMemo(() => {
+    let count = 0;
+    if (filters.genre !== "ALL") count++;
+    if (filters.year !== "ALL") count++;
+    if (filters.season !== "ALL") count++;
+    if (filters.studio !== "ALL") count++;
+    if (filters.format !== "ALL") count++;
+    if (filters.scoreFilter !== "ALL") count++;
+    if (filters.progressFilter !== "ALL") count++;
+    if (filters.collectionId !== "ALL") count++;
+    return count;
+  }, [filters]);
+
   React.useEffect(() => {
     setVisibleCount(36);
-  }, [activeTab, mediaFilter, favoritesOnly, search, sortBy, view]);
+  }, [filters, sortBy, view]);
 
   const counts = useMemo(() => {
     const base = library.filter((e) =>
-      mediaFilter === "ALL" ? true : e.type === mediaFilter
+      filters.mediaType === "ALL" ? true : e.type === filters.mediaType
     );
     const res: Record<FilterTab, number> = {
       ALL: base.length,
@@ -101,34 +332,16 @@ export default function LibraryPage() {
       res[entry.status] = (res[entry.status] ?? 0) + 1;
     }
     return res;
-  }, [library, mediaFilter]);
+  }, [library, filters.mediaType]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return library
-      .filter((e) => (activeTab === "ALL" ? true : e.status === activeTab))
-      .filter((e) => (mediaFilter === "ALL" ? true : e.type === mediaFilter))
-      .filter((e) => (favoritesOnly ? e.isFavorite : true))
-      .filter((e) =>
-        q
-          ? e.title.toLowerCase().includes(q) ||
-            (e.studio ?? "").toLowerCase().includes(q) ||
-            e.genres.some((g) => g.toLowerCase().includes(q))
-          : true
-      )
-      .sort((a, b) => {
-        if (sortBy === "FAVORITE_RANK") {
-          const ra = favoriteRankMap.get(a.mediaId) ?? Number.MAX_SAFE_INTEGER;
-          const rb = favoriteRankMap.get(b.mediaId) ?? Number.MAX_SAFE_INTEGER;
-          if (ra !== rb) return ra - rb;
-          return (b.score ?? -1) - (a.score ?? -1);
-        }
-        if (sortBy === "SCORE") return (b.score ?? -1) - (a.score ?? -1);
-        if (sortBy === "TITLE") return a.title.localeCompare(b.title);
-        if (sortBy === "PROGRESS") return b.progress - a.progress;
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      });
-  }, [library, activeTab, mediaFilter, favoritesOnly, search, sortBy, favoriteRankMap]);
+  const filtered = useMemo(
+    () =>
+      filterAndSortLibrary(library, filters, sortBy, {
+        favoriteRankMap,
+        collections,
+      }),
+    [library, filters, sortBy, favoriteRankMap, collections]
+  );
 
   const visibleEntries = useMemo(
     () => filtered.slice(0, visibleCount),
@@ -136,7 +349,7 @@ export default function LibraryPage() {
   );
   const remainingCount = Math.max(0, filtered.length - visibleEntries.length);
 
-  const handleExport = () => {
+  const handleExportJson = () => {
     const json = exportLibraryJson();
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -152,23 +365,47 @@ export default function LibraryPage() {
     });
   };
 
+  const handleExportCsv = () => {
+    const csv = libraryToCsv(filtered);
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `shiori-library-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({
+      title: "Export CSV téléchargé",
+      description: `${filtered.length} œuvre(s) exportée(s).`,
+      variant: "success",
+    });
+  };
+
+  const gridColsClass =
+    displayPrefs.posterSize === "compact"
+      ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+      : displayPrefs.posterSize === "large"
+        ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+        : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+
+  const isCompactDensity = displayPrefs.libraryDensity === "compact";
+
   return (
     <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-5">
+      {/* Header — 1 clear goal: manage your library & add titles */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5">
-            Collection personnelle
-          </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
             Ma Bibliothèque
           </h1>
-          <p className="text-sm text-[#8A8FA4] mt-1.5">
-            Organisez vos animés et mangas, ajustez votre progression en un clic et gardez vos notes.
+          <p className="text-sm text-[#8A8FA4] mt-1">
+            {library.length.toLocaleString("fr-FR")}{" "}
+            {library.length > 1 ? "œuvres suivies" : "œuvre suivie"}
+            {orderedFavorites.length > 0 ? ` · ${orderedFavorites.length} favoris` : ""}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Media type segmented switch */}
           <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
             {[
@@ -176,12 +413,12 @@ export default function LibraryPage() {
               { id: "ANIME", label: "Animes" },
               { id: "MANGA", label: "Mangas" },
             ].map((t) => {
-              const active = mediaFilter === t.id;
+              const active = filters.mediaType === t.id;
               return (
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setMediaFilter(t.id as "ALL" | MediaType)}
+                  onClick={() => updateFilters({ mediaType: t.id as "ALL" | MediaType })}
                   className={cn(
                     "relative px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer",
                     active ? "text-white" : "text-[#9A9EAE] hover:text-white"
@@ -200,46 +437,116 @@ export default function LibraryPage() {
             })}
           </div>
 
-          <Link
-            href="/settings#anilist-import"
-            className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full bg-sky-500/14 hover:bg-sky-500/24 border border-sky-400/35 text-xs font-semibold text-sky-200 hover:text-white transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Importer AniList</span>
-          </Link>
-
+          {/* Primary CTA: instant Search & Add without leaving Bibliothèque */}
           <button
             type="button"
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] text-xs font-medium text-[#D8DBE6] hover:text-white transition-colors cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Exporter</span>
-          </button>
-
-          <Link
-            href="/discover"
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-full bg-white text-[#0A0C12] hover:bg-[#ECEBE6] text-xs font-semibold transition-colors"
+            onClick={() => setCommandOpen(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white text-[#0A0C12] hover:bg-[#ECEBE6] text-xs font-semibold transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Ajouter un titre</span>
-          </Link>
+            <span>Ajouter</span>
+          </button>
+
+          {/* Secondary Tools Dropdown (Collections, Favorite Order, Import/Export) */}
+          <div className="relative" ref={toolsRef}>
+            <button
+              type="button"
+              onClick={() => setToolsMenuOpen((v) => !v)}
+              aria-label="Plus d'outils"
+              aria-expanded={toolsMenuOpen}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-9 px-3 rounded-full border text-xs font-medium transition-colors cursor-pointer",
+                toolsMenuOpen || organizingFavorites || managingCollections
+                  ? "bg-white/[0.12] border-white/[0.2] text-white"
+                  : "bg-white/[0.05] hover:bg-white/[0.1] border-white/[0.09] text-[#D8DBE6] hover:text-white"
+              )}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+              <span className="hidden sm:inline">Outils</span>
+            </button>
+
+            <AnimatePresence>
+              {toolsMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                  transition={{ duration: 0.14 }}
+                  className="absolute right-0 top-full mt-2 w-56 rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_24px_60px_rgba(0,0,0,0.88)] p-1.5 z-40 space-y-0.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrganizingFavorites((v) => !v);
+                      setToolsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  >
+                    <ListOrdered className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Classer mes favoris</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManagingCollections((v) => !v);
+                      setToolsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  >
+                    <FolderHeart className="w-3.5 h-3.5 text-violet-400" />
+                    <span>Collections ({collections.length})</span>
+                  </button>
+                  <div className="my-1 border-t border-white/[0.07]" />
+                  <Link
+                    href="/settings#anilist-import"
+                    onClick={() => setToolsMenuOpen(false)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white"
+                  >
+                    <Download className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Importer depuis AniList</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleExportJson();
+                      setToolsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#9A9EAE]" />
+                    <span>Exporter en JSON</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleExportCsv();
+                      setToolsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Exporter en CSV</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
-      {/* Category Tabs (Watching / Completed / On Hold / Dropped / Plan to Watch) */}
+      {/* Category Tabs — 100% French clear statuses */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-white/[0.07]">
         {TABS.map((tab) => {
-          const isActive = activeTab === tab.id;
+          const isActive = filters.status === tab.id;
           const statusDot =
             tab.id !== "ALL" ? STATUS_CONFIG[tab.id].dot : "bg-white/70";
           return (
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => updateFilters({ status: tab.id })}
               className={cn(
-                "relative px-4 py-2.5 text-[13px] font-medium whitespace-nowrap flex items-center gap-2 transition-colors cursor-pointer",
+                "relative px-3.5 py-2.5 text-[13px] font-medium whitespace-nowrap flex items-center gap-2 transition-colors cursor-pointer",
                 isActive ? "text-white" : "text-[#8A8FA4] hover:text-[#D9DCE8]"
               )}
             >
@@ -267,15 +574,15 @@ export default function LibraryPage() {
         })}
       </div>
 
-      {/* Toolbar: Search, Favorites toggle, Sort, View switch */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      {/* Streamlined Single-Row Toolbar (Search + Favorites + Filters + Sort + View) */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-[#74798E] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrer par titre, studio ou genre..."
+            value={filters.search}
+            onChange={(e) => updateFilters({ search: e.target.value })}
+            placeholder="Rechercher dans ma bibliothèque..."
             className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.08] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/60"
           />
         </div>
@@ -284,78 +591,468 @@ export default function LibraryPage() {
           <button
             type="button"
             onClick={() => {
-              const next = !favoritesOnly;
-              setFavoritesOnly(next);
-              if (next) {
-                setSortBy("FAVORITE_RANK");
-              } else if (sortBy === "FAVORITE_RANK") {
-                setSortBy("UPDATED");
-              }
+              const next = !filters.favoritesOnly;
+              updateFilters({ favoritesOnly: next });
+              if (next) setSortBy("FAVORITE_RANK");
+              else if (sortBy === "FAVORITE_RANK") setSortBy("UPDATED");
             }}
             className={cn(
-              "inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border text-xs font-medium transition-all cursor-pointer",
-              favoritesOnly
+              "inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer",
+              filters.favoritesOnly
                 ? "bg-accent/18 border-accent/45 text-accent-soft"
                 : "bg-surface border-white/[0.08] text-[#9A9EAE] hover:text-white"
             )}
           >
-            <Heart className={cn("w-3.5 h-3.5", favoritesOnly && "fill-current")} />
+            <Heart className={cn("w-3.5 h-3.5", filters.favoritesOnly && "fill-current")} />
             <span>Favoris ({orderedFavorites.length})</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setOrganizingFavorites((v) => !v)}
+            onClick={() => setShowAdvancedFilters((v) => !v)}
             className={cn(
-              "inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
-              organizingFavorites
-                ? "bg-rose-500/20 border-rose-400/50 text-rose-200"
-                : "bg-surface border-white/[0.08] text-[#C8CCE0] hover:text-white hover:border-white/[0.16]"
+              "inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border text-xs font-medium transition-all cursor-pointer",
+              showAdvancedFilters || activeAdvancedCount > 0
+                ? "bg-accent/18 border-accent/45 text-accent-soft"
+                : "bg-surface border-white/[0.08] text-[#C8CCE0] hover:text-white"
             )}
           >
-            <ListOrdered className="w-3.5 h-3.5 text-rose-400" />
-            <span>{organizingFavorites ? "Fermer le classement" : "Classer mes favoris"}</span>
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filtres</span>
+            {activeAdvancedCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-accent text-accent-fg font-mono text-[10px] font-bold">
+                {activeAdvancedCount}
+              </span>
+            )}
           </button>
 
           <LuxurySelect
             value={sortBy}
-            onChange={(val) => setSortBy(val as SortKey)}
+            onChange={(val) => setSortBy(val as LibrarySortKey)}
             options={LIBRARY_SORTS}
             defaultValue="UPDATED"
             align="right"
-            className="flex-1 sm:flex-none min-w-[165px] sm:w-52"
+            className="flex-1 sm:flex-none min-w-[155px] sm:w-44"
           />
 
+          {/* 3-Mode View Switch: Grille / Liste / Tableau */}
           <div className="inline-flex items-center p-1 rounded-xl bg-surface border border-white/[0.08]">
-            <button
-              type="button"
-              onClick={() => setView("grid")}
-              aria-label="Vue grille"
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center transition-colors cursor-pointer",
-                view === "grid"
-                  ? "bg-white/[0.12] text-white"
-                  : "text-[#7D8296] hover:text-white"
-              )}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              aria-label="Vue liste"
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center transition-colors cursor-pointer",
-                view === "list"
-                  ? "bg-white/[0.12] text-white"
-                  : "text-[#7D8296] hover:text-white"
-              )}
-            >
-              <ListIcon className="w-4 h-4" />
-            </button>
+            {(
+              [
+                { id: "grid", label: "Vue grille", icon: LayoutGrid },
+                { id: "list", label: "Vue liste", icon: ListIcon },
+                { id: "table", label: "Vue tableau", icon: Table2 },
+              ] as const
+            ).map((mode) => {
+              const Icon = mode.icon;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setView(mode.id)}
+                  aria-label={mode.label}
+                  title={mode.label}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center transition-colors cursor-pointer",
+                    view === mode.id
+                      ? "bg-white/[0.12] text-white"
+                      : "text-[#7D8296] hover:text-white"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
+
+      {/* Frosted Glass Filter Studio (ZERO native <select>, tactile pills + LuxurySelect) */}
+      <AnimatePresence initial={false}>
+        {showAdvancedFilters && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.99 }}
+            transition={{ duration: 0.22, ease: CINEMA_EASE }}
+            className="relative rounded-2xl card-surface border border-white/[0.11] ring-1 ring-inset ring-white/[0.04] p-4 sm:p-5 space-y-5 shadow-[0_24px_60px_rgba(0,0,0,0.45)] overflow-visible"
+          >
+            {/* Subtle top ambient accent sheen */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/55 to-transparent"
+            />
+
+            {/* Filter Studio Header */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-accent/15 border border-accent/35 flex items-center justify-center text-accent-soft">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                </span>
+                <div>
+                  <p className="text-xs font-semibold text-white">
+                    Affiner ma bibliothèque
+                  </p>
+                  <p className="text-[11px] text-[#858A9E]">
+                    {filtered.length.toLocaleString("fr-FR")} œuvre
+                    {filtered.length > 1 ? "s" : ""} correspondante
+                    {filtered.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {(activeAdvancedCount > 0 || filters.favoritesOnly || filters.search) && (
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-accent/14 hover:bg-accent/25 border border-accent/35 text-xs font-medium text-accent-soft hover:text-white transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Réinitialiser</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilters(false)}
+                  aria-label="Fermer les filtres"
+                  className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#9A9EAE] hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Row 1: Tactile 1-Click Quick Pills (Note personnelle + Progression) */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
+              {/* Personal Score Quick Pills */}
+              <div className="xl:col-span-6 rounded-xl bg-obsidian/70 border border-white/[0.07] p-3.5 space-y-2.5">
+                <span className="text-[11px] font-medium text-[#9A9EAE] flex items-center gap-1.5">
+                  <Star className="w-3.5 h-3.5 text-[#F0B95B] fill-[#F0B95B]" />
+                  <span>Note personnelle</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {SCORE_PILLS.map((opt) => {
+                    const active = filters.scoreFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => updateFilters({ scoreFilter: opt.id })}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer inline-flex items-center gap-1",
+                          active
+                            ? "bg-[#F0B95B] text-[#090A0F] border-[#F0B95B] shadow-[0_6px_18px_rgba(240,185,91,0.32)]"
+                            : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                        )}
+                      >
+                        {opt.id !== "ALL" && opt.id !== "UNRATED" && (
+                          <Star className="w-3 h-3 fill-current" />
+                        )}
+                        <span>{opt.short}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Progress Quick Pills */}
+              <div className="xl:col-span-6 rounded-xl bg-obsidian/70 border border-white/[0.07] p-3.5 space-y-2.5">
+                <span className="text-[11px] font-medium text-[#9A9EAE] flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Progression</span>
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {PROGRESS_PILLS.map((opt) => {
+                    const active = filters.progressFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => updateFilters({ progressFilter: opt.id })}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer",
+                          active
+                            ? "bg-accent text-accent-fg border-accent shadow-accent"
+                            : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                        )}
+                      >
+                        {opt.short}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Custom Frosted Glass LuxurySelect Dropdowns (with counts, icons & search!) */}
+            <div
+              className={cn(
+                "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3",
+                collections.length > 0 ? "xl:grid-cols-6" : "xl:grid-cols-5"
+              )}
+            >
+              <LuxurySelect
+                label="Genre"
+                value={filters.genre}
+                onChange={(val) => updateFilters({ genre: val })}
+                options={filterOptions.genreOptions}
+                icon={Tag}
+                searchPlaceholder="Chercher un genre..."
+              />
+
+              <LuxurySelect
+                label="Année"
+                value={filters.year}
+                onChange={(val) => updateFilters({ year: val })}
+                options={filterOptions.yearOptions}
+                icon={Calendar}
+                columns={4}
+              />
+
+              <LuxurySelect
+                label="Saison"
+                value={filters.season}
+                onChange={(val) => updateFilters({ season: val })}
+                options={LIBRARY_SEASON_OPTIONS}
+                icon={Sparkles}
+              />
+
+              <LuxurySelect
+                label="Studio / Auteur"
+                value={filters.studio}
+                onChange={(val) => updateFilters({ studio: val })}
+                options={filterOptions.studioOptions}
+                icon={Building2}
+                searchPlaceholder="Chercher un studio..."
+              />
+
+              <LuxurySelect
+                label="Format"
+                value={filters.format}
+                onChange={(val) => updateFilters({ format: val })}
+                options={filterOptions.formatOptions}
+                icon={Layers}
+                align={collections.length === 0 ? "right" : "left"}
+              />
+
+              {collections.length > 0 && (
+                <LuxurySelect
+                  label="Collection"
+                  value={filters.collectionId}
+                  onChange={(val) => updateFilters({ collectionId: val })}
+                  options={filterOptions.collectionOptions}
+                  icon={FolderHeart}
+                  align="right"
+                />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active Filter Chips Bar (always visible when any advanced filter is active!) */}
+      <AnimatePresence>
+        {activeAdvancedCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="flex flex-wrap items-center gap-2"
+          >
+            <span className="text-[11px] font-medium text-[#7D8296]">Filtres actifs :</span>
+
+            {filters.genre !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-white">
+                <Tag className="w-3 h-3 text-accent-soft" />
+                <span>{filters.genre}</span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ genre: "ALL" })}
+                  aria-label="Retirer le filtre genre"
+                  className="text-accent-soft hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {filters.year !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.15] text-xs font-mono text-white">
+                <span>{filters.year}</span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ year: "ALL" })}
+                  aria-label="Retirer le filtre année"
+                  className="text-[#9A9EAE] hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {filters.season !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.15] text-xs text-white">
+                <span>
+                  {LIBRARY_SEASON_OPTIONS.find((s) => s.id === filters.season)?.label ??
+                    filters.season}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ season: "ALL" })}
+                  aria-label="Retirer le filtre saison"
+                  className="text-[#9A9EAE] hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {filters.studio !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.15] text-xs text-white">
+                <Building2 className="w-3 h-3 text-sky-400" />
+                <span>{filters.studio}</span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ studio: "ALL" })}
+                  aria-label="Retirer le filtre studio"
+                  className="text-[#9A9EAE] hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {filters.format !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.15] text-xs text-white">
+                <span>{formatFormat(filters.format)}</span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ format: "ALL" })}
+                  aria-label="Retirer le filtre format"
+                  className="text-[#9A9EAE] hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {filters.scoreFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
+                <span>
+                  {SCORE_PILLS.find((s) => s.id === filters.scoreFilter)?.label ??
+                    filters.scoreFilter}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ scoreFilter: "ALL" })}
+                  aria-label="Retirer le filtre note"
+                  className="hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {filters.progressFilter !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/16 border border-emerald-400/40 text-xs text-emerald-200">
+                <span>
+                  {PROGRESS_PILLS.find((p) => p.id === filters.progressFilter)?.label ??
+                    filters.progressFilter}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ progressFilter: "ALL" })}
+                  aria-label="Retirer le filtre progression"
+                  className="hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {filters.collectionId !== "ALL" && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/18 border border-violet-400/40 text-xs text-violet-100">
+                <FolderHeart className="w-3 h-3 text-violet-300" />
+                <span>
+                  {collections.find((c) => c.id === filters.collectionId)?.name ?? "Collection"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ collectionId: "ALL" })}
+                  aria-label="Retirer le filtre collection"
+                  className="text-violet-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white hover:bg-accent/18 transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Tout effacer</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Quick Collection Pills Row (when collections exist) */}
+      {collections.length > 0 && !managingCollections && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          <button
+            type="button"
+            onClick={() => updateFilters({ collectionId: "ALL" })}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 cursor-pointer",
+              filters.collectionId === "ALL"
+                ? "bg-white text-[#090A0F] border-white"
+                : "bg-surface border-white/[0.08] text-[#9A9EAE] hover:text-white"
+            )}
+          >
+            Toute la bibliothèque
+          </button>
+          {collections.map((col) => {
+            const active = filters.collectionId === col.id;
+            return (
+              <button
+                key={col.id}
+                type="button"
+                onClick={() =>
+                  updateFilters({ collectionId: active ? "ALL" : col.id })
+                }
+                className={cn(
+                  "px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 cursor-pointer transition-colors",
+                  active
+                    ? "bg-accent/20 border-accent/55 text-white"
+                    : "bg-surface border-white/[0.08] text-[#C8CCE0] hover:text-white"
+                )}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: col.color }}
+                />
+                <span>{col.name}</span>
+                <span className="font-mono text-[10px] opacity-75">
+                  ({col.mediaIds.length})
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Inline Interactive Collections Manager */}
+      {managingCollections && (
+        <CollectionsManagerPanel
+          activeCollectionId={filters.collectionId}
+          onSelectCollection={(id) => updateFilters({ collectionId: id })}
+          onClose={() => setManagingCollections(false)}
+        />
+      )}
 
       {/* Inline Interactive Top Favorites Organizer (#1 -> last) */}
       {organizingFavorites && (
@@ -370,40 +1067,52 @@ export default function LibraryPage() {
 
       {/* Empty State */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl card-surface py-16 px-6 text-center">
-          <Sparkles className="w-8 h-8 text-[#52576B] mx-auto mb-3" />
+        <div className="rounded-2xl card-surface py-16 px-6 text-center space-y-3">
+          <Sparkles className="w-8 h-8 text-[#52576B] mx-auto" />
           <h3 className="text-base font-semibold text-white">
             Aucun titre dans cette vue
           </h3>
-          <p className="text-sm text-[#868B9F] mt-1 max-w-md mx-auto">
-            Modifiez vos filtres ou explorez le catalogue Shiori pour ajouter de nouveaux animés et mangas.
+          <p className="text-sm text-[#868B9F] max-w-md mx-auto">
+            Modifiez vos filtres combinés ou explorez le catalogue Shiori pour ajouter de nouveaux animés et mangas.
           </p>
-          <Link
-            href="/discover"
-            className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors"
-          >
-            Découvrir des œuvres
-          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            {(activeAdvancedCount > 0 || filters.favoritesOnly || filters.search || filters.status !== "ALL") && (
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="px-4 py-2 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-white cursor-pointer"
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
+            <Link
+              href="/discover"
+              className="px-5 py-2 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors"
+            >
+              Découvrir des œuvres
+            </Link>
+          </div>
         </div>
       ) : view === "grid" ? (
-        /* GRID VIEW (paginated for instant 60fps even with 5,000+ imported AniList titles) */
+        /* GRID VIEW */
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className={cn("grid gap-4 sm:gap-5", gridColsClass)}>
             {visibleEntries.map((entry) => {
               const cfg = STATUS_CONFIG[entry.status];
-              const pct = entry.totalUnits
-                ? Math.min(100, Math.round((entry.progress / entry.totalUnits) * 100))
-                : entry.status === "COMPLETED"
-                  ? 100
-                  : Math.min(85, Math.max(12, entry.progress * 3));
+              const exactPct = getProgressPercent(entry);
+              const barPct = exactPct ?? Math.min(85, Math.max(8, entry.progress * 3));
               const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
+              const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
 
               return (
-                /* Non-moving outer hit-area wrapper eliminates bottom-edge hover jitter & corner clip glitches */
                 <div key={entry.mediaId} className="group h-full">
                   <div className="h-full rounded-2xl overflow-hidden isolate [transform:translateZ(0)] card-surface group-hover:border-white/[0.18] group-hover:-translate-y-1 group-hover:shadow-[0_18px_38px_rgba(0,0,0,0.58)] transition-[transform,border-color,box-shadow] duration-200 ease-out flex flex-col will-change-transform">
-                    {/* Visual Banner Header (isolated GPU stacking prevents scaled-image corner/z-index flicker) */}
-                    <div className="relative h-36 bg-[#131621] overflow-hidden isolate">
+                    <div
+                      className={cn(
+                        "relative bg-[#131621] overflow-hidden isolate",
+                        displayPrefs.posterSize === "large" ? "h-44" : isCompactDensity ? "h-28" : "h-36"
+                      )}
+                    >
                       <Link href={`/media/${entry.mediaId}`} className="block w-full h-full">
                         <img
                           src={entry.bannerImage || entry.coverImage}
@@ -415,7 +1124,6 @@ export default function LibraryPage() {
                         <div className="absolute inset-0 z-[1] bg-gradient-to-t from-surface via-surface/45 to-black/25 pointer-events-none" />
                       </Link>
 
-                      {/* Status Pill + Optional Custom Favorite Rank (#1, #2, #3...) */}
                       <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 pointer-events-none">
                         {sortBy === "FAVORITE_RANK" && favoriteRankMap.has(entry.mediaId) && (
                           <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-[#FDE047] to-[#F0B95B] text-[#090A0F] font-mono text-[10.5px] font-extrabold shadow">
@@ -434,7 +1142,6 @@ export default function LibraryPage() {
                         </span>
                       </div>
 
-                      {/* Favorite Heart */}
                       <button
                         type="button"
                         onClick={() => toggleFavorite(entry.mediaId)}
@@ -446,12 +1153,9 @@ export default function LibraryPage() {
                             : "bg-[#0A0C14]/88 border-white/15 text-white/75 hover:text-white"
                         )}
                       >
-                        <Heart
-                          className={cn("w-3.5 h-3.5", entry.isFavorite && "fill-current")}
-                        />
+                        <Heart className={cn("w-3.5 h-3.5", entry.isFavorite && "fill-current")} />
                       </button>
 
-                      {/* Inset Poster + Score */}
                       <div className="absolute bottom-2.5 left-3.5 right-3.5 z-10 flex items-end justify-between pointer-events-none">
                         <img
                           src={entry.coverImage}
@@ -469,8 +1173,12 @@ export default function LibraryPage() {
                       </div>
                     </div>
 
-                    {/* Body */}
-                    <div className="p-4 flex-1 flex flex-col justify-between gap-3.5">
+                    <div
+                      className={cn(
+                        "flex-1 flex flex-col justify-between gap-3",
+                        isCompactDensity ? "p-3" : "p-4"
+                      )}
+                    >
                       <div>
                         <div className="flex items-center gap-1.5 text-[10.5px] font-mono text-[#7D8296] uppercase mb-1">
                           {entry.type === "MANGA" ? (
@@ -478,76 +1186,68 @@ export default function LibraryPage() {
                           ) : (
                             <Tv className="w-3 h-3 text-sky-400" />
                           )}
-                          <span>{entry.type}</span>
-                          {entry.studio && (
-                            <>
-                              <span>·</span>
-                              <span className="truncate">{entry.studio}</span>
-                            </>
+                          <span>{entry.format ? formatFormat(entry.format) : entry.type}</span>
+                          {entry.seasonYear && <span>· {entry.seasonYear}</span>}
+                          {entry.notes && (
+                            <span title={entry.notes} className="ml-auto text-kinpaku">
+                              <StickyNote className="w-3 h-3" />
+                            </span>
                           )}
                         </div>
-
                         <Link
                           href={`/media/${entry.mediaId}`}
-                          className="text-[15px] font-semibold text-[#F4F3EE] hover:text-accent-hover transition-colors line-clamp-1"
+                          className="text-sm font-semibold text-[#F4F3EE] hover:text-accent-hover transition-colors line-clamp-2 leading-snug"
                         >
                           {entry.title}
                         </Link>
-
                         {entry.notes && (
-                          <p className="mt-1.5 text-xs text-[#8A8FA4] line-clamp-2 leading-relaxed italic">
-                            &laquo; {entry.notes} &raquo;
+                          <p className="text-[11px] text-[#8E93A6] line-clamp-1 mt-1 italic">
+                            « {entry.notes} »
                           </p>
                         )}
                       </div>
 
-                      <div className="space-y-3">
-                        {/* Progress bar */}
-                        <div>
-                          <div className="flex items-center justify-between text-xs font-mono mb-1.5">
-                            <span className="text-[#B8BCCB]">
-                              {unit}{" "}
-                              <strong className="text-white">{entry.progress}</strong>
-                              {entry.totalUnits ? ` / ${entry.totalUnits}` : ""}
-                            </span>
-                            <span className="text-[11px] text-[#7D8296]">
-                              {entry.totalUnits ? `${pct}%` : "En cours"}
-                            </span>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
-                            <div
-                              style={{ width: `${pct}%` }}
-                              className="h-full rounded-full bg-gradient-to-r from-accent to-kinpaku transition-[width] duration-300"
-                            />
-                          </div>
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="text-[#B6BAC9]">
+                            {unit} <strong className="text-white">{entry.progress}</strong>
+                            {entry.totalUnits ? ` / ${entry.totalUnits}` : " / ?"}
+                          </span>
+                          <span className="text-[11px] text-[#7D8296]">
+                            {exactPct !== null ? `${exactPct}%` : "En cours"}
+                          </span>
                         </div>
 
-                        {/* Controls */}
-                        <div className="flex items-center gap-1.5">
+                        <div className="h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
+                          <div
+                            style={{ width: `${barPct}%` }}
+                            className="h-full rounded-full bg-gradient-to-r from-accent to-[#F0B95B] transition-all duration-300"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"
                             onClick={() => incrementProgress(entry.mediaId, -1)}
                             disabled={entry.progress <= 0}
-                            aria-label="Diminuer la progression"
-                            className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] disabled:opacity-35 border border-white/[0.08] flex items-center justify-center text-[#C2C6D6] cursor-pointer"
+                            aria-label="Retirer 1"
+                            className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] disabled:opacity-35 border border-white/[0.08] flex items-center justify-center text-white cursor-pointer"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => incrementProgress(entry.mediaId, 1)}
-                            disabled={
-                              Boolean(entry.totalUnits && entry.progress >= entry.totalUnits)
-                            }
-                            className="flex-1 h-8 rounded-xl bg-white/[0.06] hover:bg-accent disabled:opacity-40 border border-white/[0.09] hover:border-accent text-xs font-semibold text-accent-fg flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                            disabled={atCap}
+                            className="flex-1 h-8 px-2 rounded-xl bg-white/[0.06] hover:bg-accent disabled:opacity-40 border border-white/[0.09] hover:border-accent text-xs font-semibold text-white hover:text-accent-fg flex items-center justify-center gap-1 whitespace-nowrap transition-colors cursor-pointer"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-3.5 h-3.5 shrink-0" />
                             <span>+1 {entry.type === "MANGA" ? "ch." : "ép."}</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => openQuickEdit(entry)}
-                            title="Éditer"
+                            title="Éditer & collections"
                             className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center text-[#B2B6C6] hover:text-white cursor-pointer"
                           >
                             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -560,53 +1260,184 @@ export default function LibraryPage() {
               );
             })}
           </div>
+        </div>
+      ) : view === "list" ? (
+        /* LIST VIEW */
+        <div className="rounded-2xl card-surface overflow-hidden divide-y divide-white/[0.06]">
+          {visibleEntries.map((entry) => {
+            const cfg = STATUS_CONFIG[entry.status];
+            const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
+            const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
 
-          {remainingCount > 0 && (
-            <div className="flex flex-col items-center gap-2 pt-2">
-              <p className="text-xs font-mono text-[#7D8296]">
-                Affichage de {visibleEntries.length.toLocaleString("fr-FR")} sur{" "}
-                {filtered.length.toLocaleString("fr-FR")} œuvres
-              </p>
-              <button
-                type="button"
-                onClick={() => setVisibleCount((c) => c + 36)}
-                className="px-6 py-2.5 rounded-full bg-white/[0.06] hover:bg-white/[0.13] border border-white/[0.12] text-xs font-semibold text-white transition-colors cursor-pointer"
+            return (
+              <div
+                key={entry.mediaId}
+                className={cn(
+                  "flex flex-col sm:flex-row sm:items-center gap-3.5 sm:gap-4 hover:bg-white/[0.03] transition-colors",
+                  isCompactDensity ? "p-2.5 sm:px-4" : "p-3.5 sm:px-5"
+                )}
               >
-                Afficher plus ({Math.min(36, remainingCount)} suivantes)
-              </button>
-            </div>
-          )}
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <Link href={`/media/${entry.mediaId}`} className="shrink-0">
+                    <img
+                      src={entry.coverImage}
+                      alt={entry.title}
+                      loading="lazy"
+                      className="w-11 h-16 rounded-lg object-cover border border-white/10"
+                    />
+                  </Link>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Link
+                        href={`/media/${entry.mediaId}`}
+                        className="text-sm font-semibold text-white hover:text-accent-hover transition-colors truncate"
+                      >
+                        {entry.title}
+                      </Link>
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-full border text-[10px] font-semibold",
+                          cfg.bg,
+                          cfg.border,
+                          cfg.color
+                        )}
+                      >
+                        {getStatusLabel(entry.status, entry.type)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#83889C] mt-1 truncate">
+                      {entry.format ? formatFormat(entry.format) : entry.type}
+                      {entry.seasonYear ? ` · ${entry.seasonYear}` : ""}
+                      {entry.studio ? ` · ${entry.studio}` : ""}
+                      {entry.notes ? ` — ${entry.notes}` : ""}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-4 shrink-0">
+                  <div className="w-12 sm:w-14 text-center font-mono text-xs">
+                    {entry.score !== null ? (
+                      <span className="inline-flex items-center gap-1 text-[#F0B95B] font-semibold">
+                        <Star className="w-3 h-3 fill-current" />
+                        {entry.score.toFixed(1)}
+                      </span>
+                    ) : (
+                      <span className="text-[#5F6477]">—</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 sm:gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => incrementProgress(entry.mediaId, -1)}
+                      disabled={entry.progress <= 0}
+                      className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="w-20 sm:w-24 text-center font-mono text-xs text-[#D8DBE6]">
+                      {unit} <strong className="text-white">{entry.progress}</strong>
+                      {entry.totalUnits ? `/${entry.totalUnits}` : "/?"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => incrementProgress(entry.mediaId, 1)}
+                      disabled={atCap}
+                      className="w-7 h-7 rounded-lg bg-accent/25 hover:bg-accent disabled:opacity-35 flex items-center justify-center text-accent-fg cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(entry.mediaId)}
+                      className={cn(
+                        "p-2 rounded-lg transition-colors cursor-pointer",
+                        entry.isFavorite
+                          ? "text-accent-hover"
+                          : "text-[#6D7287] hover:text-white"
+                      )}
+                    >
+                      <Heart className={cn("w-4 h-4", entry.isFavorite && "fill-current")} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openQuickEdit(entry)}
+                      className="p-2 rounded-lg text-[#9A9EAE] hover:text-white hover:bg-white/[0.07] cursor-pointer"
+                    >
+                      <SlidersHorizontal className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeEntry(entry.mediaId)}
+                      className="p-2 rounded-lg text-[#7D8296] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
-        /* LIST VIEW (paginated) */
-        <div className="space-y-6">
-          <div className="rounded-2xl card-surface overflow-hidden divide-y divide-white/[0.06]">
-            {visibleEntries.map((entry) => {
-              const cfg = STATUS_CONFIG[entry.status];
-              const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
-
-              return (
-                <div
-                  key={entry.mediaId}
-                  className="p-3.5 sm:px-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-white/[0.03] transition-colors"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <Link href={`/media/${entry.mediaId}`} className="shrink-0">
-                      <img
-                        src={entry.coverImage}
-                        alt={entry.title}
-                        loading="lazy"
-                        className="w-11 h-16 rounded-lg object-cover border border-white/10"
-                      />
-                    </Link>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Link
-                          href={`/media/${entry.mediaId}`}
-                          className="text-sm font-semibold text-white hover:text-accent-hover transition-colors truncate"
-                        >
-                          {entry.title}
-                        </Link>
+        /* TABLE VIEW (Responsive scrollable data table) */
+        <div className="rounded-2xl card-surface border border-white/[0.08] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[780px]">
+              <thead>
+                <tr className="border-b border-white/[0.08] bg-obsidian/70 text-[10.5px] font-mono uppercase tracking-wider text-[#858A9E]">
+                  <th className="py-3 px-4">Œuvre</th>
+                  <th className="py-3 px-3">Format / Année</th>
+                  <th className="py-3 px-3">Statut</th>
+                  <th className="py-3 px-3">Progression</th>
+                  <th className="py-3 px-3 text-center">Note</th>
+                  <th className="py-3 px-3">Studio</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.05] text-xs">
+                {visibleEntries.map((entry) => {
+                  const cfg = STATUS_CONFIG[entry.status];
+                  const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
+                  const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
+                  return (
+                    <tr
+                      key={entry.mediaId}
+                      className="hover:bg-white/[0.03] transition-colors"
+                    >
+                      <td className={cn("px-4", isCompactDensity ? "py-2" : "py-3")}>
+                        <div className="flex items-center gap-3 max-w-[280px]">
+                          <Link href={`/media/${entry.mediaId}`} className="shrink-0">
+                            <img
+                              src={entry.coverImage}
+                              alt={entry.title}
+                              loading="lazy"
+                              className="w-8 h-11 rounded-md object-cover border border-white/10"
+                            />
+                          </Link>
+                          <div className="min-w-0">
+                            <Link
+                              href={`/media/${entry.mediaId}`}
+                              className="font-semibold text-white hover:text-accent-hover truncate block"
+                            >
+                              {entry.title}
+                            </Link>
+                            {entry.notes && (
+                              <p className="text-[10.5px] text-[#858A9E] truncate">
+                                {entry.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 font-mono text-[#A6AAB8] whitespace-nowrap">
+                        {entry.format ? formatFormat(entry.format) : entry.type}
+                        {entry.seasonYear ? ` · ${entry.seasonYear}` : ""}
+                      </td>
+                      <td className="px-3 whitespace-nowrap">
                         <span
                           className={cn(
                             "px-2 py-0.5 rounded-full border text-[10px] font-semibold",
@@ -617,102 +1448,97 @@ export default function LibraryPage() {
                         >
                           {getStatusLabel(entry.status, entry.type)}
                         </span>
-                      </div>
-                      <p className="text-xs text-[#83889C] mt-1 truncate">
-                        {entry.type} {entry.studio ? `· ${entry.studio}` : ""}
-                        {entry.notes ? ` — ${entry.notes}` : ""}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right controls */}
-                  <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 sm:gap-4 shrink-0">
-                    {/* Score */}
-                    <div className="w-12 sm:w-14 text-center font-mono text-xs">
-                      {entry.score !== null ? (
-                        <span className="inline-flex items-center gap-1 text-[#F0B95B] font-semibold">
-                          <Star className="w-3 h-3 fill-current" />
-                          {entry.score.toFixed(1)}
-                        </span>
-                      ) : (
-                        <span className="text-[#5F6477]">—</span>
-                      )}
-                    </div>
-
-                    {/* Stepper */}
-                    <div className="flex items-center gap-1 sm:gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => incrementProgress(entry.mediaId, -1)}
-                        disabled={entry.progress <= 0}
-                        className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-20 sm:w-24 text-center font-mono text-xs text-[#D8DBE6]">
-                        {unit} <strong className="text-white">{entry.progress}</strong>
-                        {entry.totalUnits ? `/${entry.totalUnits}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => incrementProgress(entry.mediaId, 1)}
-                        disabled={Boolean(entry.totalUnits && entry.progress >= entry.totalUnits)}
-                        className="w-7 h-7 rounded-lg bg-accent/25 hover:bg-accent disabled:opacity-35 flex items-center justify-center text-accent-fg cursor-pointer transition-colors"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    {/* Fav / Edit / Delete */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => toggleFavorite(entry.mediaId)}
-                        className={cn(
-                          "p-2 rounded-lg transition-colors cursor-pointer",
-                          entry.isFavorite
-                            ? "text-accent-hover"
-                            : "text-[#6D7287] hover:text-white"
+                      </td>
+                      <td className="px-3 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5 font-mono">
+                          <button
+                            type="button"
+                            onClick={() => incrementProgress(entry.mediaId, -1)}
+                            disabled={entry.progress <= 0}
+                            className="w-6 h-6 rounded bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="min-w-[68px] text-center text-[#D8DBE6]">
+                            {unit} <strong className="text-white">{entry.progress}</strong>
+                            {entry.totalUnits ? `/${entry.totalUnits}` : "/?"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => incrementProgress(entry.mediaId, 1)}
+                            disabled={atCap}
+                            className="w-6 h-6 rounded bg-accent/25 hover:bg-accent disabled:opacity-35 flex items-center justify-center text-accent-fg cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-3 text-center font-mono whitespace-nowrap">
+                        {entry.score !== null ? (
+                          <span className="inline-flex items-center gap-1 text-[#F0B95B] font-semibold">
+                            <Star className="w-3 h-3 fill-current" />
+                            {entry.score.toFixed(1)}
+                          </span>
+                        ) : (
+                          <span className="text-[#5F6477]">—</span>
                         )}
-                      >
-                        <Heart className={cn("w-4 h-4", entry.isFavorite && "fill-current")} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openQuickEdit(entry)}
-                        className="p-2 rounded-lg text-[#9A9EAE] hover:text-white hover:bg-white/[0.07] cursor-pointer"
-                      >
-                        <SlidersHorizontal className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeEntry(entry.mediaId)}
-                        className="p-2 rounded-lg text-[#7D8296] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                      <td className="px-3 text-[#9A9EAE] max-w-[150px] truncate">
+                        {entry.studio || "—"}
+                      </td>
+                      <td className="px-4 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleFavorite(entry.mediaId)}
+                            className={cn(
+                              "p-1.5 rounded-lg cursor-pointer",
+                              entry.isFavorite
+                                ? "text-accent-hover"
+                                : "text-[#6D7287] hover:text-white"
+                            )}
+                          >
+                            <Heart className={cn("w-3.5 h-3.5", entry.isFavorite && "fill-current")} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openQuickEdit(entry)}
+                            className="p-1.5 rounded-lg text-[#9A9EAE] hover:text-white hover:bg-white/[0.08] cursor-pointer"
+                          >
+                            <SlidersHorizontal className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeEntry(entry.mediaId)}
+                            className="p-1.5 rounded-lg text-[#7D8296] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        </div>
+      )}
 
-          {remainingCount > 0 && (
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-xs font-mono text-[#7D8296]">
-                Affichage de {visibleEntries.length.toLocaleString("fr-FR")} sur{" "}
-                {filtered.length.toLocaleString("fr-FR")} œuvres
-              </p>
-              <button
-                type="button"
-                onClick={() => setVisibleCount((c) => c + 50)}
-                className="px-6 py-2.5 rounded-full bg-white/[0.06] hover:bg-white/[0.13] border border-white/[0.12] text-xs font-semibold text-white transition-colors cursor-pointer"
-              >
-                Afficher plus ({Math.min(50, remainingCount)} suivantes)
-              </button>
-            </div>
-          )}
+      {/* Pagination */}
+      {remainingCount > 0 && (
+        <div className="flex flex-col items-center gap-2 pt-2">
+          <p className="text-xs font-mono text-[#7D8296]">
+            Affichage de {visibleEntries.length.toLocaleString("fr-FR")} sur{" "}
+            {filtered.length.toLocaleString("fr-FR")} œuvres
+          </p>
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + 40)}
+            className="px-6 py-2.5 rounded-full bg-white/[0.06] hover:bg-white/[0.13] border border-white/[0.12] text-xs font-semibold text-white transition-colors cursor-pointer"
+          >
+            Afficher plus ({Math.min(40, remainingCount)} suivantes)
+          </button>
         </div>
       )}
     </div>

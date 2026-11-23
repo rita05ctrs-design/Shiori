@@ -229,49 +229,14 @@ export function createDefaultProfile(): UserProfile {
 }
 
 export function createDefaultNotifications(): ShioriNotification[] {
-  const { all } = getSeedData();
-  const frieren = all.find((m) => m.id === 154587);
-  const apothecary = all.find((m) => m.id === 195516);
-  const berserk = all.find((m) => m.id === 30002);
-
   return [
     {
-      id: "notif-1",
-      kind: "AIRING",
-      title: "Nouvel épisode disponible",
-      body: "The Apothecary Diaries Season 3 — L'épisode 8 est sorti cette semaine.",
-      mediaId: apothecary?.id ?? 195516,
-      coverImage: apothecary?.coverImage.large,
-      isRead: false,
-      createdAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "notif-2",
-      kind: "MILESTONE",
-      title: "Palier atteint : 1 300+ épisodes",
-      body: "Vous venez de franchir un nouveau cap dans votre bibliothèque Shiori.",
-      mediaId: frieren?.id ?? 154587,
-      coverImage: frieren?.coverImage.large,
-      isRead: false,
-      createdAt: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
-    },
-    {
-      id: "notif-3",
-      kind: "RECOMMENDATION",
-      title: "Parce que vous aimez Berserk",
-      body: "Découvrez Vinland Saga et Vagabond dans votre sélection éditoriale.",
-      mediaId: berserk?.id ?? 30002,
-      coverImage: berserk?.coverImage.large,
-      isRead: true,
-      createdAt: new Date(Date.now() - 28 * 3600 * 1000).toISOString(),
-    },
-    {
-      id: "notif-4",
+      id: "notif-local-welcome",
       kind: "SYSTEM",
-      title: "Architecture Supabase prête",
-      body: "Connectez votre projet Supabase dans les Paramètres pour activer la synchronisation cloud.",
+      title: "Mode découverte local actif",
+      body: "Votre session invité contient une sélection d'exemple modifiable. Créez un compte pour synchroniser votre bibliothèque et recevoir vos vraies notifications.",
       isRead: true,
-      createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
+      createdAt: new Date().toISOString(),
     },
   ];
 }

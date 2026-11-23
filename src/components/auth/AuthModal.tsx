@@ -315,17 +315,19 @@ export function AuthModal() {
 
                   <div>
                     <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
-                      {tab === "signin" ? "Adresse e-mail ou pseudo" : "Adresse e-mail"}
+                      {tab === "signin" && !supabaseReady
+                        ? "Adresse e-mail ou pseudo"
+                        : "Adresse e-mail"}
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-[#6E7387] absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input
-                        type={tab === "signin" ? "text" : "email"}
+                        type={tab === "signin" && !supabaseReady ? "text" : "email"}
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder={
-                          tab === "signin"
+                          tab === "signin" && !supabaseReady
                             ? "vous@exemple.fr ou pseudo"
                             : "vous@exemple.fr"
                         }

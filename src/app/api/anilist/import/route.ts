@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { syncAniListImportWithClient } from "@/lib/supabase/sync";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/server/rate-limit";
 import type {
   AniListAnimeStatistics,
   AniListImportResponse,
@@ -146,6 +151,7 @@ async function postAniList(query: string, variables: Record<string, unknown>): P
       Accept: "application/json",
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(12_000),
     cache: "no-store",
   });
 
@@ -295,13 +301,22 @@ async function fetchAllCollectionEntries(
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const ip = getClientIp(request);
+    const limit = checkRateLimit(`anilist:import:${ip}`, 10, 5 * 60_000);
+    if (!limit.ok) {
+      return rateLimitResponse(limit.retryAfterSec);
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Requête JSON invalide." }, { status: 400 });
+    }
     const rawUsername = String(body.username ?? "").trim().replace(/^@/, "");
     const includeAnime = body.includeAnime !== false;
     const includeManga = body.includeManga !== false;
     const mode: "merge" | "replace" = body.mode === "replace" ? "replace" : "merge";
 
-    if (!rawUsername || rawUsername.length < 2) {
+    if (!rawUsername || rawUsername.length < 2 || rawUsername.length > 50) {
       return NextResponse.json(
         { error: "Veuillez saisir un nom d'utilisateur AniList valide." },
         { status: 400 }

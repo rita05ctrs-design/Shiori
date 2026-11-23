@@ -174,24 +174,18 @@ export function AniListImportCard() {
       <div className="relative z-10 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div>
-            <span className="inline-flex items-center gap-1.5 text-[10.5px] font-mono uppercase tracking-[0.16em] text-sky-400">
-              <ArrowLeftRight className="w-3.5 h-3.5" />
-              OAuth 2.0 · Synchronisation bidirectionnelle
-            </span>
-            <h2 className="text-base sm:text-lg font-semibold text-white mt-0.5 flex items-center gap-2">
-              <span>Connexion & Sync AniList en temps réel</span>
+            <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+              <ArrowLeftRight className="w-4 h-4 text-sky-400" />
+              <span>Synchronisation automatique AniList</span>
             </h2>
             <p className="text-xs text-[#8A8FA4] mt-1 leading-relaxed max-w-2xl">
-              Reliez votre compte AniList pour que chaque modification dans Shiori (ajout
-              d&apos;anime/manga, changement de statut, épisode, chapitre, note ou favori) soit
-              automatiquement envoyée sur AniList via{" "}
-              <code className="text-sky-300 font-mono text-[11px]">SaveMediaListEntry</code>.
+              Reliez votre compte AniList pour synchroniser automatiquement vos ajouts, statuts, épisodes, chapitres, notes et favoris.
             </p>
           </div>
 
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-mono font-semibold border shrink-0 self-start",
+              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border shrink-0 self-start",
               anilistConnection.connected
                 ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-300"
                 : anilistConnection.configured
@@ -210,10 +204,10 @@ export function AniListImportCard() {
               )}
             />
             {anilistConnection.connected
-              ? "Synchronisation active"
+              ? "Connecté"
               : anilistConnection.configured
-                ? "OAuth prêt"
-                : "OAuth non configuré"}
+                ? "Prêt à connecter"
+                : "Non configuré"}
           </span>
         </div>
 
@@ -316,7 +310,7 @@ export function AniListImportCard() {
             <div className="pt-3 border-t border-white/[0.07] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold text-white">
-                  Envoi automatique vers AniList (SaveMediaListEntry)
+                  Envoi automatique vers AniList
                 </p>
                 <p className="text-[11px] text-[#858A9E]">
                   Synchronise automatiquement vos ajouts, statuts, épisodes/chapitres (+1), notes et favoris.
@@ -388,9 +382,7 @@ export function AniListImportCard() {
               <p className="text-[11px] text-[#858A9E] flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>
-                  Jeton OAuth chiffré côté serveur (AES-256-GCM) et enregistré dans Supabase{" "}
-                  <code className="text-[#C8CCE0]">profiles</code> · Callback :{" "}
-                  <code className="text-[#C8CCE0]">{anilistConnection.redirectUri}</code>
+                  Connexion sécurisée et chiffrée côté serveur. Vous pouvez dissocier votre compte à tout moment.
                 </span>
               </p>
             </div>
@@ -406,18 +398,15 @@ export function AniListImportCard() {
         )}
       </div>
 
-      {/* ================================================================== */}
-      {/* PART 2: PUBLIC USERNAME IMPORT (Animes, Mangas & User.statistics)  */}
-      {/* ================================================================== */}
+      {/* PART 2: PUBLIC USERNAME IMPORT */}
       <div id="anilist-import" className="relative z-10 pt-5 border-t border-white/[0.08] space-y-4">
         <div>
-          <span className="inline-flex items-center gap-1.5 text-[10.5px] font-mono uppercase tracking-[0.16em] text-[#9A9EAE]">
-            <Sparkles className="w-3 h-3 text-sky-400" />
-            Import complet par pseudo · Animes, Mangas & Statistiques
-          </span>
+          <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+            <span>Importer une liste AniList par pseudo</span>
+          </h3>
           <p className="text-xs text-[#8A8FA4] mt-1 leading-relaxed">
-            Importez l&apos;intégralité de vos listes publiques AniList ainsi que{" "}
-            <strong className="text-[#D8DBE6]">User.statistics</strong> dans Shiori (et Supabase si vous êtes connecté).
+            Récupérez rapidement vos animés, mangas, notes et favoris depuis votre profil public AniList.
           </p>
         </div>
 

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getAllLocalCommunityProfiles,
+  isAuthenticatedActor,
   readSocialDb,
   resolveServerActor,
 } from "@/lib/server/social-store";
@@ -17,17 +18,17 @@ function isUuid(v: string): boolean {
 }
 
 /**
- * Aggregates live real-time notifications for the active user:
- * - Incoming pending friend requests
- * - Unread / recent incoming direct messages
- * - Likes & comments received on the user's community activities
+ * Aggregates live real-time notifications strictly for the server-verified authenticated user.
+ * Unauthenticated callers receive HTTP 401 so private notifications can never be enumerated.
  */
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const actor = await resolveServerActor({
-    userId: searchParams.get("userId") ?? undefined,
-    username: searchParams.get("username") ?? undefined,
-  });
+export async function GET() {
+  const actor = await resolveServerActor();
+  if (!isAuthenticatedActor(actor)) {
+    return NextResponse.json(
+      { error: "Authentification requise.", notifications: [] },
+      { status: 401 }
+    );
+  }
 
   const byId = new Map<string, ShioriNotification>();
   const actorUserLower = actor.username.toLowerCase();
@@ -208,7 +209,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2) LOCAL STORE FALLBACK / MERGE
+  // 2) LOCAL STORE (only for built-in local server accounts; never mix into Supabase accounts)
+  if (actor.source === "account") {
   try {
     const db = readSocialDb();
 
@@ -315,6 +317,7 @@ export async function GET(request: NextRequest) {
     }
   } catch {
     // non-fatal
+  }
   }
 
   const notifications = Array.from(byId.values())

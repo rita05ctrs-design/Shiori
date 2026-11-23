@@ -262,14 +262,15 @@ function drawMomijiLeaf(ctx: CanvasRenderingContext2D, p: Particle) {
  * Unmounts completely when ambiance.effect === "none" (zero runtime cost).
  */
 export function AmbientCanvas() {
-  const { ambiance } = useShiori();
+  const { ambiance, displayPrefs } = useShiori();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
-    if (ambiance.effect === "none") return;
+    if (ambiance.effect === "none" || displayPrefs.motion === "reduced") return;
 
-    // Respect OS reduced-motion preference
+    // Respect OS reduced-motion preference when set to "system"
     if (
+      displayPrefs.motion !== "full" &&
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
     ) {
@@ -486,9 +487,9 @@ export function AmbientCanvas() {
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
     };
-  }, [ambiance.effect, ambiance.density, ambiance.speed]);
+  }, [ambiance.effect, ambiance.density, ambiance.speed, displayPrefs.motion]);
 
-  if (ambiance.effect === "none") return null;
+  if (ambiance.effect === "none" || displayPrefs.motion === "reduced") return null;
 
   return (
     <canvas

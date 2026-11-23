@@ -127,6 +127,7 @@ export interface LibraryEntry {
   genres: string[];
   studio: string | null;
   format: string | null;
+  season?: string | null;
   seasonYear: number | null;
   averageScore: number | null;
   status: LibraryStatus;
@@ -197,6 +198,76 @@ export interface FavoriteVoiceActor {
 
 export type ContentLanguage = "fr" | "en" | "es" | "it";
 
+export type PosterSize = "compact" | "normal" | "large";
+export type LibraryDensity = "compact" | "comfortable";
+export type MotionPreference = "system" | "full" | "reduced";
+
+export interface DisplayPreferences {
+  posterSize: PosterSize;
+  libraryDensity: LibraryDensity;
+  motion: MotionPreference;
+}
+
+export type HomeSectionId =
+  | "hero"
+  | "stats_strip"
+  | "continue_watching"
+  | "favorites_shelf"
+  | "weekly_episodes"
+  | "recommendations"
+  | "mood_roulette"
+  | "recent_activity"
+  | "catalog_rails"
+  | "community_pulse";
+
+export interface HomeSectionPreference {
+  id: HomeSectionId;
+  visible: boolean;
+}
+
+export interface CustomCollection {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  mediaIds: number[];
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SharedPublicCollection {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  items: PublicProfileMediaSummary[];
+}
+
+export type ReportTargetType = "profile" | "activity" | "comment" | "message";
+export type ReportReason = "spam" | "harassment" | "inappropriate" | "spoiler" | "other";
+
+export interface UserBlockRecord {
+  id: string;
+  blockerId: string;
+  blockedId: string;
+  blockedUsername: string;
+  blockedDisplayName: string;
+  blockedAvatarUrl: string | null;
+  createdAt: string;
+}
+
+export interface ContentReportRecord {
+  id: string;
+  reporterId: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  targetUserId?: string | null;
+  reason: ReportReason;
+  details: string;
+  createdAt: string;
+}
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -205,6 +276,7 @@ export interface UserProfile {
   bio: string;
   avatarInitials: string;
   avatarUrl?: string | null;
+  bannerUrl?: string | null;
   accentColor: string;
   isActivityPublic?: boolean;
   preferredLanguage?: ContentLanguage;
@@ -265,6 +337,7 @@ export interface PublicUserProfile {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  bannerUrl?: string | null;
   avatarInitials: string;
   bio: string;
   accentColor: string;
@@ -273,6 +346,7 @@ export interface PublicUserProfile {
   favoriteStaff: FavoriteVoiceActor[];
   favoriteMedia: PublicProfileMediaSummary[];
   libraryPreview?: PublicProfileLibraryItem[];
+  sharedCollections?: SharedPublicCollection[];
   stats: PublicProfileStatsSummary;
   unlockedBadges?: UnlockedBadgeRecord[];
   pinnedBadges?: string[];

@@ -87,6 +87,7 @@ alter table public.profiles add column if not exists stats_summary jsonb not nul
 alter table public.profiles add column if not exists preferred_language text default 'fr';
 alter table public.profiles add column if not exists unlocked_badges jsonb not null default '[]'::jsonb;
 alter table public.profiles add column if not exists pinned_badges text[] not null default '{}';
+alter table public.profiles add column if not exists ui_preferences jsonb not null default '{}'::jsonb;
 
 -- Sécurité : ne jamais exposer anilist_access_token au rôle anon
 revoke select (anilist_access_token) on public.profiles from anon;
@@ -115,8 +116,16 @@ select
   coalesce(accent_color, '#E5484D') as accent_color,
   coalesce(is_activity_public, true) as is_activity_public,
   coalesce(favorite_staff, '[]'::jsonb) as favorite_staff,
-  coalesce(favorite_media, '[]'::jsonb) as favorite_media,
-  coalesce(stats_summary, '{}'::jsonb) as stats_summary,
+  case
+    when coalesce(is_activity_public, true) or auth.uid() = id
+      then coalesce(favorite_media, '[]'::jsonb)
+    else '[]'::jsonb
+  end as favorite_media,
+  case
+    when coalesce(is_activity_public, true) or auth.uid() = id
+      then coalesce(stats_summary, '{}'::jsonb)
+    else (coalesce(stats_summary, '{}'::jsonb) - 'libraryPreview' - 'sharedCollections')
+  end as stats_summary,
   created_at as joined_at,
   coalesce(unlocked_badges, '[]'::jsonb) as unlocked_badges,
   coalesce(pinned_badges, '{}'::text[]) as pinned_badges
@@ -161,7 +170,14 @@ create policy "Users can insert their own profile"
 
 drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
-  on public.profiles for update using (auth.uid() = id);
+  on public.profiles for update
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+drop policy if exists "Users can delete their own profile" on public.profiles;
+create policy "Users can delete their own profile"
+  on public.profiles for delete
+  using (auth.uid() = id);
 
 -- ----------------------------------------------------------------------------
 -- 2. LIBRARY ENTRIES (Anime & Manga tracking + import AniList)
@@ -179,6 +195,8 @@ create table if not exists public.library_entries (
   genres text[] default '{}',
   studio text,
   format text,
+  season text,
+  season_year integer,
   average_score integer,
   status public.library_status not null default 'PLAN_TO_WATCH',
   progress integer not null default 0 check (progress >= 0),
@@ -208,7 +226,9 @@ create policy "Users can insert their own library entries"
 
 drop policy if exists "Users can update their own library entries" on public.library_entries;
 create policy "Users can update their own library entries"
-  on public.library_entries for update using (auth.uid() = user_id);
+  on public.library_entries for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 drop policy if exists "Users can delete their own library entries" on public.library_entries;
 create policy "Users can delete their own library entries"
@@ -356,11 +376,24 @@ alter table public.activity_likes enable row level security;
 
 drop policy if exists "Anyone can view activity likes" on public.activity_likes;
 create policy "Anyone can view activity likes"
-  on public.activity_likes for select using (true);
+  on public.activity_likes for select using (
+    exists (
+      select 1 from public.activity_events ae
+      where ae.id = activity_id
+        and (ae.is_public = true or ae.user_id = auth.uid())
+    )
+  );
 
 drop policy if exists "Authenticated users can like activity" on public.activity_likes;
 create policy "Authenticated users can like activity"
-  on public.activity_likes for insert with check (auth.uid() = user_id);
+  on public.activity_likes for insert with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.activity_events ae
+      where ae.id = activity_id
+        and (ae.is_public = true or ae.user_id = auth.uid())
+    )
+  );
 
 drop policy if exists "Users can remove their own likes" on public.activity_likes;
 create policy "Users can remove their own likes"
@@ -384,11 +417,24 @@ alter table public.activity_comments enable row level security;
 
 drop policy if exists "Anyone can view activity comments" on public.activity_comments;
 create policy "Anyone can view activity comments"
-  on public.activity_comments for select using (true);
+  on public.activity_comments for select using (
+    exists (
+      select 1 from public.activity_events ae
+      where ae.id = activity_id
+        and (ae.is_public = true or ae.user_id = auth.uid())
+    )
+  );
 
 drop policy if exists "Authenticated users can comment on activity" on public.activity_comments;
 create policy "Authenticated users can comment on activity"
-  on public.activity_comments for insert with check (auth.uid() = user_id);
+  on public.activity_comments for insert with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.activity_events ae
+      where ae.id = activity_id
+        and (ae.is_public = true or ae.user_id = auth.uid())
+    )
+  );
 
 drop policy if exists "Users can delete their own comments" on public.activity_comments;
 create policy "Users can delete their own comments"
@@ -550,21 +596,32 @@ create policy "Anyone can cache media translations"
   with check (lang in ('fr', 'es', 'it') and char_length(translated_description) between 1 and 20000);
 
 drop policy if exists "Anyone can refresh cached media translations" on public.media_translations;
-create policy "Anyone can refresh cached media translations"
-  on public.media_translations for update
+drop policy if exists "Authenticated users can refresh cached media translations" on public.media_translations;
+create policy "Authenticated users can refresh cached media translations"
+  on public.media_translations for update to authenticated
   using (lang in ('fr', 'es', 'it'))
   with check (lang in ('fr', 'es', 'it') and char_length(translated_description) between 1 and 20000);
+
+grant usage on schema public to anon, authenticated;
+grant select on public.public_profiles, public.activity_events, public.activity_likes, public.activity_comments, public.user_badges to anon, authenticated;
+grant select, insert on public.media_translations to anon, authenticated;
+grant update on public.media_translations to authenticated;
+grant select, insert, update, delete on public.profiles, public.library_entries, public.user_anilist_stats, public.notifications, public.activity_events, public.activity_likes, public.activity_comments, public.direct_messages, public.user_badges, public.friendships to authenticated;
+revoke all on public.direct_messages, public.friendships from anon;
 
 -- ----------------------------------------------------------------------------
 -- 6. TRIGGERS (auto-creation du profil + updated_at)
 -- ----------------------------------------------------------------------------
 create or replace function public.handle_updated_at()
-returns trigger as $$
+returns trigger
+language plpgsql
+set search_path = public
+as $$
 begin
   new.updated_at = now();
   return new;
 end;
-$$ language plpgsql;
+$$;
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -643,7 +700,7 @@ begin
 
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created

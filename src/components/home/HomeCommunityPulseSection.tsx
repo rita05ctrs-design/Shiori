@@ -205,7 +205,7 @@ export function HomeCommunityPulseSection() {
                   ) : (
                     <p className="text-xs text-[#D8DBE6] line-clamp-1 mt-0.5">{item.text}</p>
                   )}
-                  <p className="text-[10.5px] text-[#7D8296] mt-0.5">
+                  <p suppressHydrationWarning className="text-[10.5px] text-[#7D8296] mt-0.5">
                     {formatRelativeTime(new Date(item.createdAt * 1000).toISOString())}
                   </p>
                 </div>
@@ -270,7 +270,7 @@ export function HomeCommunityPulseSection() {
                     <p className="text-xs font-bold text-white truncate mt-0.5">
                       {item.mediaTitle}
                     </p>
-                    <p className="text-[10.5px] text-[#7D8296] mt-0.5">
+                    <p suppressHydrationWarning className="text-[10.5px] text-[#7D8296] mt-0.5">
                       {formatRelativeTime(item.createdAt)}
                     </p>
                   </div>

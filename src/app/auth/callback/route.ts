@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const rawNext = searchParams.get("next") ?? "/";
   // Prevent open redirects: allow only safe internal paths
-  const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
+  const nextPath =
+    rawNext.startsWith("/") && !rawNext.startsWith("//") && !rawNext.startsWith("/\\")
+      ? rawNext
+      : "/";
 
   if (code) {
     const supabase = await getSupabaseServerClient();

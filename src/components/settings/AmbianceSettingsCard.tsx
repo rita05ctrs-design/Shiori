@@ -114,15 +114,12 @@ export function AmbianceSettingsCard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <span className="inline-flex items-center gap-1.5 text-[10.5px] font-mono uppercase tracking-[0.16em] text-accent-soft">
-            <Flower2 className="w-3.5 h-3.5 text-accent" />
-            Particules en continu · 60/120 FPS
-          </span>
-          <h2 className="text-base sm:text-lg font-semibold text-white mt-0.5">
-            Ambiance & Effets en continu
+          <h2 className="text-base font-semibold text-white flex items-center gap-2">
+            <Flower2 className="w-4 h-4 text-accent" />
+            <span>Effets d&apos;ambiance</span>
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-0.5">
-            Choisissez une atmosphère animée selon vos goûts ou désactivez-la en un clic.
+            Ajoutez une atmosphère animée légère en arrière-plan ou gardez l&apos;interface épurée.
           </p>
         </div>
 

@@ -151,29 +151,45 @@ export function AnimatedNumber({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const isInView = useInView(ref, { once: true, amount: "some" });
-  const motionVal = useMotionValue(0);
-  const springVal = useSpring(motionVal, { stiffness: 90, damping: 22, mass: 0.7 });
-  const [display, setDisplay] = useState(
-    decimals > 0 ? (0).toFixed(decimals) : "0"
-  );
+  const motionVal = useMotionValue(value);
+  const springVal = useSpring(motionVal, {
+    stiffness: 110,
+    damping: 24,
+    mass: 0.65,
+    restDelta: 0.0005,
+    restSpeed: 0.0005,
+  });
+
+  const formatNum = (n: number) => {
+    if (decimals > 0) return n.toFixed(decimals);
+    const rounded = Math.round(n);
+    return formatLocale ? rounded.toLocaleString("fr-FR") : String(rounded);
+  };
+
+  const [display, setDisplay] = useState(() => formatNum(value));
 
   useEffect(() => {
     if (isInView) {
       motionVal.set(value);
+    } else {
+      setDisplay(formatNum(value));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInView, value, motionVal]);
 
   useEffect(() => {
+    const tolerance = decimals > 0 ? Math.pow(10, -(decimals + 1)) : 0.25;
     const unsub = springVal.on("change", (latest) => {
+      const snapped = Math.abs(latest - value) <= tolerance ? value : latest;
       if (decimals > 0) {
-        setDisplay(latest.toFixed(decimals));
+        setDisplay(snapped.toFixed(decimals));
       } else {
-        const rounded = Math.round(latest);
+        const rounded = Math.round(snapped);
         setDisplay(formatLocale ? rounded.toLocaleString("fr-FR") : String(rounded));
       }
     });
     return () => unsub();
-  }, [springVal, decimals, formatLocale]);
+  }, [springVal, value, decimals, formatLocale]);
 
   return <span ref={ref}>{display}</span>;
 }

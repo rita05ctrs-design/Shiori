@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  isAuthenticatedActor,
   resolveServerActor,
   toggleLocalActivityLike,
 } from "@/lib/server/social-store";
+import { checkRateLimit, rateLimitResponse } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,19 +13,24 @@ export const dynamic = "force-dynamic";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id: activityId } = await context.params;
-  const body = await request.json().catch(() => ({}));
-  const actor = await resolveServerActor({
-    userId: body?.userId,
-    username: body?.username,
-    displayName: body?.displayName,
-    avatarUrl: body?.avatarUrl,
-  });
+  const actor = await resolveServerActor();
+  if (!isAuthenticatedActor(actor)) {
+    return NextResponse.json(
+      { error: "Connectez-vous pour aimer une activité." },
+      { status: 401 }
+    );
+  }
 
-  // 1) Try Supabase `activity_likes` when both IDs are Supabase UUIDs
+  const limit = checkRateLimit(`activity:like:${actor.id}`, 60, 60_000);
+  if (!limit.ok) {
+    return rateLimitResponse(limit.retryAfterSec);
+  }
+
+  // 1) Supabase `activity_likes` when authenticated via Supabase and activityId is UUID
   if (actor.source === "supabase" && UUID_RE.test(activityId)) {
     try {
       const supabase = await getSupabaseServerClient();
@@ -40,10 +47,16 @@ export async function POST(
           await supabase.from("activity_likes").delete().eq("id", existing.id);
           liked = false;
         } else {
-          await supabase.from("activity_likes").insert({
+          const { error } = await supabase.from("activity_likes").insert({
             activity_id: activityId,
             user_id: actor.id,
           });
+          if (error) {
+            return NextResponse.json(
+              { error: "Impossible de modifier le like sur cette activité." },
+              { status: 400 }
+            );
+          }
           liked = true;
         }
 
@@ -52,9 +65,6 @@ export async function POST(
           .select("user_id")
           .eq("activity_id", activityId);
 
-        // Keep local cache in sync if present
-        toggleLocalActivityLike(activityId, actor.id);
-
         return NextResponse.json({
           ok: true,
           liked,
@@ -62,7 +72,7 @@ export async function POST(
         });
       }
     } catch {
-      // fall through to local store
+      return NextResponse.json({ error: "Erreur lors de la mise à jour du like." }, { status: 500 });
     }
   }
 

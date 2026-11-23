@@ -12,6 +12,7 @@ import {
   CheckCheck,
   Radio,
   ArrowLeft,
+  Lock,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -32,7 +33,15 @@ interface ConversationThread {
 const POLL_INTERVAL_MS = 3000;
 
 export function MessagesClient() {
-  const { profile, friends, refreshUnreadMessages, toast } = useShiori();
+  const {
+    profile,
+    isAuthenticated,
+    openAuthModal,
+    friends,
+    refreshUnreadMessages,
+    toast,
+    isUserBlocked,
+  } = useShiori();
   const [serverActorId, setServerActorId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DirectMessageItem[]>([]);
   const [members, setMembers] = useState<PublicUserProfile[]>([]);
@@ -83,15 +92,11 @@ export function MessagesClient() {
   const currentUserId = serverActorId || profile.id;
 
   const loadInbox = useCallback(async () => {
-    if (inFlightRef.current) return;
+    if (!isAuthenticated || inFlightRef.current) return;
     inFlightRef.current = true;
     try {
-      const params = new URLSearchParams({
-        userId: profile.id,
-        username: profile.username,
-      });
       const [msgRes, memRes] = await Promise.all([
-        fetch(`/api/messages?${params.toString()}`, { cache: "no-store" }),
+        fetch("/api/messages", { cache: "no-store" }),
         fetch("/api/community/profiles", { cache: "no-store" }),
       ]);
       if (msgRes.ok) {
@@ -117,12 +122,17 @@ export function MessagesClient() {
     } finally {
       inFlightRef.current = false;
     }
-  }, [profile.id, profile.username]);
+  }, [isAuthenticated]);
 
   // Initial load
   useEffect(() => {
+    if (!isAuthenticated) {
+      setMessages([]);
+      setPartnerProfiles([]);
+      return;
+    }
     void loadInbox();
-  }, [loadInbox]);
+  }, [isAuthenticated, loadInbox]);
 
   // Read ?to=<username_or_id> on initial mount so "Envoyer un message" opens that user's thread
   useEffect(() => {
@@ -265,6 +275,7 @@ export function MessagesClient() {
 
   // 2) Fallback live polling every 3 seconds while /messages is open (pauses when tab is hidden)
   useEffect(() => {
+    if (!isAuthenticated) return;
     const tick = () => {
       if (typeof document !== "undefined" && document.hidden) return;
       void loadInbox();
@@ -281,7 +292,7 @@ export function MessagesClient() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [loadInbox, refreshUnreadMessages]);
+  }, [isAuthenticated, loadInbox, refreshUnreadMessages]);
 
   // Group ALL conversations strictly by the other user's unique ID (`otherUserId`)
   // and always display their current name, @username & avatar from `public.public_profiles`!
@@ -292,6 +303,7 @@ export function MessagesClient() {
       const iAmSender = msg.senderId === currentUserId;
       const otherUserId = iAmSender ? msg.recipientId : msg.senderId;
       if (!otherUserId || otherUserId === currentUserId) continue;
+      if (isUserBlocked(otherUserId)) continue;
 
       const liveProfile = memberById.get(otherUserId);
       const fallbackUsername = iAmSender ? msg.recipientUsername : msg.senderUsername;
@@ -332,7 +344,12 @@ export function MessagesClient() {
     }
 
     // Ensure selected partner (e.g. from ?to= or "Nouvelle discussion") appears even before first message
-    if (activePartnerId && activePartnerId !== currentUserId && !map.has(activePartnerId)) {
+    if (
+      activePartnerId &&
+      activePartnerId !== currentUserId &&
+      !isUserBlocked(activePartnerId) &&
+      !map.has(activePartnerId)
+    ) {
       const mem = memberById.get(activePartnerId);
       if (mem) {
         map.set(activePartnerId, {
@@ -352,7 +369,7 @@ export function MessagesClient() {
       const tb = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : Date.now();
       return tb - ta;
     });
-  }, [messages, memberById, currentUserId, activePartnerId]);
+  }, [messages, memberById, currentUserId, activePartnerId, isUserBlocked]);
 
   // Auto-select first conversation if none selected
   useEffect(() => {
@@ -464,6 +481,7 @@ export function MessagesClient() {
     return Array.from(memberById.values())
       .filter((m) => {
         if (m.id === currentUserId) return false;
+        if (isUserBlocked(m.id)) return false;
         if (!q) return true;
         return (
           m.username.toLowerCase().includes(q) ||
@@ -475,7 +493,43 @@ export function MessagesClient() {
         const bFriend = friendIds.has(b.id) ? 1 : 0;
         return bFriend - aFriend;
       });
-  }, [memberById, currentUserId, searchMember, friendIds]);
+  }, [memberById, currentUserId, searchMember, friendIds, isUserBlocked]);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="pt-[calc(4.75rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-12 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="rounded-3xl card-surface border border-white/[0.08] p-8 sm:p-10 text-center space-y-5">
+          <div className="w-14 h-14 rounded-2xl bg-accent/15 border border-accent/30 flex items-center justify-center mx-auto">
+            <Lock className="w-6 h-6 text-accent" />
+          </div>
+          <div className="space-y-2 max-w-md mx-auto">
+            <h1 className="text-2xl font-bold text-white tracking-tight">
+              Messagerie privée réservée aux membres
+            </h1>
+            <p className="text-sm text-[#9EA4B8] leading-relaxed">
+              Connectez-vous ou créez un compte gratuit Shiori pour discuter en privé avec vos amis et la communauté en toute sécurité.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => openAuthModal("signin")}
+              className="h-10 px-6 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-sm font-semibold shadow-accent transition-colors cursor-pointer"
+            >
+              Se connecter
+            </button>
+            <button
+              type="button"
+              onClick={() => openAuthModal("signup")}
+              className="h-10 px-5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-white text-sm font-medium transition-colors cursor-pointer"
+            >
+              Créer un compte
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-[calc(4.75rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-12 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4 sm:space-y-5 [overflow-anchor:none]">

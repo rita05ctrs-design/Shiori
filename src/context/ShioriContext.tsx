@@ -24,15 +24,19 @@ import {
   ensureSupabaseProfile,
   fetchCloudAniListStats,
   fetchCloudLibrary,
+  fetchCloudUiPreferences,
   fetchCloudUserBadges,
   removeEntryFromCloud,
   syncAniListImportBrowser,
+  syncEntriesBatchToCloud,
   syncEntryToCloud,
   syncPublicProfileToCloud,
+  syncUiPreferencesToCloud,
   syncUserBadgesToCloud,
   uploadProfileAvatar,
   type ActivityBackfillItem,
 } from "@/lib/supabase/sync";
+import { clampProgress, computeProgressStep } from "@/lib/library-utils";
 import {
   evaluateAllBadges,
   extractBadgeMetrics,
@@ -62,10 +66,14 @@ import type {
   BadgeRarity,
   CommunityActivityKind,
   ContentLanguage,
+  CustomCollection,
+  DisplayPreferences,
   EvaluatedBadge,
   FavoriteVoiceActor,
   FriendRelationState,
   FriendRequestWithProfile,
+  HomeSectionId,
+  HomeSectionPreference,
   LibraryEntry,
   LibraryStatus,
   MediaItem,
@@ -73,10 +81,14 @@ import type {
   NotificationPrefs,
   PublicProfileLibraryItem,
   PublicUserProfile,
+  ReportReason,
+  ReportTargetType,
+  SharedPublicCollection,
   ShioriNotification,
   ThemeSettings,
   ToastMessage,
   UnlockedBadgeRecord,
+  UserBlockRecord,
   UserProfile,
 } from "@/types/media";
 
@@ -90,6 +102,9 @@ const STORAGE_KEYS = {
   anilistStats: "shiori_anilist_stats_v1",
   ambiance: "shiori_ambiance_v1",
   theme: THEME_STORAGE_KEY,
+  displayPrefs: "shiori_display_prefs_v1",
+  homeSections: "shiori_home_sections_v1",
+  collections: "shiori_collections_v1",
   contentLanguage: "shiori_content_lang_v1",
   anilistAutoSync: "shiori_anilist_autosync_v1",
   favoriteStaff: "shiori_favorite_staff_v1",
@@ -98,6 +113,50 @@ const STORAGE_KEYS = {
   pinnedBadges: "shiori_pinned_badges_v1",
   socialCount: "shiori_social_count_v1",
 };
+
+export const DEFAULT_DISPLAY_PREFS: DisplayPreferences = {
+  posterSize: "normal",
+  libraryDensity: "comfortable",
+  motion: "system",
+};
+
+export const DEFAULT_HOME_SECTIONS: HomeSectionPreference[] = [
+  { id: "hero", visible: true },
+  { id: "continue_watching", visible: true },
+  { id: "stats_strip", visible: true },
+  { id: "favorites_shelf", visible: true },
+  { id: "weekly_episodes", visible: true },
+  { id: "catalog_rails", visible: true },
+  { id: "recommendations", visible: false },
+  { id: "mood_roulette", visible: false },
+  { id: "recent_activity", visible: false },
+  { id: "community_pulse", visible: false },
+];
+
+function normalizeHomeSections(raw: unknown): HomeSectionPreference[] {
+  if (!Array.isArray(raw)) return DEFAULT_HOME_SECTIONS;
+  const validIds = new Set(DEFAULT_HOME_SECTIONS.map((s) => s.id));
+  const seen = new Set<HomeSectionId>();
+  const out: HomeSectionPreference[] = [];
+  for (const item of raw) {
+    if (
+      item &&
+      typeof item === "object" &&
+      "id" in item &&
+      validIds.has((item as { id: HomeSectionId }).id)
+    ) {
+      const id = (item as { id: HomeSectionId }).id;
+      if (!seen.has(id)) {
+        seen.add(id);
+        out.push({ id, visible: Boolean((item as { visible?: boolean }).visible ?? true) });
+      }
+    }
+  }
+  for (const def of DEFAULT_HOME_SECTIONS) {
+    if (!seen.has(def.id)) out.push(def);
+  }
+  return out;
+}
 
 const DEFAULT_ANILIST_CONNECTION: AniListConnectionStatus = {
   configured: false,
@@ -110,7 +169,7 @@ const DEFAULT_ANILIST_CONNECTION: AniListConnectionStatus = {
 };
 
 const DEFAULT_AMBIANCE: AmbianceSettings = {
-  effect: "sakura",
+  effect: "none",
   density: "balanced",
   speed: "normal",
 };
@@ -135,6 +194,10 @@ interface ShioriContextValue {
   removeEntry: (mediaId: number) => void;
   importLibraryJson: (jsonText: string) => { ok: boolean; count: number; error?: string };
   exportLibraryJson: () => string;
+  exportFullAccountJson: () => Promise<string>;
+  deleteAccount: (
+    confirmation: string
+  ) => Promise<{ ok: boolean; message: string; authUserDeleted?: boolean }>;
   resetDemoData: () => void;
 
   // AniList public username import (animes, mangas & User.statistics)
@@ -240,6 +303,48 @@ interface ShioriContextValue {
   contentLanguage: ContentLanguage;
   setContentLanguage: (lang: ContentLanguage, options?: { silent?: boolean }) => void;
 
+  // Display Personalization (Poster Size, Library Density, Reduced Motion) & Home Dashboard Layout
+  displayPrefs: DisplayPreferences;
+  updateDisplayPrefs: (updates: Partial<DisplayPreferences>) => void;
+  homeSections: HomeSectionPreference[];
+  toggleHomeSection: (id: HomeSectionId) => void;
+  moveHomeSection: (id: HomeSectionId, direction: "up" | "down") => void;
+  resetHomeSections: () => void;
+
+  // Custom User Collections (Library & Shared Public Profile Collections)
+  collections: CustomCollection[];
+  createCollection: (input: {
+    name: string;
+    description?: string;
+    color?: string;
+    isPublic?: boolean;
+    mediaIds?: number[];
+  }) => CustomCollection;
+  updateCollection: (
+    id: string,
+    updates: Partial<Pick<CustomCollection, "name" | "description" | "color" | "isPublic" | "mediaIds">>
+  ) => void;
+  deleteCollection: (id: string) => void;
+  toggleMediaInCollection: (collectionId: string, mediaId: number) => void;
+
+  // Community Safety: User Blocks & Content Reporting
+  blockedUsers: UserBlockRecord[];
+  isUserBlocked: (userId: string) => boolean;
+  blockUser: (target: {
+    id: string;
+    username: string;
+    displayName?: string;
+    avatarUrl?: string | null;
+  }) => Promise<boolean>;
+  unblockUser: (targetUserId: string) => Promise<void>;
+  reportContent: (input: {
+    targetType: ReportTargetType;
+    targetId: string;
+    targetUserId?: string | null;
+    reason: ReportReason;
+    details?: string;
+  }) => Promise<{ ok: boolean; message: string }>;
+
   // Modals & UI Overlays
   commandOpen: boolean;
   setCommandOpen: (open: boolean) => void;
@@ -305,6 +410,10 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   const backfilledActivityKeyRef = useRef<string | null>(null);
   const [ambiance, setAmbiance] = useState<AmbianceSettings>(DEFAULT_AMBIANCE);
   const [theme, setTheme] = useState<ThemeSettings>(DEFAULT_THEME);
+  const [displayPrefs, setDisplayPrefs] = useState<DisplayPreferences>(DEFAULT_DISPLAY_PREFS);
+  const [homeSections, setHomeSections] = useState<HomeSectionPreference[]>(DEFAULT_HOME_SECTIONS);
+  const [collections, setCollections] = useState<CustomCollection[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<UserBlockRecord[]>([]);
   const [contentLanguage, setContentLanguageState] = useState<ContentLanguage>(
     DEFAULT_CONTENT_LANGUAGE
   );
@@ -428,6 +537,19 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       } else {
         applyThemeToDocument(DEFAULT_THEME);
       }
+      const savedDisplay = localStorage.getItem(STORAGE_KEYS.displayPrefs);
+      if (savedDisplay) {
+        setDisplayPrefs((prev) => ({ ...prev, ...JSON.parse(savedDisplay) }));
+      }
+      const savedHomeSections = localStorage.getItem(STORAGE_KEYS.homeSections);
+      if (savedHomeSections) {
+        setHomeSections(normalizeHomeSections(JSON.parse(savedHomeSections)));
+      }
+      const savedCollections = localStorage.getItem(STORAGE_KEYS.collections);
+      if (savedCollections) {
+        const parsed = JSON.parse(savedCollections);
+        if (Array.isArray(parsed)) setCollections(parsed);
+      }
     } catch {
       // ignore corrupted storage
     } finally {
@@ -474,6 +596,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             cloudProf?.avatarUrl !== undefined
               ? cloudProf.avatarUrl
               : (user.user_metadata?.avatar_url as string) ?? prev.avatarUrl ?? null,
+          bannerUrl:
+            cloudProf?.bannerUrl !== undefined ? cloudProf.bannerUrl : prev.bannerUrl ?? null,
           accentColor: cloudProf?.accentColor || prev.accentColor,
           isActivityPublic:
             cloudProf?.isActivityPublic !== undefined
@@ -499,11 +623,34 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           setFavoriteStaff(cloudProf.favoriteStaff);
         }
 
-        const [cloudLib, cloudStats, cloudBadges] = await Promise.all([
+        const [cloudLib, cloudStats, cloudBadges, cloudUiPrefs] = await Promise.all([
           fetchCloudLibrary(user.id),
           fetchCloudAniListStats(user.id),
           fetchCloudUserBadges(user.id),
+          fetchCloudUiPreferences(user.id),
         ]);
+        if (cloudUiPrefs) {
+          if (cloudUiPrefs.theme && typeof cloudUiPrefs.theme === "object") {
+            const merged = { ...DEFAULT_THEME, ...(cloudUiPrefs.theme as Partial<ThemeSettings>) };
+            setTheme(merged);
+            applyThemeToDocument(merged);
+          }
+          if (cloudUiPrefs.ambiance && typeof cloudUiPrefs.ambiance === "object") {
+            setAmbiance((prev) => ({
+              ...prev,
+              ...(cloudUiPrefs.ambiance as Partial<AmbianceSettings>),
+            }));
+          }
+          if (cloudUiPrefs.displayPrefs && typeof cloudUiPrefs.displayPrefs === "object") {
+            setDisplayPrefs((prev) => ({
+              ...prev,
+              ...(cloudUiPrefs.displayPrefs as Partial<DisplayPreferences>),
+            }));
+          }
+          if (Array.isArray(cloudUiPrefs.homeSections)) {
+            setHomeSections(normalizeHomeSections(cloudUiPrefs.homeSections));
+          }
+        }
         if (cloudLib && cloudLib.length > 0) {
           setLibrary(cloudLib);
         }
@@ -557,11 +704,32 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(data.activity)) setActivity(data.activity);
           if (Array.isArray(data.favoriteStaff)) setFavoriteStaff(data.favoriteStaff);
           if (Array.isArray(data.favoriteOrder)) setFavoriteOrder(data.favoriteOrder);
-          if (Array.isArray(data.unlockedBadges) && data.unlockedBadges.length > 0) {
-            hasStoredBadgesRef.current = true;
+          if (Array.isArray(data.collections)) setCollections(data.collections);
+          if (data.uiPreferences && typeof data.uiPreferences === "object") {
+            const ui = data.uiPreferences;
+            if (ui.theme && typeof ui.theme === "object") {
+              const merged = { ...DEFAULT_THEME, ...(ui.theme as Partial<ThemeSettings>) };
+              setTheme(merged);
+              applyThemeToDocument(merged);
+            }
+            if (ui.ambiance && typeof ui.ambiance === "object") {
+              setAmbiance((prev) => ({ ...prev, ...(ui.ambiance as Partial<AmbianceSettings>) }));
+            }
+            if (ui.displayPrefs && typeof ui.displayPrefs === "object") {
+              setDisplayPrefs((prev) => ({
+                ...prev,
+                ...(ui.displayPrefs as Partial<DisplayPreferences>),
+              }));
+            }
+            if (Array.isArray(ui.homeSections)) {
+              setHomeSections(normalizeHomeSections(ui.homeSections));
+            }
+          }
+          if (Array.isArray(data.unlockedBadges)) {
+            hasStoredBadgesRef.current = data.unlockedBadges.length > 0;
             setUnlockedBadges(data.unlockedBadges);
           }
-          if (Array.isArray(data.pinnedBadges) && data.pinnedBadges.length > 0) {
+          if (Array.isArray(data.pinnedBadges)) {
             setPinnedBadges(data.pinnedBadges.slice(0, 3));
           }
           if (typeof data.socialInteractionsCount === "number") {
@@ -575,6 +743,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Automatically sync signed-in Shiori server account changes to disk
+  const lastSyncWarnRef = useRef<number>(0);
   useEffect(() => {
     if (!hydrated || profile.mode !== "account") return;
     const timer = setTimeout(() => {
@@ -591,19 +760,45 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             bio: profile.bio,
             accentColor: profile.accentColor,
             avatarUrl: profile.avatarUrl ?? null,
+            bannerUrl: profile.bannerUrl ?? null,
             isActivityPublic: profile.isActivityPublic ?? true,
             preferredLanguage: contentLanguage,
             notificationPrefs: profile.notificationPrefs,
           },
           favoriteStaff,
           favoriteOrder,
+          collections,
+          uiPreferences: {
+            theme,
+            ambiance,
+            displayPrefs,
+            homeSections,
+          },
           unlockedBadges,
           pinnedBadges,
           socialInteractionsCount,
         }),
-      }).catch(() => {
-        // ignore transient errors
-      });
+      })
+        .then((res) => {
+          if (!res.ok && res.status !== 401 && Date.now() - lastSyncWarnRef.current > 60_000) {
+            lastSyncWarnRef.current = Date.now();
+            toast({
+              title: "Synchronisation momentanément indisponible",
+              description: "Vos modifications restent sauvegardées localement et seront resynchronisées.",
+              variant: "warning",
+            });
+          }
+        })
+        .catch(() => {
+          if (Date.now() - lastSyncWarnRef.current > 60_000) {
+            lastSyncWarnRef.current = Date.now();
+            toast({
+              title: "Hors ligne · sauvegarde locale active",
+              description: "Impossible de joindre le serveur Shiori. Aucune donnée n'est perdue.",
+              variant: "warning",
+            });
+          }
+        });
     }, 350);
     return () => clearTimeout(timer);
   }, [
@@ -614,9 +809,16 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     profile,
     favoriteStaff,
     favoriteOrder,
+    collections,
+    theme,
+    ambiance,
+    displayPrefs,
+    homeSections,
     unlockedBadges,
     pinnedBadges,
     socialInteractionsCount,
+    contentLanguage,
+    toast,
   ]);
 
   // Persist favoriteStaff & favoriteOrder to localStorage
@@ -736,7 +938,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
 
   // Debounced sync of user's public profile snapshot (for /profile/[username] & /community)
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || profile.mode === "local") return;
     const timer = setTimeout(() => {
       const scored = library.filter((e) => e.score !== null);
       const meanScore = scored.length
@@ -787,12 +989,36 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         meanScore,
       };
 
+      const libById = new Map(library.map((e) => [e.mediaId, e]));
+      const sharedCollectionsPayload: SharedPublicCollection[] = collections
+        .filter((c) => c.isPublic && c.mediaIds.length > 0)
+        .slice(0, 12)
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          color: c.color,
+          items: c.mediaIds
+            .map((mid) => libById.get(mid))
+            .filter((e): e is LibraryEntry => Boolean(e))
+            .slice(0, 20)
+            .map((e) => ({
+              mediaId: e.mediaId,
+              type: e.type,
+              title: e.title,
+              coverImage: e.coverImage,
+              score: e.score,
+            })),
+        }))
+        .filter((c) => c.items.length > 0);
+
       // 1) Direct authenticated Supabase JWT upsert into `public.profiles`
       if (profile.mode === "supabase") {
         void syncPublicProfileToCloud(profile.id, {
           username: profile.username,
           displayName: profile.displayName,
           avatarUrl: profile.avatarUrl ?? null,
+          bannerUrl: profile.bannerUrl ?? null,
           bio: profile.bio,
           accentColor: profile.accentColor,
           isActivityPublic: profile.isActivityPublic ?? true,
@@ -800,6 +1026,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           favoriteStaff,
           favoriteMedia: favoriteMediaPayload,
           libraryPreview: libraryPreviewPayload,
+          sharedCollections: sharedCollectionsPayload,
           stats: statsPayload,
           unlockedBadges,
           pinnedBadges,
@@ -815,6 +1042,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           username: profile.username,
           displayName: profile.displayName,
           avatarUrl: profile.avatarUrl ?? null,
+          bannerUrl: profile.bannerUrl ?? null,
           bio: profile.bio,
           accentColor: profile.accentColor,
           isActivityPublic: profile.isActivityPublic ?? true,
@@ -822,6 +1050,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           favoriteStaff,
           favoriteMedia: favoriteMediaPayload,
           libraryPreview: libraryPreviewPayload,
+          sharedCollections: sharedCollectionsPayload,
           stats: statsPayload,
           unlockedBadges,
           pinnedBadges,
@@ -836,15 +1065,17 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     favoriteStaff,
     orderedFavorites,
     library,
+    collections,
     unlockedBadges,
     pinnedBadges,
     socialInteractionsCount,
+    contentLanguage,
   ]);
 
   // Automatic idempotent backfill of existing library actions (favorites, scores, completed series, Seiyuu)
   // into `activity_events` whenever the user's profile is public!
   useEffect(() => {
-    if (!hydrated || profile.isActivityPublic === false) return;
+    if (!hydrated || profile.mode === "local" || profile.isActivityPublic === false) return;
     if (library.length === 0 && favoriteStaff.length === 0) return;
 
     const backfillKey = `${profile.id}:${profile.mode}:${profile.username}`;
@@ -1119,6 +1350,285 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     [theme.syncParticles]
   );
 
+  // Persist Display Preferences, Home Dashboard Layout & Custom Collections + Sync UI Prefs to Cloud
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.displayPrefs, JSON.stringify(displayPrefs));
+    } catch {
+      // ignore
+    }
+  }, [displayPrefs, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.homeSections, JSON.stringify(homeSections));
+    } catch {
+      // ignore
+    }
+  }, [homeSections, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.collections, JSON.stringify(collections));
+    } catch {
+      // ignore
+    }
+  }, [collections, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || profile.mode !== "supabase") return;
+    const timer = setTimeout(() => {
+      void syncUiPreferencesToCloud(profile.id, {
+        theme: theme as unknown as Record<string, unknown>,
+        ambiance: ambiance as unknown as Record<string, unknown>,
+        displayPrefs: displayPrefs as unknown as Record<string, unknown>,
+        homeSections,
+      });
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [hydrated, profile.id, profile.mode, theme, ambiance, displayPrefs, homeSections]);
+
+  const updateDisplayPrefs = useCallback((updates: Partial<DisplayPreferences>) => {
+    setDisplayPrefs((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  const toggleHomeSection = useCallback((id: HomeSectionId) => {
+    setHomeSections((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, visible: !s.visible } : s))
+    );
+  }, []);
+
+  const moveHomeSection = useCallback((id: HomeSectionId, direction: "up" | "down") => {
+    setHomeSections((prev) => {
+      const idx = prev.findIndex((s) => s.id === id);
+      if (idx === -1) return prev;
+      const target = direction === "up" ? idx - 1 : idx + 1;
+      if (target < 0 || target >= prev.length) return prev;
+      const copy = [...prev];
+      const [moved] = copy.splice(idx, 1);
+      copy.splice(target, 0, moved);
+      return copy;
+    });
+  }, []);
+
+  const resetHomeSections = useCallback(() => {
+    setHomeSections(DEFAULT_HOME_SECTIONS);
+  }, []);
+
+  const createCollection = useCallback(
+    (input: {
+      name: string;
+      description?: string;
+      color?: string;
+      isPublic?: boolean;
+      mediaIds?: number[];
+    }): CustomCollection => {
+      const now = new Date().toISOString();
+      const created: CustomCollection = {
+        id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: input.name.trim().slice(0, 80) || "Nouvelle collection",
+        description: (input.description ?? "").trim().slice(0, 300),
+        color: input.color || "#E5484D",
+        mediaIds: Array.from(new Set(input.mediaIds ?? [])),
+        isPublic: Boolean(input.isPublic),
+        createdAt: now,
+        updatedAt: now,
+      };
+      setCollections((prev) => [created, ...prev]);
+      toast({
+        title: `Collection « ${created.name} » créée`,
+        description: created.isPublic
+          ? "Visible sur votre profil public dès qu'elle contient au moins un titre."
+          : "Collection privée prête dans votre bibliothèque.",
+        variant: "success",
+      });
+      return created;
+    },
+    [toast]
+  );
+
+  const updateCollection = useCallback(
+    (
+      id: string,
+      updates: Partial<
+        Pick<CustomCollection, "name" | "description" | "color" | "isPublic" | "mediaIds">
+      >
+    ) => {
+      setCollections((prev) =>
+        prev.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                ...updates,
+                name: updates.name !== undefined ? updates.name.trim().slice(0, 80) || c.name : c.name,
+                description:
+                  updates.description !== undefined
+                    ? updates.description.trim().slice(0, 300)
+                    : c.description,
+                mediaIds:
+                  updates.mediaIds !== undefined
+                    ? Array.from(new Set(updates.mediaIds))
+                    : c.mediaIds,
+                updatedAt: new Date().toISOString(),
+              }
+            : c
+        )
+      );
+    },
+    []
+  );
+
+  const deleteCollection = useCallback(
+    (id: string) => {
+      setCollections((prev) => prev.filter((c) => c.id !== id));
+      toast({ title: "Collection supprimée", variant: "info" });
+    },
+    [toast]
+  );
+
+  const toggleMediaInCollection = useCallback((collectionId: string, mediaId: number) => {
+    setCollections((prev) =>
+      prev.map((c) => {
+        if (c.id !== collectionId) return c;
+        const exists = c.mediaIds.includes(mediaId);
+        return {
+          ...c,
+          mediaIds: exists
+            ? c.mediaIds.filter((id) => id !== mediaId)
+            : [...c.mediaIds, mediaId],
+          updatedAt: new Date().toISOString(),
+        };
+      })
+    );
+  }, []);
+
+  // Load & manage User Blocks & Content Reports
+  useEffect(() => {
+    if (!hydrated || profile.mode === "local") {
+      setBlockedUsers([]);
+      return;
+    }
+    fetch("/api/community/blocks", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data?.blocks)) setBlockedUsers(data.blocks);
+      })
+      .catch(() => {});
+  }, [hydrated, profile.id, profile.mode]);
+
+  const isUserBlocked = useCallback(
+    (userId: string) => blockedUsers.some((b) => b.blockedId === userId),
+    [blockedUsers]
+  );
+
+  const blockUser = useCallback(
+    async (target: {
+      id: string;
+      username: string;
+      displayName?: string;
+      avatarUrl?: string | null;
+    }) => {
+      try {
+        const res = await fetch("/api/community/blocks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: profile.id,
+            username: profile.username,
+            targetUserId: target.id,
+            targetUsername: target.username,
+            targetDisplayName: target.displayName,
+            targetAvatarUrl: target.avatarUrl ?? null,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) {
+          toast({
+            title: "Blocage impossible",
+            description: data?.error || "Une erreur est survenue.",
+            variant: "warning",
+          });
+          return false;
+        }
+        if (data.block) {
+          setBlockedUsers((prev) => [
+            data.block as UserBlockRecord,
+            ...prev.filter((b) => b.blockedId !== target.id),
+          ]);
+        }
+        toast({
+          title: `@${target.username} bloqué`,
+          description: "Ses messages et activités publiques sont désormais masqués.",
+          variant: "info",
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [profile.id, profile.username, toast]
+  );
+
+  const unblockUser = useCallback(
+    async (targetUserId: string) => {
+      try {
+        await fetch("/api/community/blocks", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: profile.id,
+            username: profile.username,
+            targetUserId,
+          }),
+        });
+        setBlockedUsers((prev) => prev.filter((b) => b.blockedId !== targetUserId));
+        toast({ title: "Utilisateur débloqué", variant: "info" });
+      } catch {
+        // ignore
+      }
+    },
+    [profile.id, profile.username, toast]
+  );
+
+  const reportContent = useCallback(
+    async (input: {
+      targetType: ReportTargetType;
+      targetId: string;
+      targetUserId?: string | null;
+      reason: ReportReason;
+      details?: string;
+    }): Promise<{ ok: boolean; message: string }> => {
+      try {
+        const res = await fetch("/api/community/reports", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: profile.id,
+            username: profile.username,
+            ...input,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) {
+          const msg = data?.error || "Impossible d'envoyer le signalement.";
+          toast({ title: "Signalement refusé", description: msg, variant: "warning" });
+          return { ok: false, message: msg };
+        }
+        const msg = data?.message || "Signalement enregistré.";
+        toast({ title: "Signalement envoyé", description: msg, variant: "success" });
+        return { ok: true, message: msg };
+      } catch {
+        const msg = "Erreur réseau lors du signalement.";
+        toast({ title: "Erreur réseau", description: msg, variant: "warning" });
+        return { ok: false, message: msg };
+      }
+    },
+    [profile.id, profile.username, toast]
+  );
+
   const resetTheme = useCallback(() => {
     setTheme(DEFAULT_THEME);
     applyThemeToDocument(DEFAULT_THEME);
@@ -1320,7 +1830,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       badgeId?: string;
       badgeRarity?: BadgeRarity;
     }) => {
-      if (profile.isActivityPublic === false) return;
+      if (profile.mode === "local" || profile.isActivityPublic === false) return;
       fetch("/api/community/activity", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1633,12 +2143,12 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refreshUnreadMessages = useCallback(async () => {
+    if (profile.mode === "local") {
+      setUnreadMessagesCount(0);
+      return 0;
+    }
     try {
-      const params = new URLSearchParams({
-        userId: profile.id,
-        username: profile.username,
-      });
-      const res = await fetch(`/api/messages?${params.toString()}`, { cache: "no-store" });
+      const res = await fetch("/api/messages", { cache: "no-store" });
       if (!res.ok) return 0;
       const data = await res.json();
       const count = Number(data?.unreadCount ?? 0);
@@ -1647,18 +2157,20 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return 0;
     }
-  }, [profile.id, profile.username]);
+  }, [profile.mode]);
 
   // ============================================================================
   // Friends System — Search, Add, Accept, Remove & Realtime Sync
   // ============================================================================
   const refreshFriendships = useCallback(async () => {
+    if (profile.mode === "local") {
+      setFriends([]);
+      setIncomingFriendRequests([]);
+      setOutgoingFriendRequests([]);
+      return;
+    }
     try {
-      const params = new URLSearchParams({
-        userId: profile.id,
-        username: profile.username,
-      });
-      const res = await fetch(`/api/community/friends?${params.toString()}`, {
+      const res = await fetch("/api/community/friends", {
         cache: "no-store",
       });
       if (!res.ok) return;
@@ -1673,7 +2185,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore transient errors
     }
-  }, [profile.id, profile.username]);
+  }, [profile.mode]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1866,12 +2378,12 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
 
   // Hydrate unread DM badge + unified real-time notifications bell (friend requests, messages, likes/comments)
   const refreshNotifications = useCallback(async () => {
+    if (profile.mode === "local") {
+      setSocialNotifications([]);
+      return;
+    }
     try {
-      const params = new URLSearchParams({
-        userId: profile.id,
-        username: profile.username,
-      });
-      const res = await fetch(`/api/notifications/realtime?${params.toString()}`, {
+      const res = await fetch("/api/notifications/realtime", {
         cache: "no-store",
       });
       if (!res.ok) return;
@@ -1882,10 +2394,10 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore transient network errors
     }
-  }, [profile.id, profile.username]);
+  }, [profile.mode]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || profile.mode === "local") return;
     void refreshUnreadMessages();
     void refreshNotifications();
 
@@ -2039,6 +2551,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
               genres: media.genres,
               studio: media.studio,
               format: media.format,
+              season: media.season ?? null,
               seasonYear: media.seasonYear ?? media.startYear,
               averageScore: media.averageScore,
               status: "WATCHING",
@@ -2050,13 +2563,9 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             };
 
       const nextStatus = updates.status ?? base.status;
-      let nextProgress = updates.progress ?? base.progress;
-      if (nextProgress < 0) nextProgress = 0;
-      if (base.totalUnits && nextProgress > base.totalUnits) {
-        nextProgress = base.totalUnits;
-      }
+      let nextProgress = clampProgress(updates.progress ?? base.progress, base.totalUnits);
       if (nextStatus === "COMPLETED" && base.totalUnits && updates.progress === undefined) {
-        nextProgress = base.totalUnits;
+        nextProgress = clampProgress(base.totalUnits, base.totalUnits);
       }
 
       const merged: LibraryEntry = {
@@ -2195,27 +2704,18 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       const existing = library.find((e) => e.mediaId === mediaId);
       if (!existing) return;
 
-      const nextProg = Math.max(
-        0,
-        existing.totalUnits
-          ? Math.min(existing.totalUnits, existing.progress + delta)
-          : existing.progress + delta
-      );
-      if (nextProg === existing.progress) return;
+      const step = computeProgressStep(existing, delta);
+      if (!step.changed) return;
 
-      const reachedEnd = Boolean(existing.totalUnits && nextProg >= existing.totalUnits);
-      const nextStatus: LibraryStatus = reachedEnd
-        ? "COMPLETED"
-        : existing.status === "PLAN_TO_WATCH" && nextProg > 0
-          ? "WATCHING"
-          : existing.status;
+      const { progress: nextProg, status: nextStatus, reachedEnd } = step;
 
       const updated: LibraryEntry = {
         ...existing,
         progress: nextProg,
         status: nextStatus,
         updatedAt: new Date().toISOString(),
-        completedAt: reachedEnd ? new Date().toISOString().slice(0, 10) : existing.completedAt,
+        startedAt: step.startedAt ?? existing.startedAt,
+        completedAt: step.completedAt ?? existing.completedAt,
       };
 
       setLibrary((prev) => prev.map((e) => (e.mediaId === mediaId ? updated : e)));
@@ -2364,22 +2864,235 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     );
   }, [library, profile]);
 
+  const exportFullAccountJson = useCallback(async () => {
+    if (profile.mode !== "local") {
+      try {
+        const res = await fetch("/api/account", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          return JSON.stringify(data, null, 2);
+        }
+      } catch {
+        // fall through to local snapshot
+      }
+    }
+    return JSON.stringify(
+      {
+        schemaVersion: "shiori-export-v2",
+        exportedAt: new Date().toISOString(),
+        source: profile.mode,
+        profile,
+        library,
+        collections,
+        favoriteStaff,
+        favoriteOrder,
+        unlockedBadges,
+        pinnedBadges,
+        preferences: {
+          theme,
+          ambiance,
+          displayPrefs,
+          homeSections,
+          contentLanguage,
+        },
+        notifications,
+        activity,
+      },
+      null,
+      2
+    );
+  }, [
+    profile,
+    library,
+    collections,
+    favoriteStaff,
+    favoriteOrder,
+    unlockedBadges,
+    pinnedBadges,
+    theme,
+    ambiance,
+    displayPrefs,
+    homeSections,
+    contentLanguage,
+    notifications,
+    activity,
+  ]);
+
+  const deleteAccount = useCallback(
+    async (confirmation: string) => {
+      if (profile.mode === "local") {
+        return {
+          ok: false,
+          message: "Aucun compte connecté à supprimer (session invité locale).",
+        };
+      }
+      try {
+        const res = await fetch("/api/account", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirmation }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) {
+          return {
+            ok: false,
+            message: data?.error || "Impossible de supprimer le compte pour le moment.",
+          };
+        }
+
+        const supabase = getSupabaseBrowserClient();
+        if (supabase) {
+          await supabase.auth.signOut().catch(() => {});
+        }
+
+        if (typeof window !== "undefined") {
+          for (const key of Object.values(STORAGE_KEYS)) {
+            try {
+              localStorage.removeItem(key);
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        const defLib = createDefaultLibrary();
+        setProfile(createDefaultProfile());
+        setLibrary(defLib);
+        setNotifications(createDefaultNotifications());
+        setActivity(createDefaultActivity(defLib));
+        setFavoriteStaff([]);
+        setFavoriteOrder([]);
+        setCollections([]);
+        setAnilistStats(null);
+        hasStoredBadgesRef.current = false;
+        setUnlockedBadges([]);
+        setPinnedBadges([]);
+        setSocialInteractionsCount(0);
+        setFriends([]);
+        setIncomingFriendRequests([]);
+        setOutgoingFriendRequests([]);
+        setBlockedUsers([]);
+        setUnreadMessagesCount(0);
+        setReadNotifIds([]);
+        setDismissedNotifIds([]);
+        setSocialNotifications([]);
+
+        const msg =
+          typeof data?.note === "string" && data.note
+            ? data.note
+            : "Votre compte et toutes les données associées ont été supprimés.";
+        toast({
+          title: "Compte supprimé",
+          description: msg,
+          variant: "success",
+        });
+        return {
+          ok: true,
+          message: msg,
+          authUserDeleted: Boolean(data?.authUserDeleted),
+        };
+      } catch {
+        return {
+          ok: false,
+          message: "Erreur réseau lors de la suppression du compte.",
+        };
+      }
+    },
+    [profile.mode, toast]
+  );
+
   const importLibraryJson = useCallback(
     (jsonText: string) => {
       try {
         const parsed = JSON.parse(jsonText);
-        const entries: LibraryEntry[] = Array.isArray(parsed)
+        const rawList: unknown[] = Array.isArray(parsed)
           ? parsed
-          : Array.isArray(parsed.entries)
+          : Array.isArray(parsed?.entries)
             ? parsed.entries
-            : [];
+            : Array.isArray(parsed?.library)
+              ? parsed.library
+              : [];
+
+        const validStatuses = new Set<LibraryStatus>([
+          "WATCHING",
+          "COMPLETED",
+          "ON_HOLD",
+          "DROPPED",
+          "PLAN_TO_WATCH",
+        ]);
+        const deduped = new Map<number, LibraryEntry>();
+        const nowIso = new Date().toISOString();
+
+        for (const item of rawList) {
+          if (!item || typeof item !== "object") continue;
+          const r = item as Record<string, unknown>;
+          const mediaId = Number(r.mediaId ?? r.id);
+          const title = typeof r.title === "string" ? r.title.trim() : "";
+          if (!Number.isFinite(mediaId) || mediaId <= 0 || !title) continue;
+
+          const type: MediaType = r.type === "MANGA" ? "MANGA" : "ANIME";
+          const totalUnits =
+            typeof r.totalUnits === "number" && Number.isFinite(r.totalUnits) && r.totalUnits > 0
+              ? Math.floor(r.totalUnits)
+              : null;
+          const status: LibraryStatus = validStatuses.has(r.status as LibraryStatus)
+            ? (r.status as LibraryStatus)
+            : "PLAN_TO_WATCH";
+          const progress = clampProgress(Number(r.progress ?? 0), totalUnits);
+          const rawScore = r.score === null || r.score === undefined || r.score === "" ? null : Number(r.score);
+          const score =
+            rawScore !== null && Number.isFinite(rawScore)
+              ? Math.max(0, Math.min(10, Math.round(rawScore * 10) / 10))
+              : null;
+
+          deduped.set(Math.floor(mediaId), {
+            mediaId: Math.floor(mediaId),
+            type,
+            title,
+            nativeTitle: typeof r.nativeTitle === "string" ? r.nativeTitle : null,
+            coverImage: typeof r.coverImage === "string" ? r.coverImage : "",
+            bannerImage: typeof r.bannerImage === "string" ? r.bannerImage : null,
+            totalUnits,
+            duration:
+              typeof r.duration === "number" && Number.isFinite(r.duration) && r.duration > 0
+                ? Math.floor(r.duration)
+                : null,
+            genres: Array.isArray(r.genres)
+              ? r.genres.filter((g): g is string => typeof g === "string" && g.trim().length > 0)
+              : [],
+            studio: typeof r.studio === "string" ? r.studio : null,
+            format: typeof r.format === "string" ? r.format : null,
+            season: typeof r.season === "string" ? r.season : null,
+            seasonYear:
+              typeof r.seasonYear === "number" && Number.isFinite(r.seasonYear)
+                ? Math.floor(r.seasonYear)
+                : null,
+            averageScore:
+              typeof r.averageScore === "number" && Number.isFinite(r.averageScore)
+                ? Math.round(r.averageScore)
+                : null,
+            status,
+            progress,
+            score,
+            isFavorite: Boolean(r.isFavorite),
+            notes: typeof r.notes === "string" ? r.notes : "",
+            startedAt: typeof r.startedAt === "string" ? r.startedAt : null,
+            completedAt: typeof r.completedAt === "string" ? r.completedAt : null,
+            updatedAt: typeof r.updatedAt === "string" && r.updatedAt ? r.updatedAt : nowIso,
+          });
+        }
+
+        const entries = Array.from(deduped.values());
         if (!entries.length) {
           return { ok: false, count: 0, error: "Aucune entrée valide trouvée dans le fichier JSON." };
         }
         setLibrary(entries);
+        if (profile.mode === "supabase" && profile.id) {
+          void syncEntriesBatchToCloud(profile.id, entries);
+        }
         toast({
           title: "Bibliothèque importée",
-          description: `${entries.length} titres chargés avec succès.`,
+          description: `${entries.length.toLocaleString("fr-FR")} titre${entries.length > 1 ? "s" : ""} chargé${entries.length > 1 ? "s" : ""} avec succès.`,
           variant: "success",
         });
         return { ok: true, count: entries.length };
@@ -2387,7 +3100,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, count: 0, error: "Format JSON invalide." };
       }
     },
-    [toast]
+    [profile.id, profile.mode, toast]
   );
 
   const resetDemoData = useCallback(() => {
@@ -2546,7 +3259,14 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           mode: "supabase",
         }));
         const cloudLib = await fetchCloudLibrary(data.user.id);
-        if (cloudLib && cloudLib.length > 0) setLibrary(cloudLib);
+        if (cloudLib !== null) setLibrary(cloudLib);
+        setCollections([]);
+        setAnilistStats(null);
+        setUnlockedBadges([]);
+        setPinnedBadges([]);
+        hasStoredBadgesRef.current = false;
+        setReadNotifIds([]);
+        setDismissedNotifIds([]);
         toast({
           title: "Connecté via Supabase",
           description: `Bienvenue, ${name}`,
@@ -2568,21 +3288,42 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       }
 
       setProfile(data.user);
-      if (Array.isArray(data.library)) setLibrary(data.library);
-      if (Array.isArray(data.notifications)) setNotifications(data.notifications);
-      if (Array.isArray(data.activity)) setActivity(data.activity);
-      if (Array.isArray(data.favoriteStaff)) setFavoriteStaff(data.favoriteStaff);
-      if (Array.isArray(data.favoriteOrder)) setFavoriteOrder(data.favoriteOrder);
-      if (Array.isArray(data.unlockedBadges) && data.unlockedBadges.length > 0) {
-        hasStoredBadgesRef.current = true;
-        setUnlockedBadges(data.unlockedBadges);
+      setLibrary(Array.isArray(data.library) ? data.library : []);
+      setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+      setActivity(Array.isArray(data.activity) ? data.activity : []);
+      setFavoriteStaff(Array.isArray(data.favoriteStaff) ? data.favoriteStaff : []);
+      setFavoriteOrder(Array.isArray(data.favoriteOrder) ? data.favoriteOrder : []);
+      setCollections(Array.isArray(data.collections) ? data.collections : []);
+      if (data.uiPreferences && typeof data.uiPreferences === "object") {
+        const ui = data.uiPreferences;
+        if (ui.theme && typeof ui.theme === "object") {
+          const merged = { ...DEFAULT_THEME, ...(ui.theme as Partial<ThemeSettings>) };
+          setTheme(merged);
+          applyThemeToDocument(merged);
+        }
+        if (ui.ambiance && typeof ui.ambiance === "object") {
+          setAmbiance((prev) => ({ ...prev, ...(ui.ambiance as Partial<AmbianceSettings>) }));
+        }
+        if (ui.displayPrefs && typeof ui.displayPrefs === "object") {
+          setDisplayPrefs((prev) => ({
+            ...prev,
+            ...(ui.displayPrefs as Partial<DisplayPreferences>),
+          }));
+        }
+        if (Array.isArray(ui.homeSections)) {
+          setHomeSections(normalizeHomeSections(ui.homeSections));
+        }
       }
-      if (Array.isArray(data.pinnedBadges)) {
-        setPinnedBadges(data.pinnedBadges.slice(0, 3));
-      }
-      if (typeof data.socialInteractionsCount === "number") {
-        setSocialInteractionsCount(data.socialInteractionsCount);
-      }
+      const serverBadges = Array.isArray(data.unlockedBadges) ? data.unlockedBadges : [];
+      hasStoredBadgesRef.current = serverBadges.length > 0;
+      setUnlockedBadges(serverBadges);
+      setPinnedBadges(Array.isArray(data.pinnedBadges) ? data.pinnedBadges.slice(0, 3) : []);
+      setSocialInteractionsCount(
+        typeof data.socialInteractionsCount === "number" ? data.socialInteractionsCount : 0
+      );
+      setAnilistStats(null);
+      setReadNotifIds([]);
+      setDismissedNotifIds([]);
 
       toast({
         title: `Bon retour, ${data.user.displayName} !`,
@@ -2632,13 +3373,26 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             displayName,
             username,
             avatarInitials: displayName.slice(0, 2).toUpperCase(),
+            bannerUrl: null,
             mode: "supabase",
           }));
           setLibrary(nextLib);
+          if (!keepLib) {
+            setFavoriteStaff([]);
+            setFavoriteOrder([]);
+            setCollections([]);
+            setAnilistStats(null);
+            setActivity([]);
+          }
+          // Always start a newly registered account with clean badges & notifications (never leak guest badges!)
+          hasStoredBadgesRef.current = false;
+          setUnlockedBadges([]);
+          setPinnedBadges([]);
+          setSocialInteractionsCount(0);
+          setReadNotifIds([]);
+          setDismissedNotifIds([]);
           if (keepLib && nextLib.length > 0) {
-            for (const entry of nextLib) {
-              void syncEntryToCloud(data.user.id, entry);
-            }
+            void syncEntriesBatchToCloud(data.user.id, nextLib);
           }
           toast({
             title: `Bienvenue sur Shiori, ${displayName} !`,
@@ -2680,6 +3434,20 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       setLibrary(Array.isArray(data.library) ? data.library : []);
       setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
       setActivity(Array.isArray(data.activity) ? data.activity : []);
+      // Reset guest/demo state so a newly registered account never inherits demo badges or staff
+      if (!keepLib) {
+        setFavoriteStaff([]);
+        setFavoriteOrder([]);
+        setCollections([]);
+        setAnilistStats(null);
+      }
+      hasStoredBadgesRef.current = false;
+      setUnlockedBadges([]);
+      setPinnedBadges([]);
+      setSocialInteractionsCount(0);
+      setReadNotifIds([]);
+      setDismissedNotifIds([]);
+      setSocialNotifications([]);
 
       toast({
         title: `Bienvenue sur Shiori, ${data.user.displayName} !`,
@@ -2723,16 +3491,32 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   const signOutSupabase = useCallback(async () => {
     const supabase = getSupabaseBrowserClient();
     if (supabase) {
-      await supabase.auth.signOut();
-    } else {
-      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+      await supabase.auth.signOut().catch(() => {});
     }
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+
     const defLib = createDefaultLibrary();
     setProfile(createDefaultProfile());
     setLibrary(defLib);
     setNotifications(createDefaultNotifications());
     setActivity(createDefaultActivity(defLib));
-    toast({ title: "Déconnecté", description: "Vous êtes repassé en session invité." });
+    setFavoriteStaff([]);
+    setFavoriteOrder([]);
+    setCollections([]);
+    setAnilistStats(null);
+    hasStoredBadgesRef.current = false;
+    setUnlockedBadges([]);
+    setPinnedBadges([]);
+    setSocialInteractionsCount(0);
+    setFriends([]);
+    setIncomingFriendRequests([]);
+    setOutgoingFriendRequests([]);
+    setBlockedUsers([]);
+    setUnreadMessagesCount(0);
+    setReadNotifIds([]);
+    setDismissedNotifIds([]);
+    setSocialNotifications([]);
+    toast({ title: "Déconnecté", description: "Vous êtes repassé en session invité locale." });
   }, [toast]);
 
   const readNotifSet = useMemo(() => new Set(readNotifIds), [readNotifIds]);
@@ -2818,6 +3602,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     removeEntry,
     importLibraryJson,
     exportLibraryJson,
+    exportFullAccountJson,
+    deleteAccount,
     resetDemoData,
     anilistStats,
     importFromAniList,
@@ -2879,6 +3665,22 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     resetTheme,
     contentLanguage,
     setContentLanguage,
+    displayPrefs,
+    updateDisplayPrefs,
+    homeSections,
+    toggleHomeSection,
+    moveHomeSection,
+    resetHomeSections,
+    collections,
+    createCollection,
+    updateCollection,
+    deleteCollection,
+    toggleMediaInCollection,
+    blockedUsers,
+    isUserBlocked,
+    blockUser,
+    unblockUser,
+    reportContent,
     commandOpen,
     setCommandOpen,
     authModalOpen,

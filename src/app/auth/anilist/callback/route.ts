@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -6,9 +7,17 @@ import {
   fetchAniListViewer,
   saveAniListConnection,
 } from "@/lib/server/anilist-oauth";
+import { isSecureRequest } from "@/lib/server/auth-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function timingSafeEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 /**
  * AniList OAuth 2.0 Callback Route: /auth/anilist/callback
@@ -37,10 +46,10 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Validate CSRF state when echoed by AniList
+  // Strictly enforce CSRF state verification (prevents OAuth login/link CSRF)
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(ANILIST_STATE_COOKIE)?.value;
-  if (expectedState && returnedState && expectedState !== returnedState) {
+  if (!expectedState || !returnedState || !timingSafeEquals(expectedState, returnedState)) {
     return NextResponse.redirect(
       `${origin}/settings?anilist_error=invalid_state#anilist-sync`
     );
@@ -63,7 +72,7 @@ export async function GET(request: NextRequest) {
     response.cookies.set(ANILIST_STATE_COOKIE, "", {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecureRequest(request),
       path: "/",
       maxAge: 0,
     });

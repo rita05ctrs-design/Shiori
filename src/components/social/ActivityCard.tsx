@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Sparkles,
   Trophy,
+  Flag,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -18,7 +19,15 @@ import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
 import { BADGE_BY_ID, RARITY_META } from "@/lib/badges";
 import { cn, formatRelativeTime } from "@/lib/utils";
-import type { ActivityCommentItem, CommunityActivityItem } from "@/types/media";
+import type { ActivityCommentItem, CommunityActivityItem, ReportReason } from "@/types/media";
+
+const ACTIVITY_REPORT_REASONS: { id: ReportReason; label: string }[] = [
+  { id: "spoiler", label: "Spoiler" },
+  { id: "spam", label: "Spam" },
+  { id: "harassment", label: "Abus" },
+  { id: "inappropriate", label: "Inapproprié" },
+  { id: "other", label: "Autre" },
+];
 
 interface ActivityCardProps {
   item: CommunityActivityItem;
@@ -63,15 +72,35 @@ const KIND_META: Record<
 };
 
 export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
-  const { profile, toast, recordSocialInteraction } = useShiori();
+  const { profile, toast, recordSocialInteraction, reportContent } = useShiori();
   const [commentsOpen, setCommentsOpen] = useState(item.comments.length > 0);
   const [commentText, setCommentText] = useState("");
-  const [liking, setLiking] = useState(false);
   const [commenting, setCommenting] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportReason>("spoiler");
+  const [reporting, setReporting] = useState(false);
 
+  const isOwnActivity = item.userId === profile.id;
   const isLiked = item.likes.includes(profile.id);
   const meta = KIND_META[item.kind] ?? KIND_META.UPDATE;
   const KindIcon = meta.icon;
+
+  const handleSubmitReport = async () => {
+    if (reporting) return;
+    setReporting(true);
+    try {
+      await reportContent({
+        targetType: "activity",
+        targetId: item.id,
+        targetUserId: item.userId,
+        reason: reportReason,
+        details: `${item.actorUsername}: ${item.mediaTitle}`,
+      });
+      setReportOpen(false);
+    } finally {
+      setReporting(false);
+    }
+  };
 
   const handleToggleLike = async () => {
     // Optimistic instant toggle (supports rapid double clicks without blocking!)
@@ -83,7 +112,6 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
     if (addingLike) {
       recordSocialInteraction();
     }
-    setLiking(true);
 
     try {
       const res = await fetch(`/api/community/activity/${encodeURIComponent(item.id)}/like`, {
@@ -104,8 +132,6 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
       }
     } catch {
       onUpdate(item);
-    } finally {
-      setLiking(false);
     }
   };
 
@@ -197,6 +223,14 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
               >
                 @{item.actorUsername}
               </Link>
+              {(item.id.startsWith("act-seed-") || item.userId.startsWith("community-")) && (
+                <span
+                  title="Activité d'exemple de démonstration"
+                  className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 font-mono text-[9.5px] uppercase tracking-wider text-amber-200"
+                >
+                  Exemple
+                </span>
+              )}
               <PinnedBadgesRow
                 badgeIds={item.actorPinnedBadges}
                 size="xs"
@@ -335,38 +369,94 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
         </div>
       )}
 
-      {/* Social Action Bar: Like + Comments */}
-      <div className="flex items-center gap-2 pt-0.5">
-        <button
-          type="button"
-          onClick={() => void handleToggleLike()}
-          className={cn(
-            "h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
-            isLiked
-              ? "bg-rose-500/18 border-rose-400/45 text-rose-300"
-              : "bg-white/[0.04] hover:bg-white/[0.09] border-white/[0.08] text-[#B5B9C9] hover:text-white"
-          )}
-        >
-          <Heart className={cn("w-3.5 h-3.5", isLiked && "fill-current")} />
-          <span className="font-mono">{item.likes.length}</span>
-          <span>J&apos;aime</span>
-        </button>
+      {/* Social Action Bar: Like + Comments + Report */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleToggleLike()}
+            className={cn(
+              "h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
+              isLiked
+                ? "bg-rose-500/18 border-rose-400/45 text-rose-300"
+                : "bg-white/[0.04] hover:bg-white/[0.09] border-white/[0.08] text-[#B5B9C9] hover:text-white"
+            )}
+          >
+            <Heart className={cn("w-3.5 h-3.5", isLiked && "fill-current")} />
+            <span className="font-mono">{item.likes.length}</span>
+            <span>J&apos;aime</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setCommentsOpen((v) => !v)}
-          className={cn(
-            "h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
-            commentsOpen
-              ? "bg-accent/18 border-accent/40 text-accent-soft"
-              : "bg-white/[0.04] hover:bg-white/[0.09] border-white/[0.08] text-[#B5B9C9] hover:text-white"
-          )}
-        >
-          <MessageCircle className="w-3.5 h-3.5" />
-          <span className="font-mono">{item.comments.length}</span>
-          <span>Commentaires</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setCommentsOpen((v) => !v)}
+            className={cn(
+              "h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
+              commentsOpen
+                ? "bg-accent/18 border-accent/40 text-accent-soft"
+                : "bg-white/[0.04] hover:bg-white/[0.09] border-white/[0.08] text-[#B5B9C9] hover:text-white"
+            )}
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span className="font-mono">{item.comments.length}</span>
+            <span>Commentaires</span>
+          </button>
+        </div>
+
+        {!isOwnActivity && (
+          <button
+            type="button"
+            onClick={() => setReportOpen((v) => !v)}
+            className="h-8 px-2.5 rounded-full text-[11px] font-medium text-[#7D8296] hover:text-amber-300 hover:bg-amber-500/10 inline-flex items-center gap-1 transition-colors cursor-pointer"
+            title="Signaler cette publication"
+          >
+            <Flag className="w-3 h-3" />
+            <span>Signaler</span>
+          </button>
+        )}
       </div>
+
+      {reportOpen && !isOwnActivity && (
+        <div className="rounded-xl bg-obsidian/80 border border-amber-400/30 p-3 space-y-2.5">
+          <p className="text-[11px] font-semibold text-amber-200">
+            Motif du signalement :
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {ACTIVITY_REPORT_REASONS.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => setReportReason(r.id)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[11px] font-medium border cursor-pointer transition-colors",
+                  reportReason === r.id
+                    ? "bg-amber-500/20 border-amber-400/50 text-amber-100"
+                    : "bg-white/[0.03] border-white/[0.08] text-[#A2A6B8] hover:text-white"
+                )}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setReportOpen(false)}
+              className="px-3 py-1 rounded-lg text-[11px] text-[#9A9EAE] hover:text-white cursor-pointer"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              disabled={reporting}
+              onClick={() => void handleSubmitReport()}
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-[#090A0F] text-[11px] font-semibold cursor-pointer"
+            >
+              {reporting ? "Envoi..." : "Confirmer le signalement"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Comments Section */}
       {commentsOpen && (

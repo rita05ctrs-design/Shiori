@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createSessionToken,
   hashPassword,
+  isSecureRequest,
   readAccountDb,
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SEC,
@@ -11,19 +12,37 @@ import {
   writeAccountDb,
   type StoredAccount,
 } from "@/lib/server/auth-store";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/server/rate-limit";
 import type { LibraryEntry } from "@/types/media";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const email = String(body.email ?? "").trim().toLowerCase();
+    const ip = getClientIp(request);
+    const limit = checkRateLimit(`auth:register:ip:${ip}`, 8, 15 * 60_000);
+    if (!limit.ok) {
+      return rateLimitResponse(limit.retryAfterSec);
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { error: "Requête JSON invalide." },
+        { status: 400 }
+      );
+    }
+
+    const email = String(body.email ?? "").trim().toLowerCase().slice(0, 160);
     const password = String(body.password ?? "");
-    const displayName = String(body.displayName ?? "").trim();
-    const requestedUsername = String(body.username ?? "").trim();
+    const displayName = String(body.displayName ?? "").trim().slice(0, 60);
+    const requestedUsername = String(body.username ?? "").trim().slice(0, 30);
     const initialLibrary: LibraryEntry[] = Array.isArray(body.initialLibrary)
-      ? body.initialLibrary
+      ? body.initialLibrary.slice(0, 5000)
       : [];
 
     if (!displayName || displayName.length < 2) {
@@ -40,9 +59,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
+    if (password.length < 6 || password.length > 128) {
       return NextResponse.json(
-        { error: "Le mot de passe doit contenir au moins 6 caractères." },
+        { error: "Le mot de passe doit contenir entre 6 et 128 caractères." },
         { status: 400 }
       );
     }
@@ -110,7 +129,7 @@ export async function POST(request: NextRequest) {
     res.cookies.set(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecureRequest(request),
       path: "/",
       maxAge: SESSION_MAX_AGE_SEC,
     });

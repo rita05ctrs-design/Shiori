@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -32,7 +32,6 @@ import {
   formatScore,
   formatSeason,
   getDisplayTitle,
-  stripHtml,
 } from "@/lib/utils";
 import type { MediaDetail } from "@/types/media";
 

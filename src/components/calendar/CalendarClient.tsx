@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
@@ -22,11 +22,18 @@ import {
   Film,
   Layers,
   ChevronRight,
+  ChevronLeft,
+  Globe,
   X,
   ListChecks,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
+import {
+  buildMonthCalendarGrid,
+  formatDateKeyInTimezone,
+  formatTimeInTimezone,
+} from "@/lib/calendar-utils";
 import {
   cn,
   formatCompactNumber,
@@ -36,7 +43,6 @@ import {
   formatSeason,
   getDisplayTitle,
   STATUS_CONFIG,
-  stripHtml,
 } from "@/lib/utils";
 import type { SeasonalBucket } from "@/lib/anilist";
 import type { AiringScheduleItem, MediaItem } from "@/types/media";
@@ -66,20 +72,18 @@ const MONTHS_FR = [
   "déc.",
 ];
 
-function getLocalDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function formatReleaseDate(media: MediaItem): { label: string; daysUntil: number | null } {
+function formatReleaseDate(
+  media: MediaItem,
+  nowMs: number | null
+): { label: string; daysUntil: number | null } {
   const d = media.startDate;
   if (d?.year && d?.month && d?.day) {
     const dt = new Date(d.year, d.month - 1, d.day);
-    const diffDays = Math.ceil((dt.getTime() - Date.now()) / 86400000);
+    const diffDays =
+      nowMs && nowMs > 0 ? Math.ceil((dt.getTime() - nowMs) / 86400000) : null;
     return {
       label: `${d.day} ${MONTHS_FR[d.month - 1]} ${d.year}`,
-      daysUntil: diffDays > 0 ? diffDays : null,
+      daysUntil: diffDays !== null && diffDays > 0 ? diffDays : null,
     };
   }
   if (media.season && media.seasonYear) {
@@ -95,6 +99,24 @@ function formatReleaseDate(media: MediaItem): { label: string; daysUntil: number
 }
 
 type SeasonFormatFilter = "ALL" | "TV" | "MOVIE" | "ONA_OVA" | "MYLIST";
+type CalendarViewMode = "day" | "week" | "month";
+
+const MONTH_NAMES_FULL_FR = [
+  "Janvier",
+  "Février",
+  "Mars",
+  "Avril",
+  "Mai",
+  "Juin",
+  "Juillet",
+  "Août",
+  "Septembre",
+  "Octobre",
+  "Novembre",
+  "Décembre",
+];
+
+const WEEKDAY_HEADERS_MON = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 interface CalendarClientProps {
   schedule: AiringScheduleItem[];
@@ -104,27 +126,76 @@ interface CalendarClientProps {
 export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   const { getEntry, quickAdd, upsertEntry, openQuickEdit, incrementProgress, openTrailer } = useShiori();
 
-  // Rolling 7 days starting from Today
+  const [tzMode, setTzMode] = useState<"local" | "jst">("local");
+  const [localTimeZone, setLocalTimeZone] = useState<string>("UTC");
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  const activeTimeZone = tzMode === "jst" ? "Asia/Tokyo" : localTimeZone;
+
+  const anchorMs = useMemo(() => {
+    if (nowMs !== null) return nowMs;
+    const firstSlot = schedule[0]?.airingAt;
+    return firstSlot ? firstSlot * 1000 : Date.UTC(2026, 0, 1);
+  }, [nowMs, schedule]);
+
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("day");
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const d = new Date(schedule[0]?.airingAt ? schedule[0].airingAt * 1000 : Date.UTC(2026, 0, 1));
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
+  });
+
+  // Hydrate browser timezone & live clock after mount so SSR and client never diverge (React #418)
+  useEffect(() => {
+    let tz = "UTC";
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+      tz = "UTC";
+    }
+    const now = Date.now();
+    const today = new Date(now);
+    const todayKey = formatDateKeyInTimezone(today, tz);
+    setLocalTimeZone(tz);
+    setNowMs(now);
+    setMonthCursor({ year: today.getFullYear(), month: today.getMonth() });
+    setSelectedDayKey(todayKey);
+    setSelectedMonthDateKey(todayKey);
+
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Rolling 7 days starting from Today (anchored deterministically on SSR)
   const rollingDays = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const base = new Date(anchorMs);
+    if (nowMs !== null) {
+      base.setHours(0, 0, 0, 0);
+    } else {
+      base.setUTCHours(0, 0, 0, 0);
+    }
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
+      const d = new Date(base);
+      if (nowMs !== null) {
+        d.setDate(base.getDate() + i);
+      } else {
+        d.setUTCDate(base.getUTCDate() + i);
+      }
       return {
-        key: getLocalDateKey(d),
-        short: DAY_NAMES_SHORT[d.getDay()],
-        full: DAY_NAMES_FULL[d.getDay()],
-        dayNum: d.getDate(),
-        monthLabel: MONTHS_FR[d.getMonth()],
+        key: formatDateKeyInTimezone(d, activeTimeZone),
+        short: DAY_NAMES_SHORT[nowMs !== null ? d.getDay() : d.getUTCDay()],
+        full: DAY_NAMES_FULL[nowMs !== null ? d.getDay() : d.getUTCDay()],
+        dayNum: nowMs !== null ? d.getDate() : d.getUTCDate(),
+        monthLabel: MONTHS_FR[nowMs !== null ? d.getMonth() : d.getUTCMonth()],
         isToday: i === 0,
         isTomorrow: i === 1,
       };
     });
-  }, []);
+  }, [anchorMs, nowMs, activeTimeZone]);
 
-  // Section 1 state (Daily Schedule — Same Day Upcoming + Already Aired)
+  // Section 1 state (Daily / Weekly / Monthly Schedule)
   const [selectedDayKey, setSelectedDayKey] = useState<string>(rollingDays[0].key);
+  const [selectedMonthDateKey, setSelectedMonthDateKey] = useState<string>(rollingDays[0].key);
   const [scheduleOnlyMyList, setScheduleOnlyMyList] = useState(false);
 
   // Section 2 state (MyAnimeList-style Seasonal Browser — Current + Upcoming Seasons)
@@ -133,20 +204,17 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   const [seasonFormat, setSeasonFormat] = useState<SeasonFormatFilter>("ALL");
   const [seasonSearch, setSeasonSearch] = useState("");
 
-  const nowMs = Date.now();
-  const nowTimeStr = new Date(nowMs).toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const nowTimeStr =
+    nowMs !== null ? formatTimeInTimezone(Math.floor(nowMs / 1000), activeTimeZone) : "--:--";
 
-  // Group schedule by local date key
+  // Group schedule by date key in active timezone
   const byDay = useMemo(() => {
     const map: Record<string, AiringScheduleItem[]> = {};
     for (const d of rollingDays) map[d.key] = [];
 
     for (const item of schedule) {
       if (scheduleOnlyMyList && !getEntry(item.media.id)) continue;
-      const k = getLocalDateKey(new Date(item.airingAt * 1000));
+      const k = formatDateKeyInTimezone(new Date(item.airingAt * 1000), activeTimeZone);
       if (map[k]) map[k].push(item);
     }
 
@@ -154,9 +222,36 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
       map[k].sort((a, b) => a.airingAt - b.airingAt);
     }
     return map;
-  }, [schedule, rollingDays, scheduleOnlyMyList, getEntry]);
+  }, [schedule, rollingDays, scheduleOnlyMyList, getEntry, activeTimeZone]);
 
-  const activeDayItems = byDay[selectedDayKey] ?? [];
+  const allSeasonalMedia = useMemo(() => {
+    const list: MediaItem[] = [];
+    for (const bucket of seasons) {
+      for (const m of bucket.items) {
+        if (scheduleOnlyMyList && !getEntry(m.id)) continue;
+        list.push(m);
+      }
+    }
+    return list;
+  }, [seasons, scheduleOnlyMyList, getEntry]);
+
+  const monthGrid = useMemo(() => {
+    const filteredSchedule = scheduleOnlyMyList
+      ? schedule.filter((s) => Boolean(getEntry(s.media.id)))
+      : schedule;
+    return buildMonthCalendarGrid(
+      monthCursor.year,
+      monthCursor.month,
+      filteredSchedule,
+      allSeasonalMedia,
+      { timeZone: activeTimeZone, today: new Date(anchorMs) }
+    );
+  }, [monthCursor, schedule, scheduleOnlyMyList, getEntry, allSeasonalMedia, activeTimeZone, anchorMs]);
+
+  const activeDayItems = useMemo(
+    () => byDay[selectedDayKey] ?? [],
+    [byDay, selectedDayKey]
+  );
   const activeDayMeta =
     rollingDays.find((d) => d.key === selectedDayKey) ?? rollingDays[0];
 
@@ -164,12 +259,12 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   // 1) "À venir aujourd'hui" (upcoming later today / on selected day)
   // 2) "Déjà sortis aujourd'hui" (already aired earlier today)
   const dayUpcoming = useMemo(
-    () => activeDayItems.filter((s) => s.airingAt * 1000 >= nowMs),
-    [activeDayItems, nowMs]
+    () => activeDayItems.filter((s) => s.airingAt * 1000 >= anchorMs),
+    [activeDayItems, anchorMs]
   );
   const dayAired = useMemo(
-    () => activeDayItems.filter((s) => s.airingAt * 1000 < nowMs).reverse(),
-    [activeDayItems, nowMs]
+    () => activeDayItems.filter((s) => s.airingAt * 1000 < anchorMs).reverse(),
+    [activeDayItems, anchorMs]
   );
 
   const trackedThisWeek = useMemo(
@@ -205,11 +300,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   const renderEpisodeCard = (slot: AiringScheduleItem, isPast: boolean) => {
     const title = getDisplayTitle(slot.media);
     const entry = getEntry(slot.media.id);
-    const airDate = new Date(slot.airingAt * 1000);
-    const timeStr = airDate.toLocaleTimeString("fr-FR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const timeStr = formatTimeInTimezone(slot.airingAt, activeTimeZone);
 
     return (
       <div
@@ -287,12 +378,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               )}
             />
             <span
+              suppressHydrationWarning
               className={cn(
                 "font-mono text-[11px]",
                 !isPast && "text-[#F7D08A]"
               )}
             >
-              {formatCountdown(slot.airingAt)}
+              {nowMs !== null ? formatCountdown(slot.airingAt) : "Horaire confirmé"}
             </span>
             {slot.media.studio && (
               <>
@@ -434,41 +526,89 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
       {/* SECTION 1: PLANNING DU JOUR (À VENIR + MAINTENANT + DÉJÀ SORTIS)     */}
       {/* ==================================================================== */}
       <section id="daily-schedule" className="space-y-6 scroll-mt-24">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
-              <span>Sorties du jour & 7 prochains jours</span>
+            <h2 className="text-xl sm:text-2xl font-bold text-white flex flex-wrap items-center gap-2.5">
+              <span>Planning des sorties</span>
               <span className="text-xs font-mono font-normal px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-[#B8BCCB]">
-                {activeDayMeta.full} {activeDayMeta.dayNum} {activeDayMeta.monthLabel}
+                {viewMode === "month"
+                  ? `${MONTH_NAMES_FULL_FR[monthCursor.month]} ${monthCursor.year}`
+                  : viewMode === "week"
+                    ? "Vue 7 jours"
+                    : `${activeDayMeta.full} ${activeDayMeta.dayNum} ${activeDayMeta.monthLabel}`}
               </span>
             </h2>
             <p className="text-xs text-[#858A9E] mt-1">
-              Dans la même journée : voyez d&apos;abord les épisodes qui arrivent bientôt, puis ceux
-              déjà sortis.
+              Horaires authentiques AniList affichés en{" "}
+              <strong className="text-[#C8CCE0]">
+                {tzMode === "jst" ? "JST (Asia/Tokyo)" : localTimeZone}
+              </strong>{" "}
+              · distinction automatique disponible vs à venir.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setScheduleOnlyMyList((v) => !v)}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-4 py-2 rounded-full border text-xs font-semibold transition-colors cursor-pointer self-start sm:self-auto",
-              scheduleOnlyMyList
-                ? "bg-accent/20 border-accent/50 text-accent-soft"
-                : "bg-surface border-white/[0.09] text-[#A2A6B8] hover:text-white"
-            )}
-          >
-            <Bookmark className="w-3.5 h-3.5" />
-            <span>Ma Liste ({trackedThisWeek})</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+            {/* View Switcher: Jour / Semaine / Mois */}
+            <div className="inline-flex items-center p-1 rounded-full bg-surface border border-white/[0.09]">
+              {(
+                [
+                  { id: "day", label: "Jour" },
+                  { id: "week", label: "Semaine" },
+                  { id: "month", label: "Mois" },
+                ] as const
+              ).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setViewMode(m.id)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer",
+                    viewMode === m.id
+                      ? "bg-accent text-accent-fg shadow-accent"
+                      : "text-[#9A9EAE] hover:text-white"
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Timezone Toggle: Local vs Japan JST */}
+            <button
+              type="button"
+              onClick={() => setTzMode((z) => (z === "local" ? "jst" : "local"))}
+              title="Basculer entre votre fuseau horaire local et l'heure japonaise (JST)"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface hover:bg-white/[0.08] border border-white/[0.09] text-xs font-mono text-[#C8CCE0] hover:text-white transition-colors cursor-pointer"
+            >
+              <Globe className="w-3.5 h-3.5 text-sky-400" />
+              <span>{tzMode === "jst" ? "JST (Japon)" : "Heure locale"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setScheduleOnlyMyList((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-xs font-semibold transition-colors cursor-pointer",
+                scheduleOnlyMyList
+                  ? "bg-accent/20 border-accent/50 text-accent-soft"
+                  : "bg-surface border-white/[0.09] text-[#A2A6B8] hover:text-white"
+              )}
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              <span>Ma Liste ({trackedThisWeek})</span>
+            </button>
+          </div>
         </div>
 
-        {/* 7-Day Selector Bar (horizontally scrollable on mobile so day labels never truncate) */}
-        <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 sm:grid sm:grid-cols-7 sm:gap-2.5 sm:overflow-visible sm:pb-0">
+        {/* VIEW 1: QUOTIDIENNE (7-Day Bar + Same-Day Timeline) */}
+        {viewMode === "day" && (
+          <>
+            {/* 7-Day Selector Bar (horizontally scrollable on mobile so day labels never truncate) */}
+            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 sm:grid sm:grid-cols-7 sm:gap-2.5 sm:overflow-visible sm:pb-0">
           {rollingDays.map((day) => {
             const isSelected = selectedDayKey === day.key;
             const list = byDay[day.key] ?? [];
-            const upCount = list.filter((s) => s.airingAt * 1000 >= nowMs).length;
+            const upCount = list.filter((s) => s.airingAt * 1000 >= anchorMs).length;
             const doneCount = list.length - upCount;
 
             return (
@@ -614,6 +754,261 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
             )}
           </motion.div>
         </AnimatePresence>
+          </>
+        )}
+
+        {/* VIEW 2: HEBDOMADAIRE (7 jours côte à côte / empilés avec heures exactes) */}
+        {viewMode === "week" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {rollingDays.map((day) => {
+              const items = byDay[day.key] ?? [];
+              return (
+                <div
+                  key={day.key}
+                  className={cn(
+                    "rounded-2xl card-surface border p-4 space-y-3 flex flex-col",
+                    day.isToday ? "border-accent/55" : "border-white/[0.08]"
+                  )}
+                >
+                  <div className="flex items-center justify-between border-b border-white/[0.07] pb-2.5">
+                    <div>
+                      <p className="text-sm font-bold text-white flex items-center gap-1.5">
+                        <span>{day.full}</span>
+                        {day.isToday && (
+                          <span className="px-1.5 py-0.2 rounded bg-accent/20 text-accent-soft font-mono text-[9.5px]">
+                            AUJ.
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] font-mono text-[#858A9E]">
+                        {day.dayNum} {day.monthLabel}
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-white/[0.06] font-mono text-[10.5px] text-[#D2D6E6]">
+                      {items.length} ép.
+                    </span>
+                  </div>
+
+                  {items.length === 0 ? (
+                    <p className="text-xs text-[#6E7387] py-4 text-center">
+                      Aucune sortie enregistrée
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-[340px] overflow-y-auto pr-0.5">
+                      {items.map((slot) => {
+                        const isPast = slot.airingAt * 1000 < anchorMs;
+                        const tracked = Boolean(getEntry(slot.media.id));
+                        return (
+                          <Link
+                            key={slot.id}
+                            href={`/media/${slot.media.id}`}
+                            className={cn(
+                              "flex items-center gap-2.5 p-2 rounded-xl border transition-colors",
+                              tracked
+                                ? "bg-accent/[0.07] border-accent/35 hover:border-accent/60"
+                                : "bg-obsidian/65 border-white/[0.06] hover:border-white/[0.16]"
+                            )}
+                          >
+                            <img
+                              src={slot.media.coverImage.large}
+                              alt={getDisplayTitle(slot.media)}
+                              loading="lazy"
+                              className="w-9 h-12 rounded-lg object-cover shrink-0 border border-white/10"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-white truncate">
+                                {getDisplayTitle(slot.media)}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[10px]">
+                                <span className="text-[#C8CCE0]">
+                                  {formatTimeInTimezone(slot.airingAt, activeTimeZone)}
+                                </span>
+                                <span className="text-white/25">·</span>
+                                <span className="text-accent-soft">Ép. {slot.episode}</span>
+                                <span
+                                  className={cn(
+                                    "ml-auto px-1.5 rounded text-[9px]",
+                                    isPast
+                                      ? "bg-emerald-500/15 text-emerald-300"
+                                      : "bg-[#F0B95B]/15 text-[#F0B95B]"
+                                  )}
+                                >
+                                  {isPast ? "Dispo" : "À venir"}
+                                </span>
+                              </div>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* VIEW 3: MENSUELLE (Grille calendrier mensuel avec sorties simulcast + premières saisonnières réelles) */}
+        {viewMode === "month" && (
+          <div className="space-y-5">
+            <div className="rounded-2xl card-surface border border-white/[0.09] p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMonthCursor((c) =>
+                      c.month === 0
+                        ? { year: c.year - 1, month: 11 }
+                        : { year: c.year, month: c.month - 1 }
+                    )
+                  }
+                  aria-label="Mois précédent"
+                  className="w-9 h-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] flex items-center justify-center text-white cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="text-center">
+                  <p className="text-sm sm:text-base font-bold text-white">
+                    {MONTH_NAMES_FULL_FR[monthCursor.month]} {monthCursor.year}
+                  </p>
+                  <p className="text-[11px] text-[#858A9E]">
+                    Épisodes simulcast (points or) & premières saisonnières confirmées (points cyan)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMonthCursor((c) =>
+                      c.month === 11
+                        ? { year: c.year + 1, month: 0 }
+                        : { year: c.year, month: c.month + 1 }
+                    )
+                  }
+                  aria-label="Mois suivant"
+                  className="w-9 h-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] flex items-center justify-center text-white cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10.5px] font-mono uppercase text-[#7D8296]">
+                {WEEKDAY_HEADERS_MON.map((w) => (
+                  <div key={w} className="py-1">
+                    {w}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                {monthGrid.cells.map((cell) => {
+                  const selected = selectedMonthDateKey === cell.dateKey;
+                  const hasEvents = cell.airingCount > 0 || cell.premiereCount > 0;
+                  return (
+                    <button
+                      key={cell.dateKey}
+                      type="button"
+                      onClick={() => setSelectedMonthDateKey(cell.dateKey)}
+                      className={cn(
+                        "min-h-[56px] sm:min-h-[72px] p-1.5 sm:p-2 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer",
+                        selected
+                          ? "bg-accent/18 border-accent text-white shadow-accent"
+                          : cell.isToday
+                            ? "bg-white/[0.06] border-accent/45 text-white"
+                            : cell.inCurrentMonth
+                              ? "bg-obsidian/70 border-white/[0.07] hover:border-white/[0.16] text-[#E5E7F0]"
+                              : "bg-obsidian/30 border-white/[0.04] text-[#5B6073]"
+                      )}
+                    >
+                      <span className="font-mono text-xs font-semibold leading-none">
+                        {cell.dayOfMonth}
+                      </span>
+                      {hasEvents && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          {cell.airingCount > 0 && (
+                            <span className="px-1 py-0.2 rounded bg-[#F0B95B]/20 text-[#F0B95B] font-mono text-[9.5px] font-bold">
+                              {cell.airingCount} ép
+                            </span>
+                          )}
+                          {cell.premiereCount > 0 && (
+                            <span className="px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-mono text-[9.5px] font-bold">
+                              {cell.premiereCount}★
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Selected Date Details in Monthly View */}
+            {(() => {
+              const slots = monthGrid.airingByDate[selectedMonthDateKey] ?? [];
+              const premieres = monthGrid.premieresByDate[selectedMonthDateKey] ?? [];
+              return (
+                <div className="rounded-2xl card-surface border border-white/[0.08] p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold text-white">
+                      Sorties confirmées le {selectedMonthDateKey}
+                    </h3>
+                    <span className="text-[11px] font-mono text-[#858A9E]">
+                      {slots.length} épisode(s) · {premieres.length} première(s)
+                    </span>
+                  </div>
+
+                  {slots.length === 0 && premieres.length === 0 ? (
+                    <p className="text-xs text-[#858A9E]">
+                      Aucune sortie horodatée confirmée par AniList pour cette date.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {slots.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {slots.map((slot) =>
+                            renderEpisodeCard(slot, slot.airingAt * 1000 < anchorMs)
+                          )}
+                        </div>
+                      )}
+                      {premieres.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-mono uppercase tracking-wider text-sky-300">
+                            Premières / Lancements confirmés
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                            {premieres.map((m) => (
+                              <Link
+                                key={m.id}
+                                href={`/media/${m.id}`}
+                                className="flex items-center gap-3 p-2.5 rounded-xl bg-obsidian/70 border border-white/[0.08] hover:border-sky-400/45 transition-colors"
+                              >
+                                <img
+                                  src={m.coverImage.large}
+                                  alt={getDisplayTitle(m)}
+                                  loading="lazy"
+                                  className="w-10 h-14 rounded-lg object-cover border border-white/10 shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-white truncate">
+                                    {getDisplayTitle(m)}
+                                  </p>
+                                  <p className="text-[10.5px] font-mono text-[#8E93A6] mt-0.5">
+                                    {formatFormat(m.format)}
+                                    {m.studio ? ` · ${m.studio}` : ""}
+                                  </p>
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </section>
 
       {/* ==================================================================== */}
@@ -759,7 +1154,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {filteredSeasonItems.map((media) => {
               const title = getDisplayTitle(media);
-              const rel = formatReleaseDate(media);
+              const rel = formatReleaseDate(media, nowMs);
               const entry = getEntry(media.id);
 
               return (

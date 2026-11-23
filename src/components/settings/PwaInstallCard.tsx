@@ -39,10 +39,10 @@ export function PwaInstallCard() {
           </div>
           <div>
             <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <span>Application Shiori (PWA · Mobile & Desktop)</span>
+              <span>Installer Shiori sur votre appareil</span>
             </h2>
             <p className="text-xs text-[#858A9E] mt-0.5 max-w-xl">
-              Installez Shiori comme une application native sur iPhone, Android, Windows ou macOS avec lancement plein écran, raccourcis rapides et écran hors-ligne.
+              Ajoutez Shiori à votre écran d&apos;accueil ou bureau pour un accès direct en plein écran.
             </p>
           </div>
         </div>
@@ -50,7 +50,7 @@ export function PwaInstallCard() {
         {isStandalone ? (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-xs font-semibold text-emerald-300 shrink-0 self-start sm:self-auto">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Installée en mode app</span>
+            <span>Installée</span>
           </span>
         ) : canInstall ? (
           <button
@@ -63,9 +63,9 @@ export function PwaInstallCard() {
             <span>{installing ? "Installation..." : "Installer Shiori"}</span>
           </button>
         ) : (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500/12 border border-sky-400/30 text-[11px] font-mono text-sky-300 shrink-0 self-start sm:self-auto">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Manifeste & SW prêts</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.1] text-xs text-[#B8BCCB] shrink-0 self-start sm:self-auto">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Disponible</span>
           </span>
         )}
       </div>

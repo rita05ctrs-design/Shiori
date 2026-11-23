@@ -41,18 +41,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "hourly",
       priority: 0.8,
     },
-    {
-      url: `${SITE_URL}/library`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.7,
-    },
-    {
-      url: `${SITE_URL}/stats`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.6,
-    },
   ];
 
   // Include flagship anime & manga detail URLs from verified seed catalog

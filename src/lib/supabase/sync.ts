@@ -11,6 +11,7 @@ import type {
   PublicProfileLibraryItem,
   PublicProfileMediaSummary,
   PublicProfileStatsSummary,
+  SharedPublicCollection,
   UnlockedBadgeRecord,
 } from "@/types/media";
 import { normalizeContentLanguage } from "@/lib/i18n";
@@ -49,6 +50,7 @@ export interface CloudProfileSnapshot {
   username: string;
   displayName: string;
   avatarUrl: string | null;
+  bannerUrl: string | null;
   bio: string;
   accentColor: string;
   isActivityPublic: boolean;
@@ -81,7 +83,7 @@ export async function ensureSupabaseProfile(
       .slice(0, 24) || `user_${user.id.slice(0, 6)}`;
 
   const selectCols =
-    "id, username, display_name, avatar_url, bio, accent_color, is_activity_public, preferred_language, favorite_staff, unlocked_badges, pinned_badges, created_at";
+    "id, username, display_name, avatar_url, banner_url, bio, accent_color, is_activity_public, preferred_language, favorite_staff, unlocked_badges, pinned_badges, created_at";
 
   const { data: existing } = await supabase
     .from("profiles")
@@ -95,6 +97,7 @@ export async function ensureSupabaseProfile(
     username: String(row.username || baseUsername),
     displayName: String(row.display_name || rawName),
     avatarUrl: row.avatar_url ?? null,
+    bannerUrl: row.banner_url ?? null,
     bio: String(row.bio ?? ""),
     accentColor: String(row.accent_color || "#E5484D"),
     isActivityPublic: row.is_activity_public !== false,
@@ -153,6 +156,7 @@ export async function syncPublicProfileToCloud(
     username: string;
     displayName: string;
     avatarUrl: string | null;
+    bannerUrl?: string | null;
     bio: string;
     accentColor: string;
     isActivityPublic: boolean;
@@ -160,6 +164,7 @@ export async function syncPublicProfileToCloud(
     favoriteStaff: FavoriteVoiceActor[];
     favoriteMedia: PublicProfileMediaSummary[];
     libraryPreview?: PublicProfileLibraryItem[];
+    sharedCollections?: SharedPublicCollection[];
     stats: PublicProfileStatsSummary;
     unlockedBadges: UnlockedBadgeRecord[];
     pinnedBadges: string[];
@@ -180,6 +185,7 @@ export async function syncPublicProfileToCloud(
     username: cleanUsername,
     display_name: payload.displayName.trim() || cleanUsername,
     avatar_url: payload.avatarUrl,
+    banner_url: payload.bannerUrl ?? null,
     bio: payload.bio ?? "",
     accent_color: payload.accentColor || "#E5484D",
     is_activity_public: payload.isActivityPublic,
@@ -189,6 +195,7 @@ export async function syncPublicProfileToCloud(
     stats_summary: {
       ...payload.stats,
       libraryPreview: (payload.libraryPreview ?? []).slice(0, 80),
+      sharedCollections: (payload.sharedCollections ?? []).slice(0, 12),
     },
     unlocked_badges: payload.unlockedBadges.slice(0, 60),
     pinned_badges: payload.pinnedBadges.slice(0, 3),
@@ -426,6 +433,28 @@ export async function syncAniListImportBrowser(
   return { authenticated: true, ...res };
 }
 
+export async function syncEntriesBatchToCloud(
+  userId: string,
+  entries: LibraryEntry[],
+  chunkSize = 100
+): Promise<{ synced: boolean; count: number; error?: string }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase || entries.length === 0) return { synced: false, count: 0 };
+
+  let saved = 0;
+  for (let i = 0; i < entries.length; i += chunkSize) {
+    const chunk = entries.slice(i, i + chunkSize).map((e) => entryToRow(userId, e));
+    const { error } = await supabase
+      .from("library_entries")
+      .upsert(chunk, { onConflict: "user_id,media_id" });
+    if (error) {
+      return { synced: saved > 0, count: saved, error: error.message };
+    }
+    saved += chunk.length;
+  }
+  return { synced: true, count: saved };
+}
+
 export async function removeEntryFromCloud(userId: string, mediaId: number) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return { synced: false };
@@ -462,7 +491,8 @@ export async function fetchCloudLibrary(userId: string): Promise<LibraryEntry[] 
     genres: row.genres ?? [],
     studio: row.studio,
     format: row.format,
-    seasonYear: null,
+    season: row.season ?? null,
+    seasonYear: row.season_year ?? null,
     averageScore: row.average_score,
     status: row.status,
     progress: row.progress,
@@ -678,6 +708,50 @@ export async function syncUserBadgesToCloud(
       .eq("id", userId);
 
     return { synced: true };
+  } catch {
+    return { synced: false };
+  }
+}
+
+export interface CloudUiPreferences {
+  theme?: Record<string, unknown>;
+  ambiance?: Record<string, unknown>;
+  displayPrefs?: Record<string, unknown>;
+  homeSections?: { id: string; visible: boolean }[];
+}
+
+export async function fetchCloudUiPreferences(
+  userId: string
+): Promise<CloudUiPreferences | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("ui_preferences")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error || !data?.ui_preferences || typeof data.ui_preferences !== "object") {
+      return null;
+    }
+    return data.ui_preferences as CloudUiPreferences;
+  } catch {
+    return null;
+  }
+}
+
+export async function syncUiPreferencesToCloud(
+  userId: string,
+  prefs: CloudUiPreferences
+): Promise<{ synced: boolean }> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { synced: false };
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ ui_preferences: prefs })
+      .eq("id", userId);
+    return { synced: !error };
   } catch {
     return { synced: false };
   }

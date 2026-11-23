@@ -3,30 +3,25 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, SlidersHorizontal, ArrowRight, Flame, BookOpen, Tv, Star } from "lucide-react";
+import { Plus, SlidersHorizontal, ArrowRight, BookOpen, Tv } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
-import {
-  AnimatedNumber,
-  CINEMA_EASE,
-  RevealSection,
-} from "@/components/motion/MotionPrimitives";
+import { CINEMA_EASE, RevealSection } from "@/components/motion/MotionPrimitives";
 
 export function ContinueWatchingSection() {
-  const { library, incrementProgress, openQuickEdit } = useShiori();
+  const { library, incrementProgress, openQuickEdit, setCommandOpen } = useShiori();
   const [pulseMap, setPulseMap] = useState<Record<number, number>>({});
+  const [mediaFilter, setMediaFilter] = useState<"ALL" | "ANIME" | "MANGA">("ALL");
 
-  const watching = library
+  const allWatching = library
     .filter((e) => e.status === "WATCHING")
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-  const completedCount = library.filter((e) => e.status === "COMPLETED").length;
-  const totalEpisodes = library
-    .filter((e) => e.type === "ANIME")
-    .reduce((acc, e) => acc + e.progress, 0);
-  const scored = library.filter((e) => e.score !== null);
-  const avgScore = scored.length
-    ? scored.reduce((a, b) => a + (b.score ?? 0), 0) / scored.length
-    : null;
+  const watching =
+    mediaFilter === "ALL"
+      ? allWatching
+      : allWatching.filter((e) => e.type === mediaFilter);
+  const watchingAnimeCount = allWatching.filter((e) => e.type === "ANIME").length;
+  const watchingMangaCount = allWatching.filter((e) => e.type === "MANGA").length;
 
   const handleIncrement = (mediaId: number) => {
     incrementProgress(mediaId, 1);
@@ -34,48 +29,59 @@ export function ContinueWatchingSection() {
   };
 
   return (
-    <RevealSection className="space-y-5">
-      {/* Header + Live Mini KPI Bar */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <RevealSection className="space-y-4">
+      {/* Clean Header with Media Filter + Direct "+ Ajouter" & Library Link */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1">
-            Reprendre la lecture
-          </p>
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F4F3EE]">
-            Votre progression en cours
+            Reprendre la lecture
           </h2>
+          <p className="text-xs text-[#8A8FA4] mt-0.5">
+            Avancez votre progression en un clic
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.07] text-xs text-[#C6CAD8]">
-            <Flame className="w-3.5 h-3.5 text-accent-hover" />
-            <span className="font-mono font-semibold text-white">
-              <AnimatedNumber value={totalEpisodes} formatLocale={false} />
-            </span>
-            <span className="text-[#858A9E]">épisodes vus</span>
-          </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.07] text-xs text-[#C6CAD8]">
-            <Star className="w-3.5 h-3.5 text-[#F0B95B] fill-[#F0B95B]" />
-            <span className="font-mono font-semibold text-white">
-              {avgScore !== null ? (
-                <AnimatedNumber value={avgScore} decimals={1} formatLocale={false} />
-              ) : (
-                "—"
-              )}
-            </span>
-            <span className="text-[#858A9E]">moyenne</span>
-          </div>
-          <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.07] text-xs text-[#C6CAD8]">
-            <span className="font-mono font-semibold text-emerald-400">
-              <AnimatedNumber value={completedCount} formatLocale={false} />
-            </span>
-            <span className="text-[#858A9E]">terminés</span>
-          </div>
-          <Link
-            href="/library"
-            className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white transition-colors"
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Quick All / Animes / Mangas switch */}
+          {allWatching.length > 0 && (
+            <div className="inline-flex items-center p-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px]">
+              {(
+                [
+                  { id: "ALL", label: `Tous (${allWatching.length})` },
+                  { id: "ANIME", label: `Animes (${watchingAnimeCount})` },
+                  { id: "MANGA", label: `Mangas (${watchingMangaCount})` },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setMediaFilter(opt.id)}
+                  className={`px-2.5 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
+                    mediaFilter === opt.id
+                      ? "bg-accent text-accent-fg"
+                      : "text-[#9A9EAE] hover:text-white"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setCommandOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors cursor-pointer"
           >
-            <span>Ma bibliothèque</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Ajouter un titre</span>
+          </button>
+
+          <Link
+            href="/library?status=WATCHING"
+            className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white transition-colors"
+          >
+            <span>Bibliothèque</span>
             <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>

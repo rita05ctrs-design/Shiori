@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "@/lib/server/rate-limit";
 import {
   ensureServerSupabaseProfile,
   getAllLocalCommunityProfiles,
+  isAuthenticatedActor,
+  isLocalPairBlocked,
   makeId,
   readSocialDb,
   resolveServerActor,
@@ -221,12 +224,14 @@ function samePair(
   return forward || reverse;
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const actor = await resolveServerActor({
-    userId: searchParams.get("userId") ?? undefined,
-    username: searchParams.get("username") ?? undefined,
-  });
+export async function GET() {
+  const actor = await resolveServerActor();
+  if (!isAuthenticatedActor(actor)) {
+    return NextResponse.json(
+      { error: "Authentification requise.", friends: [], incomingRequests: [], outgoingRequests: [], friendships: [] },
+      { status: 401 }
+    );
+  }
 
   const actorUserLower = actor.username.toLowerCase();
   const { byId, byUsername } = await loadAllKnownProfiles();
@@ -271,7 +276,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 2) Merge local friendships
+  // 2) Built-in local server account friendships (never mix into Supabase accounts)
+  if (actor.source === "account") {
   const db = readSocialDb();
   for (const f of db.friendships) {
     const involvesActor =
@@ -291,6 +297,7 @@ export async function GET(request: NextRequest) {
       )
     );
     if (!already) records.push(f);
+  }
   }
 
   const friends: PublicUserProfile[] = [];
@@ -338,6 +345,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const actor = await resolveServerActor();
+    if (!isAuthenticatedActor(actor)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "AUTH_REQUIRED",
+          error: "Connectez-vous à votre compte Shiori pour gérer vos amis.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const rl = checkRateLimit(`friends:${actor.id}:${getClientIp(request)}`, 25, 60_000);
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterSec);
+
     const body = await request.json();
     const action = String(body?.action || "add") as "add" | "accept" | "decline" | "remove";
 
@@ -347,14 +369,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const actor = await resolveServerActor({
-      userId: body?.userId,
-      username: body?.username,
-      displayName: body?.displayName,
-      avatarUrl: body?.avatarUrl,
-      accentColor: body?.accentColor,
-    });
 
     const rawTargetUsername = String(body?.targetUsername || "")
       .trim()
@@ -394,6 +408,38 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Block enforcement: prevent friend requests or acceptance when either side blocked the other
+    if (action === "add" || action === "accept") {
+      let blocked = isLocalPairBlocked(actor.id, targetProfile.id);
+      if (!blocked && actor.source === "supabase" && isUuid(actor.id) && isUuid(targetProfile.id)) {
+        try {
+          const sb = await getSupabaseServerClient();
+          if (sb) {
+            const { data } = await sb
+              .from("user_blocks")
+              .select("id")
+              .or(
+                `and(blocker_id.eq.${actor.id},blocked_id.eq.${targetProfile.id}),and(blocker_id.eq.${targetProfile.id},blocked_id.eq.${actor.id})`
+              )
+              .limit(1);
+            if (Array.isArray(data) && data.length > 0) blocked = true;
+          }
+        } catch {
+          // table not yet migrated
+        }
+      }
+      if (blocked) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "USER_BLOCKED",
+            error: "Action impossible : un blocage est actif entre ces comptes.",
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const targetIsSupabaseUser = isUuid(targetProfile.id);

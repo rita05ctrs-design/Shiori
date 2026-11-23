@@ -9,6 +9,35 @@ import type {
 } from "@/types/media";
 
 const ANILIST_ENDPOINT = "https://graphql.anilist.co";
+const ANILIST_TIMEOUT_MS = 8500;
+const ANILIST_MAX_CACHE_ENTRIES = 160;
+
+interface CachedQueryEntry {
+  data: unknown;
+  expiresAt: number;
+}
+
+const anilistMemCache = new Map<string, CachedQueryEntry>();
+
+function getCachedQuery<T>(key: string, allowStale = false): T | null {
+  const entry = anilistMemCache.get(key);
+  if (!entry) return null;
+  if (allowStale || Date.now() < entry.expiresAt) {
+    return entry.data as T;
+  }
+  return null;
+}
+
+function setCachedQuery(key: string, data: unknown, ttlSec: number) {
+  if (anilistMemCache.size >= ANILIST_MAX_CACHE_ENTRIES) {
+    const oldest = anilistMemCache.keys().next().value;
+    if (oldest) anilistMemCache.delete(oldest);
+  }
+  anilistMemCache.set(key, {
+    data,
+    expiresAt: Date.now() + Math.max(30, ttlSec) * 1000,
+  });
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function normalizeMedia(raw: any): MediaItem {
@@ -166,25 +195,53 @@ async function queryAniList<T = any>(
   variables: Record<string, unknown> = {},
   revalidate = 300
 ): Promise<T> {
-  const res = await fetch(ANILIST_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ query, variables }),
-    next: { revalidate },
-  });
+  const cacheKey = `${query.slice(0, 120)}::${JSON.stringify(variables)}`;
+  const fresh = getCachedQuery<T>(cacheKey);
+  if (fresh) return fresh;
 
-  if (!res.ok) {
-    throw new Error(`AniList HTTP ${res.status}`);
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(ANILIST_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ query, variables }),
+        signal: AbortSignal.timeout(ANILIST_TIMEOUT_MS),
+        next: { revalidate },
+      });
+
+      if (res.status === 429 && attempt === 0) {
+        const retryAfterSec = Math.min(2, Math.max(0.5, Number(res.headers.get("retry-after") ?? 1)));
+        await new Promise((r) => setTimeout(r, retryAfterSec * 1000));
+        continue;
+      }
+
+      if (!res.ok) {
+        throw new Error(`AniList HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      if (json.errors) {
+        throw new Error(json.errors[0]?.message || "AniList GraphQL error");
+      }
+      setCachedQuery(cacheKey, json.data, revalidate);
+      return json.data as T;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error("AniList request failed");
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    }
   }
 
-  const json = await res.json();
-  if (json.errors) {
-    throw new Error(json.errors[0]?.message || "AniList GraphQL error");
-  }
-  return json.data as T;
+  // Serve stale cache cleanly during temporary upstream outages before falling back to seed
+  const stale = getCachedQuery<T>(cacheKey, true);
+  if (stale) return stale;
+
+  throw lastError ?? new Error("AniList unavailable");
 }
 
 const MEDIA_FRAGMENT = `
@@ -223,22 +280,18 @@ export function getSeedData() {
   const manga: MediaItem[] = (data.manga?.media ?? []).map(normalizeMedia);
 
   const now = Math.floor(Date.now() / 1000);
+  // Preserve authentic recorded AniList timestamps without ever fabricating unknown air times
   const airing: AiringScheduleItem[] = (data.airing?.airingSchedules ?? [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((s: any, idx: number) => {
-      // If seed timestamps are slightly in the past, keep them mapped onto the current week cleanly
-      const baseTime =
-        s.airingAt < now - 2 * 86400
-          ? now + ((idx % 7) * 86400 + (idx % 6) * 7200)
-          : s.airingAt;
-      return {
-        id: s.id,
-        airingAt: baseTime,
-        episode: s.episode,
-        timeUntilAiring: baseTime - now,
-        media: normalizeMedia(s.media),
-      };
-    });
+    .filter((s: any) => typeof s?.airingAt === "number" && s.airingAt > 0 && s?.media)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((s: any) => ({
+      id: s.id,
+      airingAt: s.airingAt,
+      episode: s.episode,
+      timeUntilAiring: s.airingAt - now,
+      media: normalizeMedia(s.media),
+    }));
 
   // Deduplicated pool for local fallback search / detail
   const map = new Map<number, MediaItem>();

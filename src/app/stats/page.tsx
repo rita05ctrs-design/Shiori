@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AnimatedNumber,
   CINEMA_EASE,
-  RevealSection,
 } from "@/components/motion/MotionPrimitives";
 import {
   ResponsiveContainer,
@@ -26,14 +25,18 @@ import {
   Star,
   Award,
   Heart,
-  Activity,
   Sparkles,
-  TrendingUp,
-  Download,
   ExternalLink,
+  CalendarRange,
+  BarChart3,
+  Info,
+  ChevronDown,
+  ArrowRight,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
-import { cn, formatRelativeTime, STATUS_CONFIG } from "@/lib/utils";
+import { computeLibraryAnalytics } from "@/lib/stats";
+import { ShioriWrappedCard } from "@/components/stats/ShioriWrappedCard";
+import { cn, STATUS_CONFIG } from "@/lib/utils";
 import type { LibraryStatus, MediaType } from "@/types/media";
 
 const STATUS_COLORS_HEX: Record<LibraryStatus, string> = {
@@ -45,157 +48,65 @@ const STATUS_COLORS_HEX: Record<LibraryStatus, string> = {
 };
 
 export default function StatsPage() {
-  const { library, activity, profile, anilistStats } = useShiori();
+  const { library, activity, anilistStats } = useShiori();
   const [scope, setScope] = useState<"ALL" | MediaType>("ALL");
+  const [showWrapped, setShowWrapped] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Auto-open Shiori Wrapped if user navigated via /stats#wrapped
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#wrapped") {
+      setShowWrapped(true);
+    }
+  }, []);
 
   const entries = useMemo(
-    () =>
-      library.filter((e) => (scope === "ALL" ? true : e.type === scope)),
+    () => library.filter((e) => (scope === "ALL" ? true : e.type === scope)),
     [library, scope]
   );
 
   const metrics = useMemo(() => {
-    const animeEntries = entries.filter((e) => e.type === "ANIME");
-    const mangaEntries = entries.filter((e) => e.type === "MANGA");
-
-    const totalEpisodes = animeEntries.reduce((sum, e) => sum + e.progress, 0);
-    const totalMinutes = animeEntries.reduce(
-      (sum, e) => sum + e.progress * (e.duration ?? 24),
-      0
-    );
-    const totalHours = Math.round(totalMinutes / 60);
-    const totalDays = (totalMinutes / 60 / 24).toFixed(1);
-
-    const totalChapters = mangaEntries.reduce((sum, e) => sum + e.progress, 0);
-
-    const scored = entries.filter((e) => e.score !== null);
-    const meanScore = scored.length
-      ? scored.reduce((sum, e) => sum + (e.score ?? 0), 0) / scored.length
-      : null;
-
-    const completed = entries.filter((e) => e.status === "COMPLETED").length;
-    const activeBase = entries.filter((e) => e.status !== "PLAN_TO_WATCH").length;
-    const completionRate = activeBase ? Math.round((completed / activeBase) * 100) : 0;
-
-    // Score distribution 1..10
-    const scoreBuckets = Array.from({ length: 10 }, (_, idx) => ({
-      bucket: String(idx + 1),
-      count: 0,
-    }));
-    for (const e of scored) {
-      const rounded = Math.min(10, Math.max(1, Math.round(e.score ?? 0)));
-      scoreBuckets[rounded - 1].count += 1;
-    }
-
-    // Status breakdown
+    const analytics = computeLibraryAnalytics(entries, activity);
     const statuses: LibraryStatus[] = [
       "WATCHING",
       "COMPLETED",
-      "ON_HOLD",
       "PLAN_TO_WATCH",
+      "ON_HOLD",
       "DROPPED",
     ];
     const statusData = statuses
       .map((s) => ({
         status: s,
         name: STATUS_CONFIG[s].label,
-        value: entries.filter((e) => e.status === s).length,
+        value: analytics.statusCounts[s] ?? 0,
         color: STATUS_COLORS_HEX[s],
       }))
       .filter((d) => d.value > 0);
 
-    // Genre affinity
-    const genreMap = new Map<string, { count: number; scoreSum: number; scoredCount: number }>();
-    for (const e of entries) {
-      for (const g of e.genres) {
-        const cur = genreMap.get(g) ?? { count: 0, scoreSum: 0, scoredCount: 0 };
-        cur.count += 1;
-        if (e.score !== null) {
-          cur.scoreSum += e.score;
-          cur.scoredCount += 1;
-        }
-        genreMap.set(g, cur);
-      }
-    }
-    const topGenres = Array.from(genreMap.entries())
-      .map(([genre, info]) => ({
-        genre,
-        count: info.count,
-        avgScore: info.scoredCount ? info.scoreSum / info.scoredCount : null,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
-
-    // Top Studios / Creators
-    const studioMap = new Map<string, { count: number; scoreSum: number; scoredCount: number }>();
-    for (const e of entries) {
-      if (!e.studio) continue;
-      const cur = studioMap.get(e.studio) ?? { count: 0, scoreSum: 0, scoredCount: 0 };
-      cur.count += 1;
-      if (e.score !== null) {
-        cur.scoreSum += e.score;
-        cur.scoredCount += 1;
-      }
-      studioMap.set(e.studio, cur);
-    }
-    const topStudios = Array.from(studioMap.entries())
-      .map(([name, info]) => ({
-        name,
-        count: info.count,
-        avgScore: info.scoredCount ? info.scoreSum / info.scoredCount : null,
-      }))
-      .sort((a, b) => b.count - a.count || (b.avgScore ?? 0) - (a.avgScore ?? 0))
-      .slice(0, 6);
-
-    const favorites = entries.filter((e) => e.isFavorite);
-
     return {
-      totalTitles: entries.length,
-      totalEpisodes,
-      totalHours,
-      totalDays,
-      totalChapters,
-      meanScore,
-      scoredCount: scored.length,
-      completionRate,
-      completed,
-      scoreBuckets,
+      ...analytics,
       statusData,
-      topGenres,
-      topStudios,
-      favorites,
     };
-  }, [entries]);
+  }, [entries, activity]);
 
   const maxGenreCount = Math.max(1, ...metrics.topGenres.map((g) => g.count));
+  const hasMonthlyActivity = metrics.monthlyActivity.some((m) => m.count > 0);
 
   return (
-    <div className="pt-24 pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-9">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1300px] mx-auto px-4 sm:px-6 lg:px-8 space-y-7">
+      {/* Clean Header — 1 clear goal: understand your stats at a glance */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5 flex items-center gap-1.5">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>Analytique · {profile.displayName}</span>
-          </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Statistiques & Profil
+            Statistiques
           </h1>
-          <p className="text-sm text-[#8A8FA4] mt-1.5">
-            Calculées en temps réel à partir de votre bibliothèque Shiori.
+          <p className="text-sm text-[#8A8FA4] mt-1">
+            L&apos;essentiel de votre bibliothèque Shiori, calculé en temps réel.
           </p>
         </div>
 
-        {/* Scope switcher + AniList import shortcut */}
-        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
-          <Link
-            href="/settings#anilist-import"
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-sky-500/14 hover:bg-sky-500/24 border border-sky-400/35 text-xs font-semibold text-sky-200 hover:text-white transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Importer AniList</span>
-          </Link>
-          <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
+        {/* Single clean Scope Switcher */}
+        <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08] self-start sm:self-auto">
           {[
             { id: "ALL", label: "Global" },
             { id: "ANIME", label: "Animes" },
@@ -223,223 +134,157 @@ export default function StatsPage() {
               </button>
             );
           })}
-          </div>
         </div>
       </div>
 
-      {/* Imported AniList Official User.statistics Snapshot (if imported) */}
-      {anilistStats && (
-        <RevealSection className="rounded-2xl card-surface border-sky-500/25 p-5 sm:p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {anilistStats.anilistAvatarUrl && (
-                <img
-                  src={anilistStats.anilistAvatarUrl}
-                  alt={anilistStats.anilistUsername}
-                  className="w-10 h-10 rounded-full object-cover border border-sky-400/35 shrink-0"
-                />
-              )}
-              <div>
-                <p className="text-[10.5px] font-mono uppercase tracking-[0.16em] text-sky-400">
-                  Statistiques AniList (User.statistics)
-                </p>
-                <h2 className="text-base font-semibold text-white">
-                  @{anilistStats.anilistUsername}
-                </h2>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              {anilistStats.anilistSiteUrl && (
-                <a
-                  href={anilistStats.anilistSiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300"
-                >
-                  <span>Profil AniList</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
-              <Link
-                href="/settings#anilist-import"
-                className="px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-[#D6D9E6] hover:text-white transition-colors"
-              >
-                Mettre à jour
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-[10.5px] text-[#858A9E]">Animes AniList</p>
-              <p className="text-lg font-bold font-mono text-white mt-0.5">
-                {anilistStats.anime.count.toLocaleString("fr-FR")}
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-[10.5px] text-[#858A9E]">Épisodes vus</p>
-              <p className="text-lg font-bold font-mono text-sky-300 mt-0.5">
-                {anilistStats.anime.episodesWatched.toLocaleString("fr-FR")}
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-[10.5px] text-[#858A9E]">Temps anime</p>
-              <p className="text-lg font-bold font-mono text-white mt-0.5">
-                {(anilistStats.anime.minutesWatched / 60 / 24).toFixed(1)}j
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-[10.5px] text-[#858A9E]">Mangas AniList</p>
-              <p className="text-lg font-bold font-mono text-white mt-0.5">
-                {anilistStats.manga.count.toLocaleString("fr-FR")}
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-[10.5px] text-[#858A9E]">Chapitres / Tomes</p>
-              <p className="text-base font-bold font-mono text-violet-300 mt-0.5">
-                {anilistStats.manga.chaptersRead.toLocaleString("fr-FR")}{" "}
-                <span className="text-xs text-[#7D8296]">
-                  / {anilistStats.manga.volumesRead.toLocaleString("fr-FR")}
-                </span>
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-[10.5px] text-[#858A9E]">Moyenne A / M</p>
-              <p className="text-base font-bold font-mono text-[#F0B95B] mt-0.5">
-                {(anilistStats.anime.meanScore / 10).toFixed(1)}{" "}
-                <span className="text-xs text-[#7D8296]">/</span>{" "}
-                {(anilistStats.manga.meanScore / 10).toFixed(1)}
-              </p>
-            </div>
-          </div>
-        </RevealSection>
-      )}
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.42, delay: 0.02, ease: CINEMA_EASE }}
-          whileHover={{ y: -4 }}
-          className="rounded-2xl card-surface hover:border-white/[0.15] p-5 transition-colors"
-        >
+      {/* TIER 1 — 4 Essential KPI Cards (immediately scannable above the fold) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <div className="rounded-2xl card-surface p-5">
           <div className="flex items-center justify-between text-[#858A9E]">
             <span className="text-xs font-medium">Titres suivis</span>
             <Film className="w-4 h-4 text-accent" />
           </div>
-          <p className="mt-3 text-3xl font-bold font-mono text-white">
+          <p className="mt-2.5 text-3xl font-bold font-mono text-white">
             <AnimatedNumber value={metrics.totalTitles} />
           </p>
-          <p className="mt-1 text-[11px] text-[#7A7F94]">
-            {metrics.completed} terminés · {metrics.completionRate}% complétion
+          <p className="mt-1 text-xs text-[#7A7F94]">
+            {metrics.completedCount} terminés · {metrics.completionRate}%
           </p>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.42, delay: 0.07, ease: CINEMA_EASE }}
-          whileHover={{ y: -4 }}
-          className="rounded-2xl card-surface hover:border-white/[0.15] p-5 transition-colors"
-        >
+        <div className="rounded-2xl card-surface p-5">
           <div className="flex items-center justify-between text-[#858A9E]">
-            <span className="text-xs font-medium">Temps de visionnage</span>
-            <Clock className="w-4 h-4 text-sky-400" />
-          </div>
-          <p className="mt-3 text-3xl font-bold font-mono text-white">
-            <AnimatedNumber value={Number(metrics.totalDays)} decimals={1} formatLocale={false} />
-            <span className="text-base font-normal text-[#858A9E] ml-1">j</span>
-          </p>
-          <p className="mt-1 text-[11px] text-[#7A7F94] font-mono">
-            {metrics.totalHours.toLocaleString("fr-FR")} h · {metrics.totalEpisodes} ép.
-          </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.42, delay: 0.12, ease: CINEMA_EASE }}
-          whileHover={{ y: -4 }}
-          className="rounded-2xl card-surface hover:border-white/[0.15] p-5 transition-colors"
-        >
-          <div className="flex items-center justify-between text-[#858A9E]">
-            <span className="text-xs font-medium">Chapitres lus</span>
+            <span className="text-xs font-medium">
+              {scope === "MANGA" ? "Chapitres lus" : "Épisodes & Chapitres"}
+            </span>
             <BookOpen className="w-4 h-4 text-violet-400" />
           </div>
-          <p className="mt-3 text-3xl font-bold font-mono text-white">
-            <AnimatedNumber value={metrics.totalChapters} />
+          <p className="mt-2.5 text-3xl font-bold font-mono text-white">
+            <AnimatedNumber
+              value={scope === "MANGA" ? metrics.totalChapters : metrics.totalEpisodes}
+            />
           </p>
-          <p className="mt-1 text-[11px] text-[#7A7F94]">
-            Collection manga & romans
+          <p className="mt-1 text-xs text-[#7A7F94]">
+            {scope === "MANGA"
+              ? `${metrics.mangaRead} manga${metrics.mangaRead > 1 ? "s" : ""} lu${metrics.mangaRead > 1 ? "s" : ""}`
+              : scope === "ANIME"
+                ? `${metrics.animeWatching} en cours · ${metrics.animeCompleted} terminés`
+                : `${metrics.totalChapters.toLocaleString("fr-FR")} chapitres lus`}
           </p>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.42, delay: 0.17, ease: CINEMA_EASE }}
-          whileHover={{ y: -4 }}
-          className="rounded-2xl card-surface hover:border-white/[0.15] p-5 transition-colors"
-        >
+        <div className="rounded-2xl card-surface p-5">
+          <div className="flex items-center justify-between text-[#858A9E]">
+            <span className="text-xs font-medium">Temps estimé</span>
+            <Clock className="w-4 h-4 text-sky-400" />
+          </div>
+          <p className="mt-2.5 text-3xl font-bold font-mono text-white">
+            <AnimatedNumber value={metrics.totalDays} decimals={1} formatLocale={false} />
+            <span className="text-base font-normal text-[#858A9E] ml-1">j</span>
+          </p>
+          <p className="mt-1 text-xs text-[#7A7F94]">
+            {metrics.totalHours.toLocaleString("fr-FR")} heures
+          </p>
+        </div>
+
+        <div className="rounded-2xl card-surface p-5">
           <div className="flex items-center justify-between text-[#858A9E]">
             <span className="text-xs font-medium">Note moyenne</span>
             <Star className="w-4 h-4 text-[#F0B95B] fill-[#F0B95B]" />
           </div>
-          <p className="mt-3 text-3xl font-bold font-mono text-[#F0B95B]">
+          <p className="mt-2.5 text-3xl font-bold font-mono text-[#F0B95B]">
             {metrics.meanScore !== null ? (
               <AnimatedNumber value={metrics.meanScore} decimals={2} formatLocale={false} />
             ) : (
               "—"
             )}
           </p>
-          <p className="mt-1 text-[11px] text-[#7A7F94]">
-            Sur {metrics.scoredCount} œuvre{metrics.scoredCount > 1 ? "s" : ""} notée
+          <p className="mt-1 text-xs text-[#7A7F94]">
+            Sur {metrics.scoredCount} titre{metrics.scoredCount > 1 ? "s" : ""} noté
             {metrics.scoredCount > 1 ? "s" : ""}
           </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.42, delay: 0.22, ease: CINEMA_EASE }}
-          whileHover={{ y: -4 }}
-          className="rounded-2xl card-surface hover:border-white/[0.15] p-5 col-span-2 lg:col-span-1 transition-colors"
-        >
-          <div className="flex items-center justify-between text-[#858A9E]">
-            <span className="text-xs font-medium">Coups de cœur</span>
-            <Heart className="w-4 h-4 text-accent-hover fill-current" />
-          </div>
-          <p className="mt-3 text-3xl font-bold font-mono text-white">
-            <AnimatedNumber value={metrics.favorites.length} />
-          </p>
-          <p className="mt-1 text-[11px] text-[#7A7F94]">
-            Sélection personnelle
-          </p>
-        </motion.div>
+        </div>
       </div>
 
-      {/* Charts Row: Score Distribution + Status Donut */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Score Distribution */}
-        <div className="lg:col-span-7 rounded-2xl card-surface p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent">
-                Évaluations
-              </p>
-              <h2 className="text-lg font-semibold text-white mt-0.5">
-                Distribution de vos notes
-              </h2>
+      {/* TIER 1 — 2 Core Charts: Status Breakdown + Score Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Status Distribution Donut */}
+        <div className="lg:col-span-5 rounded-2xl card-surface p-5 sm:p-6 flex flex-col">
+          <h2 className="text-base font-semibold text-white mb-4">
+            Répartition par statut
+          </h2>
+
+          {metrics.statusData.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-sm text-[#7D8296] py-10">
+              Aucune œuvre pour le moment.
             </div>
-            <span className="text-xs font-mono text-[#858A9E]">Échelle 1 → 10</span>
+          ) : (
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
+              <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={metrics.statusData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={48}
+                      outerRadius={74}
+                      paddingAngle={4}
+                      stroke="none"
+                    >
+                      {metrics.statusData.map((item) => (
+                        <Cell key={item.status} fill={item.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#11131D",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        color: "#F4F3EE",
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="space-y-2.5">
+                {metrics.statusData.map((d) => (
+                  <Link
+                    key={d.status}
+                    href={`/library?status=${d.status}`}
+                    className="flex items-center justify-between text-xs hover:text-white transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: d.color }}
+                      />
+                      <span className="text-[#D2D5E2] group-hover:text-white">{d.name}</span>
+                    </div>
+                    <span className="font-mono font-semibold text-white">{d.value}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Score Distribution */}
+        <div className="lg:col-span-7 rounded-2xl card-surface p-5 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-white">
+              Répartition de vos notes
+            </h2>
+            <span className="text-xs font-mono text-[#858A9E]">Note / 10</span>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-52 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={metrics.scoreBuckets}
-                margin={{ top: 8, right: 8, left: -24, bottom: 0 }}
+                margin={{ top: 6, right: 8, left: -24, bottom: 0 }}
               >
                 <XAxis
                   dataKey="bucket"
@@ -476,267 +321,365 @@ export default function StatsPage() {
             </ResponsiveContainer>
           </div>
         </div>
-
-        {/* Status Distribution Donut */}
-        <div className="lg:col-span-5 rounded-2xl card-surface p-6 flex flex-col">
-          <div className="mb-4">
-            <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent">
-              Organisation
-            </p>
-            <h2 className="text-lg font-semibold text-white mt-0.5">
-              Répartition par statut
-            </h2>
-          </div>
-
-          {metrics.statusData.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-sm text-[#7D8296]">
-              Aucune donnée à afficher.
-            </div>
-          ) : (
-            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
-              <div className="h-52 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={metrics.statusData}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={52}
-                      outerRadius={78}
-                      paddingAngle={4}
-                      stroke="none"
-                    >
-                      {metrics.statusData.map((item) => (
-                        <Cell key={item.status} fill={item.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#11131D",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                        color: "#F4F3EE",
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="space-y-2.5">
-                {metrics.statusData.map((d) => (
-                  <div
-                    key={d.status}
-                    className="flex items-center justify-between text-xs"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: d.color }}
-                      />
-                      <span className="text-[#D2D5E2]">{d.name}</span>
-                    </div>
-                    <span className="font-mono font-semibold text-white">
-                      {d.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Genres Affinity + Top Studios + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Genre Affinity */}
-        <div className="lg:col-span-6 rounded-2xl card-surface p-6 space-y-5">
-          <div>
-            <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent">
-              ADN Spectateur
-            </p>
-            <h2 className="text-lg font-semibold text-white mt-0.5">
-              Genres de prédilection
-            </h2>
-          </div>
-
-          {metrics.topGenres.length === 0 ? (
-            <p className="text-sm text-[#7D8296]">Ajoutez des œuvres pour analyser vos genres favoris.</p>
-          ) : (
-            <div className="space-y-3.5">
-              {metrics.topGenres.map((g, i) => {
-                const pct = Math.round((g.count / maxGenreCount) * 100);
-                return (
-                  <div key={g.genre} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <Link
-                        href={`/discover?genre=${encodeURIComponent(g.genre)}`}
-                        className="font-medium text-[#ECEBE6] hover:text-accent-hover transition-colors flex items-center gap-2"
-                      >
-                        <span className="font-mono text-[10px] text-[#6E7387]">
-                          0{i + 1}
-                        </span>
-                        <span>{g.genre}</span>
-                      </Link>
-                      <div className="flex items-center gap-3 font-mono text-[11px]">
-                        {g.avgScore !== null && (
-                          <span className="text-[#F0B95B]">
-                            ★ {g.avgScore.toFixed(1)}
-                          </span>
-                        )}
-                        <span className="text-[#9A9EAE]">
-                          {g.count} titre{g.count > 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-                      <motion.div
-                        initial={{ scaleX: 0 }}
-                        whileInView={{ scaleX: 1 }}
-                        viewport={{ once: true, amount: 0.4 }}
-                        transition={{
-                          duration: 0.75,
-                          delay: i * 0.055,
-                          ease: CINEMA_EASE,
-                        }}
-                        style={{ width: `${pct}%`, transformOrigin: "left center" }}
-                        className="h-full rounded-full bg-gradient-to-r from-accent to-[#F0B95B]"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Studios & Recent Activity */}
-        <div className="lg:col-span-6 space-y-6">
-          {/* Top Studios */}
-          <div className="rounded-2xl card-surface p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#F0B95B]">
-                  Signatures
-                </p>
-                <h2 className="text-lg font-semibold text-white mt-0.5">
-                  Studios & Auteurs les plus suivis
-                </h2>
-              </div>
-              <Award className="w-5 h-5 text-[#F0B95B]" />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {metrics.topStudios.map((s) => (
-                <div
-                  key={s.name}
-                  className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between gap-2"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-[#F4F3EE] truncate">
-                      {s.name}
-                    </p>
-                    <p className="text-[11px] text-[#7D8296] font-mono mt-0.5">
-                      {s.count} œuvre{s.count > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  {s.avgScore !== null && (
-                    <span className="font-mono text-xs text-[#F0B95B] shrink-0">
-                      ★ {s.avgScore.toFixed(1)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Activity Log */}
-          <div className="rounded-2xl card-surface p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-white flex items-center gap-2">
-                <Activity className="w-4 h-4 text-accent" />
-                <span>Activité récente</span>
-              </h2>
-              <span className="text-[11px] font-mono text-[#7D8296]">Temps réel</span>
-            </div>
-
-            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-              {activity.slice(0, 8).map((ev) => (
-                <Link
-                  key={ev.id}
-                  href={`/media/${ev.mediaId}`}
-                  className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.04] transition-colors"
-                >
-                  <img
-                    src={ev.coverImage}
-                    alt={ev.mediaTitle}
-                    className="w-9 h-12 rounded-lg object-cover shrink-0 border border-white/10"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-[#F4F3EE] truncate">
-                      {ev.mediaTitle}
-                    </p>
-                    <p className="text-[11.5px] text-[#9A9EAE] truncate mt-0.5">
-                      {ev.action}
-                    </p>
-                  </div>
-                  <span className="text-[10.5px] font-mono text-[#6E7387] shrink-0">
-                    {formatRelativeTime(ev.createdAt)}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Favorites Showcase */}
-      {metrics.favorites.length > 0 && (
-        <RevealSection className="rounded-2xl card-surface p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.16em] text-accent-hover flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                Panthéon personnel
-              </p>
-              <h2 className="text-lg font-semibold text-white mt-0.5">
-                Vos coups de cœur
-              </h2>
-            </div>
+      {/* TIER 1 — Top Genres (Clean & Scannable) */}
+      <div className="rounded-2xl card-surface p-5 sm:p-6 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-white">Genres préférés</h2>
+          {metrics.favorites.length > 0 && (
             <Link
-              href="/library"
-              className="text-xs text-[#9A9EAE] hover:text-white transition-colors"
+              href="/library?favorites=1"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#B8BCCB] hover:text-white transition-colors"
             >
-              Gérer dans ma bibliothèque →
+              <Heart className="w-3.5 h-3.5 text-rose-400 fill-current" />
+              <span>Voir mes {metrics.favorites.length} favoris</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </Link>
-          </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3.5">
-            {metrics.favorites.slice(0, 24).map((fav) => (
-              <Link
-                key={fav.mediaId}
-                href={`/media/${fav.mediaId}`}
-                className="group space-y-1.5"
-              >
-                <div className="aspect-[2/3] rounded-xl overflow-hidden border border-white/10 group-hover:border-accent/60 transition-all relative">
-                  <img
-                    src={fav.coverImage}
-                    alt={fav.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  {fav.score && (
-                    <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 font-mono text-[10px] text-[#F0B95B]">
-                      ★ {fav.score.toFixed(1)}
-                    </span>
-                  )}
+          )}
+        </div>
+
+        {metrics.topGenres.length === 0 ? (
+          <p className="text-sm text-[#7D8296]">
+            Ajoutez quelques œuvres à votre bibliothèque pour découvrir vos genres préférés.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3.5">
+            {metrics.topGenres.slice(0, 6).map((g, i) => {
+              const pct = Math.round((g.count / maxGenreCount) * 100);
+              return (
+                <div key={g.genre} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <Link
+                      href={`/discover?genre=${encodeURIComponent(g.genre)}`}
+                      className="font-medium text-[#ECEBE6] hover:text-accent-hover transition-colors flex items-center gap-2"
+                    >
+                      <span className="font-mono text-[10px] text-[#6E7387]">
+                        0{i + 1}
+                      </span>
+                      <span>{g.genre}</span>
+                    </Link>
+                    <div className="flex items-center gap-2.5 font-mono text-[11px]">
+                      {g.avgScore !== null && (
+                        <span className="text-[#F0B95B]">★ {g.avgScore.toFixed(1)}</span>
+                      )}
+                      <span className="text-[#9A9EAE]">
+                        {g.count} titre{g.count > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                    <motion.div
+                      initial={{ scaleX: 0 }}
+                      whileInView={{ scaleX: 1 }}
+                      viewport={{ once: true, amount: 0.4 }}
+                      transition={{ duration: 0.65, delay: i * 0.04, ease: CINEMA_EASE }}
+                      style={{ width: `${pct}%`, transformOrigin: "left center" }}
+                      className="h-full rounded-full bg-gradient-to-r from-accent to-[#F0B95B]"
+                    />
+                  </div>
                 </div>
-                <p className="text-[11.5px] font-medium text-[#DCDFE9] group-hover:text-white truncate">
-                  {fav.title}
-                </p>
-              </Link>
-            ))}
+              );
+            })}
           </div>
-        </RevealSection>
-      )}
+        )}
+      </div>
+
+      {/* TIER 2 — Secondary Controls: Shiori Wrapped & Advanced Analytics (clean progressive disclosure) */}
+      <div className="flex flex-wrap items-center gap-2.5 pt-1">
+        {library.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowWrapped((v) => !v)}
+            className={cn(
+              "inline-flex items-center gap-2 h-10 px-4 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
+              showWrapped
+                ? "bg-accent/20 border-accent/50 text-white"
+                : "bg-surface border-white/[0.09] text-[#D6D9E6] hover:text-white hover:border-white/[0.18]"
+            )}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-accent" />
+            <span>{showWrapped ? "Masquer Shiori Wrapped" : "Voir ma rétrospective (Shiori Wrapped)"}</span>
+            <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showWrapped && "rotate-180")} />
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className={cn(
+            "inline-flex items-center gap-2 h-10 px-4 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
+            showAdvanced
+              ? "bg-white/[0.12] border-white/[0.22] text-white"
+              : "bg-surface border-white/[0.09] text-[#D6D9E6] hover:text-white hover:border-white/[0.18]"
+          )}
+        >
+          <BarChart3 className="w-3.5 h-3.5 text-sky-400" />
+          <span>{showAdvanced ? "Masquer les statistiques avancées" : "Statistiques avancées"}</span>
+          <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showAdvanced && "rotate-180")} />
+        </button>
+      </div>
+
+      {/* Collapsible Shiori Wrapped */}
+      <AnimatePresence initial={false}>
+        {showWrapped && (
+          <motion.div
+            id="wrapped"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.22 }}
+          >
+            <ShioriWrappedCard />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Collapsible Advanced Statistics (Annual Evolution, Monthly Activity, Studios, AniList Snapshot) */}
+      <AnimatePresence initial={false}>
+        {showAdvanced && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.22 }}
+            className="space-y-6"
+          >
+            {/* Detailed Breakdown & Duration Note */}
+            <div className="rounded-2xl card-surface p-5 space-y-3">
+              <h3 className="text-sm font-semibold text-white">Détail par statut</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
+                <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-[11px] text-[#858A9E]">Animes commencés</p>
+                  <p className="text-lg font-bold font-mono text-white mt-0.5">{metrics.animeStarted}</p>
+                </div>
+                <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-[11px] text-[#858A9E]">Animes en cours</p>
+                  <p className="text-lg font-bold font-mono text-sky-300 mt-0.5">{metrics.animeWatching}</p>
+                </div>
+                <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-[11px] text-[#858A9E]">Animes terminés</p>
+                  <p className="text-lg font-bold font-mono text-emerald-300 mt-0.5">{metrics.animeCompleted}</p>
+                </div>
+                <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-[11px] text-[#858A9E]">En pause</p>
+                  <p className="text-lg font-bold font-mono text-amber-300 mt-0.5">{metrics.animeOnHold}</p>
+                </div>
+                <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-[11px] text-[#858A9E]">Abandonnés</p>
+                  <p className="text-lg font-bold font-mono text-rose-300 mt-0.5">{metrics.animeDropped}</p>
+                </div>
+                <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-[11px] text-[#858A9E]">Mangas lus</p>
+                  <p className="text-lg font-bold font-mono text-violet-300 mt-0.5">{metrics.mangaRead}</p>
+                </div>
+              </div>
+
+              {metrics.unknownDurationCount > 0 && (
+                <p className="text-[11.5px] text-[#8A8FA4] flex items-center gap-1.5 pt-1">
+                  <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>
+                    Durée estimée à 24 min/épisode pour {metrics.unknownDurationCount} animé
+                    {metrics.unknownDurationCount > 1 ? "s" : ""} sans durée renseignée.
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {/* Annual Evolution + Monthly Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <div className="lg:col-span-6 rounded-2xl card-surface p-5 sm:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <CalendarRange className="w-4 h-4 text-accent" />
+                    <span>Par année de sortie</span>
+                  </h3>
+                  <span className="text-xs font-mono text-[#858A9E]">
+                    {metrics.yearEvolution.length} an{metrics.yearEvolution.length > 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                {metrics.yearEvolution.length === 0 ? (
+                  <div className="h-52 flex items-center justify-center text-sm text-[#7D8296] text-center px-4">
+                    Aucune donnée annuelle disponible.
+                  </div>
+                ) : (
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={metrics.yearEvolution}
+                        margin={{ top: 8, right: 8, left: -24, bottom: 0 }}
+                      >
+                        <XAxis dataKey="year" stroke="#656A7E" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis allowDecimals={false} stroke="#656A7E" fontSize={11} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                          contentStyle={{
+                            backgroundColor: "#11131D",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: "12px",
+                            fontSize: "12px",
+                            color: "#F4F3EE",
+                          }}
+                          formatter={(value: number, name: string) => [
+                            `${value} titre(s)`,
+                            name === "animeCount" ? "Animes" : "Mangas",
+                          ]}
+                          labelFormatter={(label) => `Année ${label}`}
+                        />
+                        <Bar dataKey="animeCount" stackId="yr" fill="#38BDF8" radius={[0, 0, 2, 2]} />
+                        <Bar dataKey="mangaCount" stackId="yr" fill="#A78BFA" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+
+              <div className="lg:col-span-6 rounded-2xl card-surface p-5 sm:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-kinpaku" />
+                    <span>Activité mensuelle (12 mois)</span>
+                  </h3>
+                </div>
+
+                {!hasMonthlyActivity ? (
+                  <div className="h-52 flex items-center justify-center text-sm text-[#7D8296] text-center px-4">
+                    Vos mises à jour apparaîtront mois par mois ici.
+                  </div>
+                ) : (
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={metrics.monthlyActivity}
+                        margin={{ top: 8, right: 8, left: -24, bottom: 0 }}
+                      >
+                        <XAxis dataKey="label" stroke="#656A7E" fontSize={11} tickLine={false} axisLine={false} />
+                        <YAxis allowDecimals={false} stroke="#656A7E" fontSize={11} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                          contentStyle={{
+                            backgroundColor: "#11131D",
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            borderRadius: "12px",
+                            fontSize: "12px",
+                            color: "#F4F3EE",
+                          }}
+                          formatter={(value: number) => [`${value} action(s)`, "Activité"]}
+                        />
+                        <Bar dataKey="count" fill="#F0B95B" radius={[6, 6, 2, 2]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Top Studios */}
+            {metrics.topStudios.length > 0 && (
+              <div className="rounded-2xl card-surface p-5 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Award className="w-4 h-4 text-[#F0B95B]" />
+                    <span>Studios & Auteurs les plus suivis</span>
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  {metrics.topStudios.map((s) => (
+                    <div
+                      key={s.name}
+                      className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-[#F4F3EE] truncate">{s.name}</p>
+                        <p className="text-[11px] text-[#7D8296] font-mono mt-0.5">
+                          {s.count} œuvre{s.count > 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      {s.avgScore !== null && (
+                        <span className="font-mono text-xs text-[#F0B95B] shrink-0">
+                          ★ {s.avgScore.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Imported AniList Summary (cleanly placed in Advanced Analytics with clear label) */}
+            {anilistStats && (
+              <div className="rounded-2xl card-surface border-sky-500/20 p-5 sm:p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {anilistStats.anilistAvatarUrl && (
+                      <img
+                        src={anilistStats.anilistAvatarUrl}
+                        alt={anilistStats.anilistUsername}
+                        className="w-9 h-9 rounded-full object-cover border border-sky-400/35 shrink-0"
+                      />
+                    )}
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">
+                        Résumé importé depuis AniList (@{anilistStats.anilistUsername})
+                      </h3>
+                      <p className="text-xs text-[#858A9E]">
+                        Chiffres globaux issus de votre dernier import AniList (peut inclure des révisions).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    {anilistStats.anilistSiteUrl && (
+                      <a
+                        href={anilistStats.anilistSiteUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300"
+                      >
+                        <span>Voir sur AniList</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                    <Link
+                      href="/settings#anilist-import"
+                      className="px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-[#D6D9E6] hover:text-white transition-colors"
+                    >
+                      Actualiser
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[11px] text-[#858A9E]">Animes AniList</p>
+                    <p className="text-lg font-bold font-mono text-white mt-0.5">
+                      {anilistStats.anime.count.toLocaleString("fr-FR")}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[11px] text-[#858A9E]">Épisodes (AniList)</p>
+                    <p className="text-lg font-bold font-mono text-sky-300 mt-0.5">
+                      {anilistStats.anime.episodesWatched.toLocaleString("fr-FR")}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[11px] text-[#858A9E]">Mangas AniList</p>
+                    <p className="text-lg font-bold font-mono text-white mt-0.5">
+                      {anilistStats.manga.count.toLocaleString("fr-FR")}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[11px] text-[#858A9E]">Chapitres (AniList)</p>
+                    <p className="text-lg font-bold font-mono text-violet-300 mt-0.5">
+                      {anilistStats.manga.chaptersRead.toLocaleString("fr-FR")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

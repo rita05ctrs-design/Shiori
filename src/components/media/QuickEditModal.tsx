@@ -17,8 +17,10 @@ import {
   BookmarkPlus,
   XCircle,
   Sparkles,
+  FolderHeart,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { clampProgress } from "@/lib/library-utils";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import {
   cn,
@@ -74,8 +76,15 @@ function extractInfo(item: MediaItem | LibraryEntry) {
 }
 
 export function QuickEditModal() {
-  const { editingMedia, closeQuickEdit, getEntry, upsertEntry, removeEntry } =
-    useShiori();
+  const {
+    editingMedia,
+    closeQuickEdit,
+    getEntry,
+    upsertEntry,
+    removeEntry,
+    collections,
+    toggleMediaInCollection,
+  } = useShiori();
 
   const [status, setStatus] = useState<LibraryStatus>("WATCHING");
   const [progress, setProgress] = useState<number>(0);
@@ -84,6 +93,8 @@ export function QuickEditModal() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [heartPulse, setHeartPulse] = useState(0);
   const [notes, setNotes] = useState("");
+  const [startedAt, setStartedAt] = useState("");
+  const [completedAt, setCompletedAt] = useState("");
   const [savedFlash, setSavedFlash] = useState(false);
 
   const info = editingMedia ? extractInfo(editingMedia) : null;
@@ -98,12 +109,16 @@ export function QuickEditModal() {
       setScore(existing.score);
       setIsFavorite(existing.isFavorite);
       setNotes(existing.notes ?? "");
+      setStartedAt(existing.startedAt ?? "");
+      setCompletedAt(existing.completedAt ?? "");
     } else {
       setStatus("WATCHING");
       setProgress(0);
       setScore(null);
       setIsFavorite(false);
       setNotes("");
+      setStartedAt("");
+      setCompletedAt("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingMedia]);
@@ -125,14 +140,16 @@ export function QuickEditModal() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingMedia) return;
+    if (!editingMedia || !info) return;
     setSavedFlash(true);
     upsertEntry(editingMedia, {
       status,
-      progress,
+      progress: clampProgress(progress, info.totalUnits),
       score,
       isFavorite,
       notes: notes.trim(),
+      startedAt: startedAt || null,
+      completedAt: completedAt || null,
     });
     setTimeout(() => {
       closeQuickEdit();
@@ -481,10 +498,71 @@ export function QuickEditModal() {
                 )}
               </div>
 
+              {/* Personal Dates & Journal Notes */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
+                    Date de début
+                  </label>
+                  <input
+                    type="date"
+                    value={startedAt}
+                    onChange={(e) => setStartedAt(e.target.value)}
+                    className="w-full h-9 rounded-xl bg-[#08090E] border border-white/[0.09] px-3 text-xs font-mono text-[#ECEBE6] focus:outline-none focus:border-accent/60"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
+                    Date de fin
+                  </label>
+                  <input
+                    type="date"
+                    value={completedAt}
+                    onChange={(e) => setCompletedAt(e.target.value)}
+                    className="w-full h-9 rounded-xl bg-[#08090E] border border-white/[0.09] px-3 text-xs font-mono text-[#ECEBE6] focus:outline-none focus:border-accent/60"
+                  />
+                </div>
+              </div>
+
+              {/* Custom Collections Assignment */}
+              {collections.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-[#858A9E] flex items-center gap-1.5">
+                    <FolderHeart className="w-3.5 h-3.5 text-accent" />
+                    <span>Collections personnalisées</span>
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {collections.map((col) => {
+                      const assigned = col.mediaIds.includes(info.id);
+                      return (
+                        <button
+                          key={col.id}
+                          type="button"
+                          onClick={() => toggleMediaInCollection(col.id, info.id)}
+                          className={cn(
+                            "px-2.5 py-1 rounded-full border text-xs font-medium inline-flex items-center gap-1.5 transition-all cursor-pointer",
+                            assigned
+                              ? "bg-accent/20 border-accent/55 text-white"
+                              : "bg-white/[0.04] border-white/[0.09] text-[#A2A6B8] hover:text-white"
+                          )}
+                        >
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: col.color }}
+                          />
+                          <span>{col.name}</span>
+                          {assigned && <Check className="w-3 h-3 text-accent-soft" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Personal Notes */}
               <div>
                 <label className="block text-[11px] font-mono uppercase tracking-[0.15em] text-[#858A9E] mb-2">
-                  Notes & critique personnelle
+                  Notes & journal personnel (privé)
                 </label>
                 <textarea
                   rows={3}

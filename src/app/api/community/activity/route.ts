@@ -3,11 +3,17 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   ensureServerSupabaseProfile,
   getAllLocalCommunityProfiles,
+  isAuthenticatedActor,
   makeId,
   pushLocalActivity,
   readSocialDb,
   resolveServerActor,
 } from "@/lib/server/social-store";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sanitizeSafeImageUrl,
+} from "@/lib/server/rate-limit";
 import type {
   ActivityCommentItem,
   BadgeRarity,
@@ -24,18 +30,35 @@ export async function GET(request: NextRequest) {
   const kind = searchParams.get("kind");
   const username = searchParams.get("username")?.trim().toLowerCase();
 
+  const requester = await resolveServerActor();
+  const requesterId = isAuthenticatedActor(requester) ? requester.id : null;
+
   const merged = new Map<string, CommunityActivityItem>();
+  const privateUserIds = new Set<string>();
+  const privateUsernames = new Set<string>();
 
   // 1) Fetch public realtime activity from Supabase if tables exist
   try {
     const supabase = await getSupabaseServerClient();
     if (supabase) {
-      const { data: rows, error } = await supabase
-        .from("activity_events")
-        .select("*")
-        .eq("is_public", true)
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const [{ data: rows, error }, { data: privateProfs }] = await Promise.all([
+        supabase
+          .from("activity_events")
+          .select("*")
+          .eq("is_public", true)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("public_profiles")
+          .select("id, username")
+          .eq("is_activity_public", false)
+          .limit(200),
+      ]);
+
+      for (const pp of privateProfs ?? []) {
+        if (pp.id) privateUserIds.add(String(pp.id));
+        if (pp.username) privateUsernames.add(String(pp.username).toLowerCase());
+      }
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
         const ids = rows.map((r) => r.id);
@@ -64,7 +87,7 @@ export async function GET(request: NextRequest) {
             userId: c.user_id,
             authorUsername: c.author_username,
             authorDisplayName: c.author_display_name,
-            authorAvatarUrl: c.author_avatar_url ?? null,
+            authorAvatarUrl: sanitizeSafeImageUrl(c.author_avatar_url),
             body: c.body,
             createdAt: c.created_at,
           });
@@ -83,7 +106,7 @@ export async function GET(request: NextRequest) {
             userId: String(r.user_id),
             actorUsername: String(r.actor_username || "membre"),
             actorDisplayName: String(r.actor_display_name || r.actor_username || "Membre"),
-            actorAvatarUrl: r.actor_avatar_url ?? null,
+            actorAvatarUrl: sanitizeSafeImageUrl(r.actor_avatar_url),
             actorAccentColor: typeof meta.accentColor === "string" ? meta.accentColor : "#E5484D",
             actorPinnedBadges: Array.isArray(meta.pinnedBadges)
               ? meta.pinnedBadges.slice(0, 3)
@@ -92,7 +115,7 @@ export async function GET(request: NextRequest) {
             mediaId: Number(r.media_id ?? 0),
             mediaTitle: String(r.media_title),
             mediaType: resolvedMediaType,
-            coverImage: r.cover_image ?? null,
+            coverImage: sanitizeSafeImageUrl(r.cover_image),
             action: String(r.action),
             score: typeof meta.score === "number" ? meta.score : null,
             badgeId: typeof meta.badgeId === "string" ? meta.badgeId : undefined,
@@ -110,7 +133,15 @@ export async function GET(request: NextRequest) {
     // graceful fallback to local store
   }
 
-  // 2) Merge local community activity feed
+  // 2) Merge local community activity feed & track private local profiles
+  const localProfiles = getAllLocalCommunityProfiles();
+  for (const p of localProfiles) {
+    if (!p.isActivityPublic) {
+      privateUserIds.add(p.id);
+      privateUsernames.add(p.username.toLowerCase());
+    }
+  }
+
   const db = readSocialDb();
   for (const a of db.activities) {
     if (!a.isPublic) continue;
@@ -119,13 +150,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  let items = Array.from(merged.values()).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  // Filter out activities from users who switched their profile to private
+  let items = Array.from(merged.values())
+    .filter((a) => {
+      if (requesterId && a.userId === requesterId) return true;
+      if (privateUserIds.has(a.userId)) return false;
+      if (privateUsernames.has(a.actorUsername.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Hydrate latest pinnedBadges onto each activity author from community profiles
   const pinnedByUsername = new Map<string, string[]>();
-  for (const p of getAllLocalCommunityProfiles()) {
+  for (const p of localProfiles) {
     if (Array.isArray(p.pinnedBadges) && p.pinnedBadges.length > 0) {
       pinnedByUsername.set(p.username.toLowerCase(), p.pinnedBadges.slice(0, 3));
     }
@@ -150,22 +187,27 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const actor = await resolveServerActor();
+    if (!isAuthenticatedActor(actor)) {
+      return NextResponse.json(
+        { error: "Authentification requise pour publier une activité." },
+        { status: 401 }
+      );
+    }
+
+    const limit = checkRateLimit(`activity:post:${actor.id}`, 30, 60_000);
+    if (!limit.ok) {
+      return rateLimitResponse(limit.retryAfterSec);
+    }
+
     const body = await request.json();
     if (body?.isPublic === false) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
-    const actor = await resolveServerActor({
-      userId: body?.userId,
-      username: body?.actorUsername,
-      displayName: body?.actorDisplayName,
-      avatarUrl: body?.actorAvatarUrl,
-      accentColor: body?.actorAccentColor,
-    });
-
     const kind = (body?.kind || "UPDATE") as CommunityActivityKind;
-    const mediaTitle = String(body?.mediaTitle || "").trim();
-    const action = String(body?.action || "").trim();
+    const mediaTitle = String(body?.mediaTitle || "").trim().slice(0, 200);
+    const action = String(body?.action || "").trim().slice(0, 300);
     if (!mediaTitle || !action) {
       return NextResponse.json({ error: "Champs requis manquants" }, { status: 400 });
     }
@@ -176,20 +218,19 @@ export async function POST(request: NextRequest) {
     const actorPinnedBadges: string[] = Array.isArray(body?.actorPinnedBadges)
       ? body.actorPinnedBadges.filter((x: unknown) => typeof x === "string").slice(0, 3)
       : [];
-    const badgeId = typeof body?.badgeId === "string" ? body.badgeId : undefined;
+    const badgeId = typeof body?.badgeId === "string" ? body.badgeId.slice(0, 64) : undefined;
     const badgeRarity = typeof body?.badgeRarity === "string" ? (body.badgeRarity as BadgeRarity) : undefined;
+    const safeCoverImage = sanitizeSafeImageUrl(body?.coverImage);
 
     let createdId = makeId("act");
     const createdAt = new Date().toISOString();
     let savedToSupabase = false;
     let supabaseError: string | undefined;
 
-    // Persist to Supabase `activity_events` FIRST (triggers Supabase Realtime!)
     if (actor.source === "supabase") {
       try {
         const supabase = await getSupabaseServerClient();
         if (supabase) {
-          // Ensure user exists in `public.profiles` so foreign key never fails!
           const ensured = await ensureServerSupabaseProfile(supabase, actor);
           const { data: inserted, error } = await supabase
             .from("activity_events")
@@ -198,13 +239,13 @@ export async function POST(request: NextRequest) {
               media_id: Number(body?.mediaId ?? 0),
               media_title: mediaTitle,
               media_type: dbMediaType,
-              cover_image: body?.coverImage ?? null,
+              cover_image: safeCoverImage,
               action,
               event_kind: kind,
               is_public: true,
               actor_username: ensured.username || actor.username,
               actor_display_name: actor.displayName,
-              actor_avatar_url: actor.avatarUrl,
+              actor_avatar_url: sanitizeSafeImageUrl(actor.avatarUrl),
               metadata: {
                 isStaff,
                 isBadge,
@@ -222,11 +263,11 @@ export async function POST(request: NextRequest) {
             createdId = String(inserted.id);
             savedToSupabase = true;
           } else if (error) {
-            supabaseError = error.message;
+            supabaseError = "Impossible de publier l'activité.";
           }
         }
-      } catch (err) {
-        supabaseError = err instanceof Error ? err.message : "Erreur insertion activity_events";
+      } catch {
+        supabaseError = "Erreur de synchronisation activité.";
       }
     }
 
@@ -235,14 +276,14 @@ export async function POST(request: NextRequest) {
       userId: actor.id,
       actorUsername: actor.username,
       actorDisplayName: actor.displayName,
-      actorAvatarUrl: actor.avatarUrl,
+      actorAvatarUrl: sanitizeSafeImageUrl(actor.avatarUrl),
       actorAccentColor: actor.accentColor,
       actorPinnedBadges,
       kind,
       mediaId: Number(body?.mediaId ?? 0),
       mediaTitle,
       mediaType: isBadge ? "BADGE" : isStaff ? "STAFF" : dbMediaType,
-      coverImage: body?.coverImage ?? null,
+      coverImage: safeCoverImage,
       action,
       score: typeof body?.score === "number" ? body.score : null,
       badgeId,
@@ -253,11 +294,10 @@ export async function POST(request: NextRequest) {
       comments: [],
     };
 
-    try {
+    if (actor.source === "account") {
       pushLocalActivity(item);
-    } catch {
-      // non-fatal on serverless FS
     }
+
     return NextResponse.json({
       ok: true,
       activity: item,
@@ -265,6 +305,6 @@ export async function POST(request: NextRequest) {
       supabaseError,
     });
   } catch {
-    return NextResponse.json({ error: "Erreur publication activité" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur publication activité" }, { status: 400 });
   }
 }

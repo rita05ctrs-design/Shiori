@@ -72,12 +72,13 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     const ro = new ResizeObserver(() => updateScrollBounds());
     ro.observe(el);
 
+    const state = stateRef.current;
     return () => {
       el.removeEventListener("scroll", updateScrollBounds);
       window.removeEventListener("resize", updateScrollBounds);
       ro.disconnect();
-      if (stateRef.current.rafId) {
-        cancelAnimationFrame(stateRef.current.rafId);
+      if (state.rafId) {
+        cancelAnimationFrame(state.rafId);
       }
     };
   }, [updateScrollBounds]);

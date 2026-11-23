@@ -8,7 +8,6 @@ import {
   Star,
   Tv,
   BookOpen,
-  Heart,
   Mic2,
   Lock,
   Globe,
@@ -16,6 +15,11 @@ import {
   Calendar,
   ArrowLeft,
   Sparkles,
+  FolderKanban,
+  Flag,
+  Ban,
+  ShieldCheck,
+  X,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { UserAvatar } from "@/components/ui/UserAvatar";
@@ -27,7 +31,20 @@ import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
 import { BadgesShowcase } from "@/components/badges/BadgesShowcase";
 import { evaluateAllBadges } from "@/lib/badges";
-import type { CommunityActivityItem, PublicUserProfile } from "@/types/media";
+import type {
+  CommunityActivityItem,
+  PublicUserProfile,
+  ReportReason,
+  SharedPublicCollection,
+} from "@/types/media";
+
+const REPORT_REASONS: { id: ReportReason; label: string }[] = [
+  { id: "spam", label: "Spam ou publicité" },
+  { id: "harassment", label: "Harcèlement ou comportement abusif" },
+  { id: "inappropriate", label: "Contenu inapproprié" },
+  { id: "spoiler", label: "Spoiler non masqué" },
+  { id: "other", label: "Autre motif" },
+];
 
 interface PublicProfileClientProps {
   username: string;
@@ -39,6 +56,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
     library,
     orderedFavorites,
     favoriteStaff,
+    collections,
     hydrated,
     evaluatedBadges: ownEvaluatedBadges,
     unlockedBadges: ownUnlockedBadges,
@@ -46,11 +64,20 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
     socialInteractionsCount: ownSocialCount,
     togglePinBadge,
     previewBadgeUnlock,
+    isUserBlocked,
+    blockUser,
+    unblockUser,
+    reportContent,
   } = useShiori();
   const [member, setMember] = useState<PublicUserProfile | null>(null);
   const [activities, setActivities] = useState<CommunityActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<ReportReason>("spam");
+  const [reportDetails, setReportDetails] = useState("");
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [blockingBusy, setBlockingBusy] = useState(false);
 
   const isOwnProfile =
     hydrated &&
@@ -118,11 +145,33 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         const meanScore = scored.length
           ? Math.round((scored.reduce((a, b) => a + (b.score ?? 0), 0) / scored.length) * 10) / 10
           : null;
+        const entryById = new Map(library.map((e) => [e.mediaId, e]));
+        const liveSharedCollections: SharedPublicCollection[] = collections
+          .filter((c) => c.isPublic)
+          .slice(0, 12)
+          .map((c) => ({
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            color: c.color,
+            items: c.mediaIds
+              .map((mid) => entryById.get(mid))
+              .filter((e): e is NonNullable<typeof e> => Boolean(e))
+              .slice(0, 18)
+              .map((e) => ({
+                mediaId: e.mediaId,
+                type: e.type,
+                title: e.title,
+                coverImage: e.coverImage,
+                score: e.score,
+              })),
+          }));
         return {
           id: currentUser.id,
           username: currentUser.username,
           displayName: currentUser.displayName,
           avatarUrl: currentUser.avatarUrl ?? null,
+          bannerUrl: currentUser.bannerUrl ?? null,
           avatarInitials: currentUser.avatarInitials,
           bio: currentUser.bio,
           accentColor: currentUser.accentColor,
@@ -136,6 +185,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
             coverImage: e.coverImage,
             score: e.score,
           })),
+          sharedCollections: liveSharedCollections,
           stats: {
             totalEntries: library.length,
             animeCount: library.filter((e) => e.type === "ANIME").length,
@@ -195,6 +245,21 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
 
   if (!displayProfile) return null;
 
+  const previewItems = displayProfile.libraryPreview ?? [];
+  const previewGenres = new Set<string>();
+  for (const item of previewItems) {
+    for (const g of item.genres ?? []) {
+      if (g) previewGenres.add(g.trim().toLowerCase());
+    }
+  }
+  const previewScoredCount = previewItems.filter(
+    (m) => m.score !== null && m.score > 0
+  ).length;
+  const previewPerfectCount = Math.max(
+    previewItems.filter((m) => m.score !== null && m.score >= 10).length,
+    displayProfile.favoriteMedia.filter((m) => m.score !== null && m.score >= 10).length
+  );
+
   const profileBadges = isOwnProfile
     ? ownEvaluatedBadges
     : evaluateAllBadges(
@@ -206,16 +271,11 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           mangaCount: displayProfile.stats.mangaCount,
           episodesWatched: displayProfile.stats.episodesWatched,
           chaptersRead: displayProfile.stats.chaptersRead,
-          moviesCompletedCount: Math.round(displayProfile.stats.animeCount * 0.08),
-          uniqueGenresCount: Math.min(18, Math.round(displayProfile.stats.totalEntries / 12)),
+          moviesCompletedCount: 0,
+          uniqueGenresCount: previewGenres.size,
           totalLibraryCount: displayProfile.stats.totalEntries,
-          scoredCount:
-            displayProfile.stats.meanScore !== null
-              ? Math.max(10, Math.round(displayProfile.stats.totalEntries * 0.45))
-              : 0,
-          perfectScoresCount: displayProfile.favoriteMedia.filter(
-            (m) => m.score !== null && m.score >= 10
-          ).length,
+          scoredCount: previewScoredCount,
+          perfectScoresCount: previewPerfectCount,
           favoriteMediaCount: displayProfile.favoriteMedia.length,
           favoriteStaffCount: displayProfile.favoriteStaff.length,
           hasCustomAvatar: Boolean(displayProfile.avatarUrl),
@@ -224,10 +284,53 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         displayProfile.unlockedBadges ?? []
       );
 
+  const isDemoShowcaseProfile =
+    displayProfile.source === "community" || displayProfile.id.startsWith("community-");
+
   const joinedLabel = new Date(displayProfile.joinedAt).toLocaleDateString("fr-FR", {
     month: "long",
     year: "numeric",
   });
+  const isBlocked = !isOwnProfile && isUserBlocked(displayProfile.id);
+  const sharedCollections = displayProfile.sharedCollections ?? [];
+
+  const handleToggleBlock = async () => {
+    if (blockingBusy || isOwnProfile) return;
+    setBlockingBusy(true);
+    try {
+      if (isBlocked) {
+        await unblockUser(displayProfile.id);
+      } else {
+        await blockUser({
+          id: displayProfile.id,
+          username: displayProfile.username,
+          displayName: displayProfile.displayName,
+          avatarUrl: displayProfile.avatarUrl,
+        });
+      }
+    } finally {
+      setBlockingBusy(false);
+    }
+  };
+
+  const handleSubmitProfileReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submittingReport) return;
+    setSubmittingReport(true);
+    try {
+      await reportContent({
+        targetType: "profile",
+        targetId: displayProfile.id,
+        targetUserId: displayProfile.id,
+        reason: reportReason,
+        details: reportDetails.trim(),
+      });
+      setReportOpen(false);
+      setReportDetails("");
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
 
   return (
     <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
@@ -240,15 +343,50 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         <span>Retour à la communauté</span>
       </Link>
 
-      {/* Hero Profile Header Card */}
+      {/* Blocked User Banner */}
+      {isBlocked && (
+        <div className="rounded-2xl bg-rose-500/12 border border-rose-400/35 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3 text-xs text-rose-100">
+          <div className="flex items-center gap-2.5">
+            <Ban className="w-4 h-4 text-rose-300 shrink-0" />
+            <span>
+              Vous avez bloqué <strong>@{displayProfile.username}</strong>. Ses activités et messages privés sont masqués.
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={blockingBusy}
+            onClick={() => void handleToggleBlock()}
+            className="px-3.5 py-1.5 rounded-full bg-white/[0.1] hover:bg-white/[0.18] text-white font-semibold cursor-pointer transition-colors"
+          >
+            Débloquer
+          </button>
+        </div>
+      )}
+
+      {/* Hero Profile Header Card (with optional custom banner) */}
       <section className="rounded-3xl card-surface border border-white/[0.09] p-4 sm:p-6 md:p-8 relative overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-24 -right-16 w-80 h-80 rounded-full opacity-25 blur-3xl"
-          style={{
-            background: `radial-gradient(circle, ${displayProfile.accentColor}, transparent 70%)`,
-          }}
-        />
+        {displayProfile.bannerUrl ? (
+          <>
+            <img
+              src={displayProfile.bannerUrl}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 w-full h-full object-cover opacity-35"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#080A11]/95 via-[#080A11]/75 to-[#080A11]/88"
+            />
+          </>
+        ) : (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -top-24 -right-16 w-80 h-80 rounded-full opacity-25 blur-3xl"
+            style={{
+              background: `radial-gradient(circle, ${displayProfile.accentColor}, transparent 70%)`,
+            }}
+          />
+        )}
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-5 min-w-0">
@@ -268,6 +406,14 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                 <span className="px-2.5 py-0.5 rounded-full bg-white/[0.07] border border-white/[0.1] font-mono text-xs text-[#C8CCE0]">
                   @{displayProfile.username}
                 </span>
+                {isDemoShowcaseProfile && (
+                  <span
+                    title="Profil vitrine d'exemple fourni par Shiori"
+                    className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/35 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-200"
+                  >
+                    Profil exemple
+                  </span>
+                )}
                 <PinnedBadgesRow badgeIds={displayProfile.pinnedBadges} size="sm" />
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-[10.5px] font-mono text-[#9EA3B5]">
                   {displayProfile.isActivityPublic ? (
@@ -305,26 +451,58 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                 className="h-10 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.12] text-xs font-semibold text-white inline-flex items-center gap-2 transition-colors"
               >
                 <Settings className="w-4 h-4 text-accent" />
-                <span>Modifier mon profil & avatar</span>
+                <span>Modifier mon profil & bannière</span>
               </Link>
             ) : (
               <>
-                <FriendActionButton
-                  target={{
-                    id: displayProfile.id,
-                    username: displayProfile.username,
-                    displayName: displayProfile.displayName,
-                    avatarUrl: displayProfile.avatarUrl,
-                  }}
-                  size="md"
-                />
-                <Link
-                  href={`/messages?to=${encodeURIComponent(displayProfile.username)}`}
-                  className="h-10 px-5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-2 transition-all"
+                {!isBlocked && (
+                  <>
+                    <FriendActionButton
+                      target={{
+                        id: displayProfile.id,
+                        username: displayProfile.username,
+                        displayName: displayProfile.displayName,
+                        avatarUrl: displayProfile.avatarUrl,
+                      }}
+                      size="md"
+                    />
+                    <Link
+                      href={`/messages?to=${encodeURIComponent(displayProfile.username)}`}
+                      className="h-10 px-5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-2 transition-all"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Envoyer un message</span>
+                    </Link>
+                  </>
+                )}
+                <button
+                  type="button"
+                  disabled={blockingBusy}
+                  onClick={() => void handleToggleBlock()}
+                  title={isBlocked ? "Débloquer cet utilisateur" : "Bloquer cet utilisateur"}
+                  className="h-10 px-3.5 rounded-xl bg-white/[0.05] hover:bg-rose-500/15 border border-white/[0.1] hover:border-rose-400/40 text-xs font-medium text-[#C8CCE0] hover:text-rose-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>Envoyer un message</span>
-                </Link>
+                  {isBlocked ? (
+                    <>
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Débloquer</span>
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Bloquer</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReportOpen(true)}
+                  title="Signaler ce profil"
+                  className="h-10 px-3 rounded-xl bg-white/[0.05] hover:bg-amber-500/15 border border-white/[0.1] hover:border-amber-400/40 text-xs font-medium text-[#C8CCE0] hover:text-amber-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Signaler</span>
+                </button>
               </>
             )}
           </div>
@@ -475,12 +653,100 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         externalFavorites={displayProfile.favoriteMedia}
       />
 
+      {/* Shared Public Custom Collections */}
+      {(sharedCollections.length > 0 || isOwnProfile) && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent flex items-center gap-1.5">
+                <FolderKanban className="w-3.5 h-3.5" />
+                <span>Listes personnalisées</span>
+              </p>
+              <h2 className="text-lg sm:text-xl font-bold text-white mt-0.5">
+                Collections partagées ({sharedCollections.length})
+              </h2>
+            </div>
+            {isOwnProfile && (
+              <Link
+                href="/library"
+                className="text-xs text-accent-soft hover:text-white transition-colors"
+              >
+                Gérer mes collections →
+              </Link>
+            )}
+          </div>
+
+          {sharedCollections.length === 0 ? (
+            <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E]">
+              Aucune collection publique pour le moment. Créez une collection dans votre bibliothèque et activez « Publique » pour la partager ici.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {sharedCollections.map((col) => (
+                <div
+                  key={col.id}
+                  className="rounded-2xl card-surface border border-white/[0.08] p-4 sm:p-5 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: col.color }}
+                        />
+                        <h3 className="text-sm font-bold text-white truncate">{col.name}</h3>
+                      </div>
+                      {col.description && (
+                        <p className="text-xs text-[#9EA3B5] mt-1 line-clamp-2">
+                          {col.description}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[10.5px] font-mono text-[#8A8FA4] shrink-0">
+                      {col.items.length} titre{col.items.length > 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  {col.items.length === 0 ? (
+                    <p className="text-xs text-[#7D8296]">Collection vide pour le moment.</p>
+                  ) : (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {col.items.slice(0, 6).map((item) => (
+                        <Link
+                          key={item.mediaId}
+                          href={`/media/${item.mediaId}`}
+                          title={item.title}
+                          className="group relative aspect-[2/3] rounded-lg overflow-hidden border border-white/10 hover:border-accent/60 transition-all"
+                        >
+                          <img
+                            src={item.coverImage}
+                            alt={item.title}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Public Activity History */}
       <section className="space-y-4">
         <h2 className="text-lg sm:text-xl font-bold text-white">
           Activité récente
         </h2>
-        {!displayProfile.isActivityPublic ? (
+        {isBlocked ? (
+          <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E] flex items-center gap-2">
+            <Ban className="w-4 h-4 text-rose-400" />
+            <span>Activité masquée tant que cet utilisateur est bloqué.</span>
+          </div>
+        ) : !displayProfile.isActivityPublic ? (
           <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E] flex items-center gap-2">
             <Lock className="w-4 h-4 text-amber-400" />
             <span>Cet utilisateur a choisi de garder son activité privée.</span>
@@ -505,6 +771,87 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           </div>
         )}
       </section>
+
+      {/* Report Profile Modal */}
+      {reportOpen && !isOwnProfile && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Signaler ce profil"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+        >
+          <form
+            onSubmit={handleSubmitProfileReport}
+            className="w-full max-w-md rounded-2xl bg-[#10131F] border border-white/[0.14] shadow-2xl p-5 space-y-4"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Flag className="w-4 h-4 text-amber-400" />
+                <span>Signaler @{displayProfile.username}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReportOpen(false)}
+                className="p-1.5 rounded-lg text-[#9A9EAE] hover:text-white hover:bg-white/[0.08] cursor-pointer"
+                aria-label="Fermer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-[#C8CCE0]">Motif</label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {REPORT_REASONS.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setReportReason(r.id)}
+                    className={`px-3 py-2 rounded-xl text-left text-xs font-medium border transition-colors cursor-pointer ${
+                      reportReason === r.id
+                        ? "bg-amber-500/18 border-amber-400/50 text-amber-100"
+                        : "bg-white/[0.03] border-white/[0.08] text-[#B5B9C9] hover:text-white"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-[#C8CCE0]">
+                Détails complémentaires (optionnel)
+              </label>
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={reportDetails}
+                onChange={(e) => setReportDetails(e.target.value)}
+                placeholder="Précisez ce qui vous pose problème..."
+                className="w-full px-3 py-2 rounded-xl bg-obsidian/80 border border-white/[0.1] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setReportOpen(false)}
+                className="h-9 px-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-medium text-[#C8CCE0] cursor-pointer"
+              >
+                Annuler
+              </button>
+              <button
+                type="submit"
+                disabled={submittingReport}
+                className="h-9 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-[#090A0F] text-xs font-semibold cursor-pointer"
+              >
+                {submittingReport ? "Envoi..." : "Envoyer le signalement"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

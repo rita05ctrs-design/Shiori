@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Mic2,
   Star,
-  Radio,
   UserCircle2,
   Loader2,
   Globe,
@@ -32,36 +31,34 @@ import type {
   PublicUserProfile,
 } from "@/types/media";
 
-type CommunityTab = "anilist" | "activity" | "friends" | "members";
+type CommunityTab = "feed" | "friends" | "members";
+type FeedSource = "shiori" | "anilist";
 
-const ACTIVITY_FILTERS: { id: "ALL" | CommunityActivityKind; label: string }[] = [
-  { id: "ALL", label: "Toute l'activité" },
-  { id: "BADGE_UNLOCKED", label: "Badges rares" },
-  { id: "FAVORITE_MEDIA", label: "Favoris Anime/Manga" },
-  { id: "FAVORITE_STAFF", label: "Voice Actors" },
-  { id: "COMPLETED", label: "Séries terminées" },
+const ACTIVITY_FILTERS: {
+  id: "ALL" | CommunityActivityKind;
+  label: string;
+}[] = [
+  { id: "ALL", label: "Tout" },
+  { id: "FAVORITE_MEDIA", label: "Favoris" },
+  { id: "COMPLETED", label: "Terminés" },
   { id: "SCORED", label: "Notes" },
+  { id: "BADGE_UNLOCKED", label: "Badges" },
+  { id: "FAVORITE_STAFF", label: "Doubleurs" },
 ];
 
 export function CommunityClient() {
   const {
     profile,
-    supabaseReady,
     friends,
     incomingFriendRequests,
     outgoingFriendRequests,
     addFriend,
     getFriendRelation,
+    isUserBlocked,
   } = useShiori();
-  const [tab, setTab] = useState<CommunityTab>("anilist");
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const param = new URLSearchParams(window.location.search).get("tab");
-    if (param === "friends" || param === "activity" || param === "members" || param === "anilist") {
-      setTab(param);
-    }
-  }, []);
+  const [tab, setTab] = useState<CommunityTab>("feed");
+  const [feedSource, setFeedSource] = useState<FeedSource>("shiori");
   const [kindFilter, setKindFilter] = useState<"ALL" | CommunityActivityKind>("ALL");
   const [memberQuery, setMemberQuery] = useState("");
   const [directAddUsername, setDirectAddUsername] = useState("");
@@ -75,7 +72,20 @@ export function CommunityClient() {
   const [totalMembersCount, setTotalMembersCount] = useState<number>(0);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [loadingMembers, setLoadingMembers] = useState(true);
-  const [realtimeLive, setRealtimeLive] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const param = new URLSearchParams(window.location.search).get("tab");
+    if (param === "friends") setTab("friends");
+    else if (param === "members") setTab("members");
+    else if (param === "anilist") {
+      setTab("feed");
+      setFeedSource("anilist");
+    } else if (param === "activity") {
+      setTab("feed");
+      setFeedSource("shiori");
+    }
+  }, []);
 
   const loadActivities = useCallback(async () => {
     setLoadingFeed(true);
@@ -123,128 +133,87 @@ export function CommunityClient() {
     return () => clearTimeout(t);
   }, [memberQuery, loadProfiles, profile.id, profile.mode, profile.username]);
 
-  // Also refresh once shortly after mount so freshly backfilled profile & activity appear live
-  useEffect(() => {
-    const t = setTimeout(() => {
-      void loadProfiles(memberQuery);
-      void loadActivities();
-    }, 1500);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile.id, profile.mode]);
-
-  // Subscribe to Supabase Realtime for live activity_events, activity_likes, activity_comments!
+  // Subscribe to realtime updates transparently in the background
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
     const channel = supabase
       .channel("shiori-community-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activity_events" },
-        () => {
-          void loadActivities();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activity_likes" },
-        () => {
-          void loadActivities();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "activity_comments" },
-        () => {
-          void loadActivities();
-        }
-      )
-      .subscribe((status) => {
-        setRealtimeLive(status === "SUBSCRIBED");
-      });
+      .on("postgres_changes", { event: "*", schema: "public", table: "activity_events" }, () => {
+        void loadActivities();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "activity_likes" }, () => {
+        void loadActivities();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "activity_comments" }, () => {
+        void loadActivities();
+      })
+      .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
   }, [loadActivities]);
 
+  const visibleActivities = activities.filter((a) => !isUserBlocked(a.userId));
+  const visibleProfiles = profiles.filter((p) => !isUserBlocked(p.id));
+
   return (
-    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+      {/* Clean Header — 1 clear goal: follow activity, add friends & browse members */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent mb-1.5 flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">
-              Communauté Shiori · {realtimeLive ? "Supabase Realtime connecté" : "Fil en direct"}
-            </span>
-          </p>
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Activité & Profils Publics
+          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
+            Communauté
           </h1>
-          <p className="text-sm text-[#8A8FA4] mt-1.5 max-w-2xl">
-            Découvrez les coups de cœur, Voice Actors favoris, séries terminées et notes des
-            membres en temps réel, échangez par commentaires et discutez en message privé.
+          <p className="text-sm text-[#8A8FA4] mt-1">
+            Suivez l&apos;activité des membres, ajoutez vos amis et discutez en privé.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Link
             href={`/profile/${encodeURIComponent(profile.username)}`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-semibold text-white transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-white transition-colors"
           >
             <UserCircle2 className="w-3.5 h-3.5 text-accent" />
-            <span>Mon profil public</span>
+            <span>Mon profil</span>
           </Link>
           <Link
             href="/messages"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors"
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>Messagerie</span>
+            <span>Messages</span>
           </Link>
         </div>
       </div>
 
-      {/* Main Navigation Tabs: horizontally scrollable on mobile so nothing wraps or overflows */}
+      {/* Primary 3-Tab Switch + Contextual Right Control */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar pb-0.5">
           <div className="inline-flex flex-nowrap items-center p-1 rounded-full bg-surface border border-white/[0.09] gap-0.5">
             <button
               type="button"
-              onClick={() => setTab("anilist")}
+              onClick={() => setTab("feed")}
               className={cn(
-                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
-                tab === "anilist"
-                  ? "bg-[#02A9FF] text-[#06121C] shadow-[0_6px_18px_rgba(2,169,255,0.35)]"
-                  : "text-[#9A9EAE] hover:text-white"
-              )}
-            >
-              <Globe className="w-3.5 h-3.5 shrink-0" />
-              <span>Fil AniList</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("activity")}
-              className={cn(
-                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
-                tab === "activity"
+                "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                tab === "feed"
                   ? "bg-accent text-accent-fg shadow-accent"
                   : "text-[#9A9EAE] hover:text-white"
               )}
             >
               <Activity className="w-3.5 h-3.5 shrink-0" />
-              <span>Activité Shiori</span>
+              <span>Fil d&apos;activité</span>
             </button>
             <button
               type="button"
               onClick={() => setTab("friends")}
               className={cn(
-                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 relative whitespace-nowrap shrink-0",
+                "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
                 tab === "friends"
-                  ? "bg-emerald-500 text-[#061810] shadow-[0_6px_18px_rgba(16,185,129,0.32)]"
+                  ? "bg-emerald-500 text-[#061810]"
                   : "text-[#9A9EAE] hover:text-white"
               )}
             >
@@ -260,7 +229,7 @@ export function CommunityClient() {
               type="button"
               onClick={() => setTab("members")}
               className={cn(
-                "px-3.5 sm:px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
                 tab === "members"
                   ? "bg-accent text-accent-fg shadow-accent"
                   : "text-[#9A9EAE] hover:text-white"
@@ -272,137 +241,79 @@ export function CommunityClient() {
           </div>
         </div>
 
-        {tab === "activity" ? (
-          <div className="flex items-center gap-2">
-            {supabaseReady && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/12 border border-emerald-500/30 text-[10.5px] font-mono text-emerald-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Temps réel
-              </span>
+        {tab === "feed" ? (
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="inline-flex items-center p-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs">
+              <button
+                type="button"
+                onClick={() => setFeedSource("shiori")}
+                className={cn(
+                  "px-3 py-1.5 rounded-full font-medium transition-colors cursor-pointer",
+                  feedSource === "shiori"
+                    ? "bg-white/[0.12] text-white"
+                    : "text-[#9A9EAE] hover:text-white"
+                )}
+              >
+                Shiori
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeedSource("anilist")}
+                className={cn(
+                  "px-3 py-1.5 rounded-full font-medium transition-colors cursor-pointer inline-flex items-center gap-1",
+                  feedSource === "anilist"
+                    ? "bg-[#02A9FF]/20 text-sky-200"
+                    : "text-[#9A9EAE] hover:text-white"
+                )}
+              >
+                <Globe className="w-3 h-3" />
+                <span>AniList</span>
+              </button>
+            </div>
+
+            {feedSource === "shiori" && (
+              <button
+                type="button"
+                onClick={() => void loadActivities()}
+                aria-label="Actualiser le fil"
+                className="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.09] text-white inline-flex items-center justify-center cursor-pointer"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", loadingFeed && "animate-spin")} />
+              </button>
             )}
-            <button
-              type="button"
-              onClick={() => void loadActivities()}
-              className="h-9 px-3.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <RefreshCw className={cn("w-3.5 h-3.5", loadingFeed && "animate-spin")} />
-              <span>Actualiser</span>
-            </button>
           </div>
-        ) : tab === "members" || tab === "friends" ? (
-          <div className="relative w-full sm:w-80">
+        ) : (
+          <div className="relative w-full sm:w-72">
             <Search className="w-4 h-4 text-[#7D8296] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={memberQuery}
               onChange={(e) => setMemberQuery(e.target.value)}
-              placeholder="Rechercher un ami, @pseudo, Seiyuu..."
+              placeholder="Rechercher un membre ou @pseudo..."
               className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
             />
           </div>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/12 border border-sky-400/30 text-[11px] font-mono text-sky-300 self-start sm:self-auto">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-            Flux officiel AniList en direct
-          </span>
         )}
       </div>
 
-      {/* TAB 0: ANILIST LIVE ACTIVITY FEED + SIDEBAR DIRECTORY */}
-      {tab === "anilist" ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-8 min-w-0">
-            <AniListActivityFeed />
-          </div>
-
-          <aside className="lg:col-span-4 min-w-0 space-y-4">
-            <div className="rounded-2xl card-surface p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-accent" />
-                  <span>Membres Shiori</span>
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setTab("members")}
-                  className="text-xs text-accent-soft hover:underline cursor-pointer"
-                >
-                  Tous →
-                </button>
-              </div>
-
-              <div className="space-y-2.5">
-                {profiles.slice(0, 6).map((m) => {
-                  const isMe = m.username.toLowerCase() === profile.username.toLowerCase();
-                  return (
-                    <div
-                      key={m.id}
-                      className="p-2.5 rounded-xl bg-obsidian/65 border border-white/[0.06] hover:border-white/[0.14] transition-colors flex items-center gap-3"
-                    >
-                      <Link href={`/profile/${encodeURIComponent(m.username)}`}>
-                        <UserAvatar
-                          avatarUrl={m.avatarUrl}
-                          initials={m.avatarInitials}
-                          accentColor={m.accentColor}
-                          alt={m.displayName}
-                          size="sm"
-                        />
-                      </Link>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/profile/${encodeURIComponent(m.username)}`}
-                          className="text-xs font-semibold text-white hover:text-accent-hover truncate block"
-                        >
-                          {m.displayName}{" "}
-                          {isMe && <span className="text-accent-soft">(Vous)</span>}
-                        </Link>
-                        <p className="text-[10.5px] font-mono text-[#7D8296] truncate">
-                          @{m.username} · {m.stats.totalEntries} titres
-                        </p>
-                      </div>
-                      {!isMe && (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <FriendActionButton
-                            target={{
-                              id: m.id,
-                              username: m.username,
-                              displayName: m.displayName,
-                              avatarUrl: m.avatarUrl,
-                            }}
-                            compactIconOnly
-                          />
-                          <Link
-                            href={`/messages?to=${encodeURIComponent(m.username)}`}
-                            title={`Envoyer un message à ${m.displayName}`}
-                            className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-accent border border-white/[0.09] hover:border-accent text-[#C6CAD8] hover:text-accent-fg flex items-center justify-center transition-colors shrink-0"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </Link>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </aside>
-        </div>
-      ) : tab === "activity" ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Feed Column */}
-          <div className="lg:col-span-8 min-w-0 space-y-4">
-            {/* Kind Filter Chips — horizontally scrollable on mobile */}
-            <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 max-w-full">
+      {/* TAB 1: CLEAN CENTERED ACTIVITY FEED (zero dead sidebar space!) */}
+      {tab === "feed" ? (
+        feedSource === "anilist" ? (
+          <AniListActivityFeed />
+        ) : (
+          <div className="space-y-4">
+            {/* Compact Frosted Category Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
               {ACTIVITY_FILTERS.map((f) => (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => setKindFilter(f.id)}
                   className={cn(
-                    "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap shrink-0",
+                    "px-3.5 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 transition-all cursor-pointer",
                     kindFilter === f.id
-                      ? "bg-white text-[#090A0F] border-white"
-                      : "bg-surface border-white/[0.08] text-[#9A9EAE] hover:text-white"
+                      ? "bg-accent/20 border-accent/55 text-white font-semibold shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.25)]"
+                      : "bg-obsidian/70 border-white/[0.08] text-[#9A9EAE] hover:text-white hover:border-white/[0.18]"
                   )}
                 >
                   {f.label}
@@ -410,25 +321,24 @@ export function CommunityClient() {
               ))}
             </div>
 
-            {loadingFeed && activities.length === 0 ? (
+            {loadingFeed && visibleActivities.length === 0 ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-44 rounded-2xl card-surface animate-pulse" />
+                  <div key={i} className="h-40 rounded-2xl card-surface animate-pulse" />
                 ))}
               </div>
-            ) : activities.length === 0 ? (
+            ) : visibleActivities.length === 0 ? (
               <div className="rounded-2xl card-surface p-10 text-center space-y-2">
                 <p className="text-sm font-semibold text-white">
                   Aucune activité dans cette catégorie pour le moment.
                 </p>
                 <p className="text-xs text-[#858A9E]">
-                  Ajoutez un anime en coup de cœur, un Voice Actor favori ou attribuez une note
-                  pour alimenter le fil en direct !
+                  Ajoutez un favori ou notez un titre pour partager votre activité avec la communauté.
                 </p>
               </div>
             ) : (
               <div className="space-y-3.5">
-                {activities.map((item) => (
+                {visibleActivities.map((item) => (
                   <ActivityCard
                     key={item.id}
                     item={item}
@@ -442,106 +352,20 @@ export function CommunityClient() {
               </div>
             )}
           </div>
-
-          {/* Right Sidebar: Quick Member Discovery */}
-          <aside className="lg:col-span-4 min-w-0 space-y-4">
-            <div className="rounded-2xl card-surface p-4 sm:p-5 space-y-4">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-accent" />
-                  <span>Découvrir les membres</span>
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setTab("members")}
-                  className="text-xs text-accent-soft hover:underline cursor-pointer"
-                >
-                  Tous →
-                </button>
-              </div>
-
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-[#7D8296] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={memberQuery}
-                  onChange={(e) => setMemberQuery(e.target.value)}
-                  placeholder="Chercher un @pseudo..."
-                  className="w-full h-9 pl-8 pr-3 rounded-xl bg-obsidian/80 border border-white/[0.08] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
-                />
-              </div>
-
-              <div className="space-y-2.5">
-                {profiles.slice(0, 6).map((m) => {
-                  const isMe = m.username.toLowerCase() === profile.username.toLowerCase();
-                  return (
-                    <div
-                      key={m.id}
-                      className="p-2.5 rounded-xl bg-obsidian/65 border border-white/[0.06] hover:border-white/[0.14] transition-colors flex items-center gap-3"
-                    >
-                      <Link href={`/profile/${encodeURIComponent(m.username)}`}>
-                        <UserAvatar
-                          avatarUrl={m.avatarUrl}
-                          initials={m.avatarInitials}
-                          accentColor={m.accentColor}
-                          alt={m.displayName}
-                          size="sm"
-                        />
-                      </Link>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/profile/${encodeURIComponent(m.username)}`}
-                          className="text-xs font-semibold text-white hover:text-accent-hover truncate block"
-                        >
-                          {m.displayName} {isMe && <span className="text-accent-soft">(Vous)</span>}
-                        </Link>
-                        <p className="text-[10.5px] font-mono text-[#7D8296] truncate">
-                          @{m.username} · {m.stats.totalEntries} titres
-                        </p>
-                      </div>
-                      {!isMe && (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <FriendActionButton
-                            target={{
-                              id: m.id,
-                              username: m.username,
-                              displayName: m.displayName,
-                              avatarUrl: m.avatarUrl,
-                            }}
-                            compactIconOnly
-                          />
-                          <Link
-                            href={`/messages?to=${encodeURIComponent(m.username)}`}
-                            title={`Envoyer un message à ${m.displayName}`}
-                            className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-accent border border-white/[0.09] hover:border-accent text-[#C6CAD8] hover:text-accent-fg flex items-center justify-center transition-colors shrink-0"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </Link>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </aside>
-        </div>
+        )
       ) : tab === "friends" ? (
-        /* TAB 2: DEDICATED FRIENDS HUB (Search, Direct @pseudo Add, Requests, My Friends, Suggestions) */
+        /* TAB 2: FRIENDS HUB */
         <div className="space-y-6">
-          {/* Quick Find & Add Friend by @username Card */}
-          <div className="rounded-2xl card-surface border border-emerald-500/25 p-5 sm:p-6 space-y-4">
+          {/* Add Friend by @pseudo */}
+          <div className="rounded-2xl card-surface border border-emerald-500/20 p-5 space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-emerald-400 flex items-center gap-1.5">
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>Trouver & ajouter des amis</span>
-                </p>
-                <h2 className="text-lg font-bold text-white mt-0.5">
-                  Rechercher un ami par @pseudo ou nom
+                <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-emerald-400" />
+                  <span>Ajouter un ami</span>
                 </h2>
                 <p className="text-xs text-[#8D92A6] mt-0.5">
-                  Entrez un identifiant exact (ex. <code className="text-white">@sora_kyoto</code>) ou utilisez la recherche en direct ci-dessous.
+                  Saisissez le @pseudo d&apos;un membre Shiori pour lui envoyer une invitation.
                 </p>
               </div>
 
@@ -586,7 +410,7 @@ export function CommunityClient() {
                     if (friendFeedback) setFriendFeedback(null);
                   }}
                   placeholder="@pseudo de votre ami..."
-                  className="flex-1 md:w-64 h-10 px-3.5 rounded-xl bg-obsidian/85 border border-white/[0.1] text-xs font-mono text-white placeholder:text-[#656A7E] focus:outline-none focus:border-emerald-400"
+                  className="flex-1 md:w-60 h-10 px-3.5 rounded-xl bg-obsidian/85 border border-white/[0.1] text-xs font-mono text-white placeholder:text-[#656A7E] focus:outline-none focus:border-emerald-400"
                 />
                 <button
                   type="submit"
@@ -623,73 +447,14 @@ export function CommunityClient() {
                 </button>
               </div>
             )}
-
-            {/* Live filtered search results while typing */}
-            {memberQuery.trim().length > 0 && (
-              <div className="pt-3 border-t border-white/[0.08] space-y-2.5">
-                <p className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE]">
-                  Résultats pour « {memberQuery.trim()} » ({profiles.filter((p) => p.username.toLowerCase() !== profile.username.toLowerCase()).length})
-                </p>
-                {loadingMembers ? (
-                  <div className="flex items-center gap-2 py-3 text-xs text-[#8E93A6]">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                    <span>Recherche en cours...</span>
-                  </div>
-                ) : profiles.filter((p) => p.username.toLowerCase() !== profile.username.toLowerCase()).length === 0 ? (
-                  <p className="text-xs text-[#8A8FA4]">
-                    Aucun membre trouvé dans l&apos;annuaire — cliquez sur <strong>Ajouter</strong> pour envoyer une invitation directe à @{memberQuery.trim().replace(/^@+/, "")}.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {profiles
-                      .filter((p) => p.username.toLowerCase() !== profile.username.toLowerCase())
-                      .map((m) => (
-                        <div
-                          key={m.id}
-                          className="p-3 rounded-xl bg-obsidian/75 border border-white/[0.08] flex items-center justify-between gap-3"
-                        >
-                          <Link
-                            href={`/profile/${encodeURIComponent(m.username)}`}
-                            className="flex items-center gap-2.5 min-w-0"
-                          >
-                            <UserAvatar
-                              avatarUrl={m.avatarUrl}
-                              initials={m.avatarInitials}
-                              accentColor={m.accentColor}
-                              alt={m.displayName}
-                              size="sm"
-                            />
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-white truncate">
-                                {m.displayName}
-                              </p>
-                              <p className="text-[10.5px] font-mono text-[#7D8296] truncate">
-                                @{m.username}
-                              </p>
-                            </div>
-                          </Link>
-                          <FriendActionButton
-                            target={{
-                              id: m.id,
-                              username: m.username,
-                              displayName: m.displayName,
-                              avatarUrl: m.avatarUrl,
-                            }}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
-          {/* Incoming & Outgoing Friend Requests */}
+          {/* Pending Requests */}
           {(incomingFriendRequests.length > 0 || outgoingFriendRequests.length > 0) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {incomingFriendRequests.length > 0 && (
                 <div className="rounded-2xl card-surface border border-emerald-500/30 p-5 space-y-3">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <UserPlus className="w-4 h-4 text-emerald-400" />
                     <span>Demandes reçues ({incomingFriendRequests.length})</span>
                   </h3>
@@ -711,7 +476,7 @@ export function CommunityClient() {
                             size="sm"
                           />
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-white truncate">
+                            <p className="text-xs font-semibold text-white truncate">
                               {user.displayName}
                             </p>
                             <p className="text-[11px] font-mono text-[#7D8296] truncate">
@@ -735,7 +500,7 @@ export function CommunityClient() {
 
               {outgoingFriendRequests.length > 0 && (
                 <div className="rounded-2xl card-surface border border-amber-500/25 p-5 space-y-3">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-400" />
                     <span>Demandes envoyées ({outgoingFriendRequests.length})</span>
                   </h3>
@@ -757,7 +522,7 @@ export function CommunityClient() {
                             size="sm"
                           />
                           <div className="min-w-0">
-                            <p className="text-xs font-bold text-white truncate">
+                            <p className="text-xs font-semibold text-white truncate">
                               {user.displayName}
                             </p>
                             <p className="text-[11px] font-mono text-[#7D8296] truncate">
@@ -781,9 +546,9 @@ export function CommunityClient() {
             </div>
           )}
 
-          {/* My Friends Grid */}
+          {/* My Friends List */}
           <div className="space-y-3">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-base font-semibold text-white flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-emerald-400" />
               <span>Mes amis ({friends.length})</span>
             </h3>
@@ -791,54 +556,40 @@ export function CommunityClient() {
             {friends.length === 0 ? (
               <div className="rounded-2xl card-surface p-8 text-center space-y-2">
                 <p className="text-sm font-semibold text-white">
-                  Vous n&apos;avez pas encore ajouté d&apos;ami sur Shiori.
+                  Vous n&apos;avez pas encore d&apos;ami sur Shiori.
                 </p>
                 <p className="text-xs text-[#8A8FA4] max-w-md mx-auto">
-                  Recherchez un pseudo ci-dessus ou cliquez sur « Ajouter en ami » sur les suggestions de membres juste en dessous !
+                  Entrez un @pseudo ci-dessus ou parcourez les membres suggérés ci-dessous.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {friends.map((f) => (
                   <div
                     key={f.id}
-                    className="rounded-2xl card-surface border border-emerald-500/20 hover:border-emerald-400/40 p-5 flex flex-col justify-between gap-4 transition-colors"
+                    className="rounded-2xl card-surface border border-emerald-500/20 p-5 flex flex-col justify-between gap-4"
                   >
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3.5">
-                        <Link href={`/profile/${encodeURIComponent(f.username)}`}>
-                          <UserAvatar
-                            avatarUrl={f.avatarUrl}
-                            initials={f.avatarInitials}
-                            accentColor={f.accentColor}
-                            alt={f.displayName}
-                            size="lg"
-                          />
+                    <div className="flex items-center gap-3.5">
+                      <Link href={`/profile/${encodeURIComponent(f.username)}`}>
+                        <UserAvatar
+                          avatarUrl={f.avatarUrl}
+                          initials={f.avatarInitials}
+                          accentColor={f.accentColor}
+                          alt={f.displayName}
+                          size="md"
+                        />
+                      </Link>
+                      <div className="min-w-0">
+                        <Link
+                          href={`/profile/${encodeURIComponent(f.username)}`}
+                          className="text-sm font-bold text-white hover:text-accent-hover truncate block"
+                        >
+                          {f.displayName}
                         </Link>
-                        <div className="min-w-0">
-                          <Link
-                            href={`/profile/${encodeURIComponent(f.username)}`}
-                            className="text-base font-bold text-white hover:text-accent-hover transition-colors truncate block"
-                          >
-                            {f.displayName}
-                          </Link>
-                          <p className="text-xs font-mono text-[#7D8296] truncate">
-                            @{f.username}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#A6AAB8]">
-                            <span>{f.stats.totalEntries} titres</span>
-                            {f.stats.meanScore !== null && (
-                              <span className="inline-flex items-center gap-0.5 text-kinpaku">
-                                <Star className="w-3 h-3 fill-current" />
-                                {f.stats.meanScore.toFixed(1)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                        <p className="text-xs font-mono text-[#7D8296] truncate">
+                          @{f.username} · {f.stats.totalEntries} titres
+                        </p>
                       </div>
-                      {f.pinnedBadges && f.pinnedBadges.length > 0 && (
-                        <PinnedBadgesRow badgeIds={f.pinnedBadges} size="xs" />
-                      )}
                     </div>
 
                     <div className="flex items-center gap-2 pt-3 border-t border-white/[0.07]">
@@ -870,9 +621,9 @@ export function CommunityClient() {
             )}
           </div>
 
-          {/* Suggestions of Members to Add */}
+          {/* Suggestions */}
           {(() => {
-            const suggestions = profiles.filter(
+            const suggestions = visibleProfiles.filter(
               (m) =>
                 m.username.toLowerCase() !== profile.username.toLowerCase() &&
                 getFriendRelation(m.id, m.username) === "NONE"
@@ -880,50 +631,38 @@ export function CommunityClient() {
             if (suggestions.length === 0) return null;
             return (
               <div className="space-y-3">
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-accent" />
-                  <span>Membres à découvrir ({suggestions.length})</span>
+                <h3 className="text-base font-semibold text-white">
+                  Membres à découvrir
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {suggestions.map((m) => (
+                  {suggestions.slice(0, 6).map((m) => (
                     <div
                       key={m.id}
-                      className="rounded-2xl card-surface border border-white/[0.08] hover:border-white/[0.18] p-5 flex flex-col justify-between gap-4 transition-colors"
+                      className="rounded-2xl card-surface border border-white/[0.08] p-4 flex flex-col justify-between gap-3"
                     >
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3.5">
-                          <Link href={`/profile/${encodeURIComponent(m.username)}`}>
-                            <UserAvatar
-                              avatarUrl={m.avatarUrl}
-                              initials={m.avatarInitials}
-                              accentColor={m.accentColor}
-                              alt={m.displayName}
-                              size="md"
-                            />
+                      <div className="flex items-center gap-3">
+                        <Link href={`/profile/${encodeURIComponent(m.username)}`}>
+                          <UserAvatar
+                            avatarUrl={m.avatarUrl}
+                            initials={m.avatarInitials}
+                            accentColor={m.accentColor}
+                            alt={m.displayName}
+                            size="md"
+                          />
+                        </Link>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/profile/${encodeURIComponent(m.username)}`}
+                            className="text-sm font-semibold text-white hover:text-accent-hover truncate block"
+                          >
+                            {m.displayName}
                           </Link>
-                          <div className="min-w-0">
-                            <Link
-                              href={`/profile/${encodeURIComponent(m.username)}`}
-                              className="text-sm font-bold text-white hover:text-accent-hover truncate block"
-                            >
-                              {m.displayName}
-                            </Link>
-                            <p className="text-xs font-mono text-[#7D8296] truncate">
-                              @{m.username} · {m.stats.totalEntries} titres
-                            </p>
-                          </div>
-                        </div>
-                        {m.bio && (
-                          <p className="text-xs text-[#9EA3B5] line-clamp-2 leading-relaxed">
-                            {m.bio}
+                          <p className="text-xs font-mono text-[#7D8296] truncate">
+                            @{m.username} · {m.stats.totalEntries} titres
                           </p>
-                        )}
-                        {m.pinnedBadges && m.pinnedBadges.length > 0 && (
-                          <PinnedBadgesRow badgeIds={m.pinnedBadges} size="xs" />
-                        )}
+                        </div>
                       </div>
-
-                      <div className="flex items-center gap-2 pt-3 border-t border-white/[0.07]">
+                      <div className="flex items-center gap-2 pt-2.5 border-t border-white/[0.07]">
                         <FriendActionButton
                           target={{
                             id: m.id,
@@ -948,20 +687,20 @@ export function CommunityClient() {
           })()}
         </div>
       ) : (
-        /* TAB 3: FULL MEMBERS DIRECTORY */
+        /* TAB 3: MEMBERS DIRECTORY */
         <div className="space-y-4">
           {loadingMembers ? (
             <div className="flex items-center justify-center py-12 text-xs text-[#8E93A6] gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
-              <span>Recherche des membres...</span>
+              <span>Chargement des membres...</span>
             </div>
-          ) : profiles.length === 0 ? (
+          ) : visibleProfiles.length === 0 ? (
             <div className="rounded-2xl card-surface p-10 text-center text-sm text-[#9A9EAE]">
               Aucun membre trouvé pour « {memberQuery} ».
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {profiles.map((m) => {
+              {visibleProfiles.map((m) => {
                 const isMe = m.username.toLowerCase() === profile.username.toLowerCase();
                 return (
                   <div
@@ -980,12 +719,19 @@ export function CommunityClient() {
                           />
                         </Link>
                         <div className="min-w-0">
-                          <Link
-                            href={`/profile/${encodeURIComponent(m.username)}`}
-                            className="text-base font-bold text-white hover:text-accent-hover transition-colors truncate block"
-                          >
-                            {m.displayName}
-                          </Link>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Link
+                              href={`/profile/${encodeURIComponent(m.username)}`}
+                              className="text-base font-bold text-white hover:text-accent-hover transition-colors truncate"
+                            >
+                              {m.displayName}
+                            </Link>
+                            {(m.source === "community" || m.id.startsWith("community-")) && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 font-mono text-[9.5px] uppercase text-amber-200 shrink-0">
+                                Exemple
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs font-mono text-[#7D8296] truncate">
                             @{m.username}
                           </p>

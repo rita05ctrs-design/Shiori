@@ -58,7 +58,7 @@ export function ThemeQuickPopover() {
         aria-label="Personnaliser les couleurs et le thème"
         title="Personnaliser les couleurs"
         className={cn(
-          "relative w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer",
+          "relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer",
           open
             ? "bg-accent/20 border-accent/55 text-white"
             : "bg-white/[0.045] hover:bg-white/[0.09] border-white/[0.08] hover:border-white/[0.18] text-[#B8BCCB] hover:text-white"

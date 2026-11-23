@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { checkRateLimit, getClientIp, rateLimitResponse } from "@/lib/server/rate-limit";
 import {
   ensureServerSupabaseProfile,
   getAllLocalCommunityProfiles,
+  isAuthenticatedActor,
+  isLocalPairBlocked,
   makeId,
   readSocialDb,
   resolveServerActor,
@@ -91,16 +94,18 @@ async function loadProfilesByIds(ids: string[]): Promise<Map<string, PublicUserP
   return map;
 }
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const actor = await resolveServerActor({
-    userId: searchParams.get("userId") ?? undefined,
-    username: searchParams.get("username") ?? undefined,
-  });
+export async function GET() {
+  const actor = await resolveServerActor();
+  if (!isAuthenticatedActor(actor)) {
+    return NextResponse.json(
+      { error: "Connexion requise pour consulter vos messages privés." },
+      { status: 401 }
+    );
+  }
 
   const merged = new Map<string, DirectMessageItem>();
 
-  // 1) Fetch from Supabase `direct_messages` strictly by actor UUID
+  // 1) Fetch from Supabase `direct_messages` strictly by verified actor UUID
   if (actor.source === "supabase" && isUuid(actor.id)) {
     try {
       const supabase = await getSupabaseServerClient();
@@ -134,14 +139,14 @@ export async function GET(request: NextRequest) {
     } catch {
       // fall through if table not yet migrated
     }
-  }
-
-  // 2) Merge local direct messages involving this exact actor.id
-  const db = readSocialDb();
-  for (const m of db.messages) {
-    const involvesMe = m.senderId === actor.id || m.recipientId === actor.id;
-    if (involvesMe && !merged.has(m.id)) {
-      merged.set(m.id, m);
+  } else if (actor.source === "account") {
+    // 2) Built-in local server account messages involving strictly verified actor.id
+    const db = readSocialDb();
+    for (const m of db.messages) {
+      const involvesMe = m.senderId === actor.id || m.recipientId === actor.id;
+      if (involvesMe && !merged.has(m.id)) {
+        merged.set(m.id, m);
+      }
     }
   }
 
@@ -186,7 +191,23 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const actor = await resolveServerActor();
+    if (!isAuthenticatedActor(actor)) {
+      return NextResponse.json(
+        { error: "Connexion requise pour envoyer un message privé." },
+        { status: 401 }
+      );
+    }
+
+    const rl = checkRateLimit(`dm:${actor.id}:${getClientIp(request)}`, 30, 60_000);
+    if (!rl.allowed) {
+      return rateLimitResponse(rl.retryAfterSec, "Envoi de messages trop rapide. Patientez quelques instants.");
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Requête JSON invalide." }, { status: 400 });
+    }
     const text = String(body?.body ?? "").trim();
     if (!text || text.length > 2000) {
       return NextResponse.json(
@@ -200,17 +221,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Destinataire manquant." }, { status: 400 });
     }
 
-    const actor = await resolveServerActor({
-      userId: body?.senderId,
-      username: body?.senderUsername,
-      displayName: body?.senderDisplayName,
-      avatarUrl: body?.senderAvatarUrl,
-    });
-
     if (recipientId === actor.id) {
       return NextResponse.json(
         { error: "Vous ne pouvez pas vous envoyer un message à vous-même." },
         { status: 400 }
+      );
+    }
+
+    if (actor.source === "account" && isLocalPairBlocked(actor.id, recipientId)) {
+      return NextResponse.json(
+        { error: "Impossible d'envoyer un message : un blocage est actif entre ces deux comptes." },
+        { status: 403 }
       );
     }
 
@@ -264,9 +285,16 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (error) {
+          const isPolicyBlock =
+            error.code === "42501" ||
+            (error.message ?? "").toLowerCase().includes("row-level security");
           return NextResponse.json(
-            { error: error.message || "Erreur Supabase lors de l'envoi du message." },
-            { status: 500 }
+            {
+              error: isPolicyBlock
+                ? "Impossible d'envoyer un message : un blocage est actif entre ces comptes."
+                : "Erreur lors de l'envoi du message.",
+            },
+            { status: isPolicyBlock ? 403 : 500 }
           );
         }
 
@@ -293,14 +321,17 @@ export async function POST(request: NextRequest) {
       createdAt,
     };
 
-    try {
-      const db = readSocialDb();
-      if (!db.messages.some((existing) => existing.id === msg.id)) {
-        db.messages.push(msg);
-        writeSocialDb(db);
+    // Keep Supabase private DMs strictly inside Supabase (never mirror into shared local social.json)
+    if (actor.source === "account") {
+      try {
+        const db = readSocialDb();
+        if (!db.messages.some((existing) => existing.id === msg.id)) {
+          db.messages.push(msg);
+          writeSocialDb(db);
+        }
+      } catch {
+        // non-fatal on serverless FS
       }
-    } catch {
-      // non-fatal on serverless FS
     }
 
     return NextResponse.json({ ok: true, message: msg, savedToSupabase });
@@ -311,17 +342,17 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const actor = await resolveServerActor();
+    if (!isAuthenticatedActor(actor)) {
+      return NextResponse.json({ error: "Authentification requise." }, { status: 401 });
+    }
+
     const body = await request.json();
     const partnerId = String(body?.partnerId ?? "").trim();
 
     if (!partnerId) {
       return NextResponse.json({ error: "Identifiant partenaire manquant." }, { status: 400 });
     }
-
-    const actor = await resolveServerActor({
-      userId: body?.userId,
-      username: body?.username,
-    });
 
     if (actor.source === "supabase" && isUuid(actor.id) && isUuid(partnerId)) {
       try {
@@ -337,20 +368,20 @@ export async function PATCH(request: NextRequest) {
       } catch {
         // ignore if table not migrated
       }
-    }
-
-    try {
-      const db = readSocialDb();
-      let changed = false;
-      for (const m of db.messages) {
-        if (m.recipientId === actor.id && m.senderId === partnerId && !m.isRead) {
-          m.isRead = true;
-          changed = true;
+    } else if (actor.source === "account") {
+      try {
+        const db = readSocialDb();
+        let changed = false;
+        for (const m of db.messages) {
+          if (m.recipientId === actor.id && m.senderId === partnerId && !m.isRead) {
+            m.isRead = true;
+            changed = true;
+          }
         }
+        if (changed) writeSocialDb(db);
+      } catch {
+        // non-fatal
       }
-      if (changed) writeSocialDb(db);
-    } catch {
-      // non-fatal
     }
 
     return NextResponse.json({ ok: true });

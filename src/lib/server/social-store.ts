@@ -13,12 +13,16 @@ import {
 import type {
   ActivityCommentItem,
   CommunityActivityItem,
+  ContentReportRecord,
   DirectMessageItem,
   FriendshipRecord,
   PublicUserProfile,
+  UserBlockRecord,
 } from "@/types/media";
 
-const PROJECT_DATA_DIR = path.join(process.cwd(), ".shiori-data");
+const PROJECT_DATA_DIR = process.env.SHIORI_DATA_DIR
+  ? path.resolve(process.env.SHIORI_DATA_DIR)
+  : path.join(process.cwd(), ".shiori-data");
 const TMP_DATA_DIR = path.join(os.tmpdir(), "shiori-data");
 
 let resolvedDataDir: string | null = null;
@@ -50,6 +54,8 @@ export interface SocialDatabase {
   activities: CommunityActivityItem[];
   messages: DirectMessageItem[];
   friendships: FriendshipRecord[];
+  blocks?: UserBlockRecord[];
+  reports?: ContentReportRecord[];
 }
 
 function createSeedSocialDb(): SocialDatabase {
@@ -662,7 +668,17 @@ function createSeedSocialDb(): SocialDatabase {
     },
   ];
 
-  return { profiles, activities, messages, friendships: [] };
+  return { profiles, activities, messages, friendships: [], blocks: [], reports: [] };
+}
+
+export function isLocalPairBlocked(userAId: string, userBId: string): boolean {
+  const db = readSocialDb();
+  const blocks = db.blocks ?? [];
+  return blocks.some(
+    (b) =>
+      (b.blockerId === userAId && b.blockedId === userBId) ||
+      (b.blockerId === userBId && b.blockedId === userAId)
+  );
 }
 
 export function readSocialDb(): SocialDatabase {
@@ -676,6 +692,8 @@ export function readSocialDb(): SocialDatabase {
         activities: Array.isArray(parsed.activities) ? parsed.activities : [],
         messages: Array.isArray(parsed.messages) ? parsed.messages : [],
         friendships: Array.isArray(parsed.friendships) ? parsed.friendships : [],
+        blocks: Array.isArray(parsed.blocks) ? parsed.blocks : [],
+        reports: Array.isArray(parsed.reports) ? parsed.reports : [],
       };
       // Automatically backfill libraryPreview onto seeded profiles from older social.json files
       const needsSeedBackfill = loaded.profiles.some(
@@ -805,18 +823,20 @@ export interface ActiveActor {
   source: "supabase" | "account" | "local";
 }
 
+export function isAuthenticatedActor(actor: ActiveActor): boolean {
+  return actor.source === "supabase" || actor.source === "account";
+}
+
 /**
- * Resolves the active user from Supabase Auth, Shiori server session cookie,
- * or explicit client actor fallback (for local/guest preview).
+ * Resolves the active user STRICTLY from cryptographically verified server credentials:
+ * 1) Supabase Auth JWT session cookie (`supabase.auth.getUser()`), or
+ * 2) Signed HttpOnly `shiori_session` HMAC cookie (`accounts.json`).
+ *
+ * SECURITY: Never trusts client-supplied `userId` or `username` to impersonate another user!
+ * Unauthenticated callers always resolve to the non-privileged guest actor (`source: "local"`).
  */
-export async function resolveServerActor(fallback?: {
-  userId?: string;
-  username?: string;
-  displayName?: string;
-  avatarUrl?: string | null;
-  accentColor?: string;
-}): Promise<ActiveActor> {
-  // 1) Supabase Auth user
+export async function resolveServerActor(): Promise<ActiveActor> {
+  // 1) Supabase Auth user (server-verified JWT)
   try {
     const supabase = await getSupabaseServerClient();
     if (supabase) {
@@ -851,10 +871,10 @@ export async function resolveServerActor(fallback?: {
 
         return {
           id: user.id,
-          username: fallback?.username || username,
-          displayName: fallback?.displayName || displayName,
-          avatarUrl: fallback?.avatarUrl !== undefined ? fallback.avatarUrl : avatarUrl,
-          accentColor: fallback?.accentColor || accentColor,
+          username,
+          displayName,
+          avatarUrl,
+          accentColor,
           source: "supabase",
         };
       }
@@ -863,7 +883,7 @@ export async function resolveServerActor(fallback?: {
     // fall through cleanly
   }
 
-  // 2) Built-in Shiori server account
+  // 2) Built-in Shiori server account (HMAC-signed HttpOnly cookie)
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
@@ -886,15 +906,41 @@ export async function resolveServerActor(fallback?: {
     // fall through
   }
 
-  // 3) Local profile fallback
+  // 3) Unauthenticated guest — NEVER trusts client-supplied userId/username
   return {
-    id: fallback?.userId || "local-curator",
-    username: fallback?.username || "kuro_shiori",
-    displayName: fallback?.displayName || "Kuro",
-    avatarUrl: fallback?.avatarUrl ?? null,
-    accentColor: fallback?.accentColor || "#E5484D",
+    id: "local-curator",
+    username: "kuro_shiori",
+    displayName: "Kuro",
+    avatarUrl: null,
+    accentColor: "#E5484D",
     source: "local",
   };
+}
+
+/**
+ * Permanently scrubs all local social records associated with a deleted account.
+ */
+export function purgeLocalUserData(userId: string) {
+  const db = readSocialDb();
+  db.profiles = db.profiles.filter((p) => p.id !== userId);
+  db.activities = db.activities
+    .filter((a) => a.userId !== userId)
+    .map((a) => ({
+      ...a,
+      likes: a.likes.filter((id) => id !== userId),
+      comments: a.comments.filter((c) => c.userId !== userId),
+    }));
+  db.messages = db.messages.filter(
+    (m) => m.senderId !== userId && m.recipientId !== userId
+  );
+  db.friendships = db.friendships.filter(
+    (f) => f.requesterId !== userId && f.addresseeId !== userId
+  );
+  db.blocks = (db.blocks ?? []).filter(
+    (b) => b.blockerId !== userId && b.blockedId !== userId
+  );
+  db.reports = (db.reports ?? []).filter((r) => r.reporterId !== userId);
+  writeSocialDb(db);
 }
 
 /**
@@ -990,10 +1036,16 @@ export function upsertLocalCommunityProfile(profile: PublicUserProfile) {
       p.id === profile.id ||
       p.username.toLowerCase() === profile.username.toLowerCase()
   );
-  if (idx === -1) {
+      if (idx === -1) {
     db.profiles.unshift(profile);
   } else {
-    db.profiles[idx] = { ...db.profiles[idx], ...profile };
+    // SECURITY: Never overwrite another user's profile on username collision; match strictly by id
+    const byId = db.profiles.findIndex((p) => p.id === profile.id);
+    if (byId !== -1) {
+      db.profiles[byId] = { ...db.profiles[byId], ...profile };
+    } else {
+      db.profiles.unshift(profile);
+    }
   }
   writeSocialDb(db);
 }

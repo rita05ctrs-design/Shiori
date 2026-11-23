@@ -2,31 +2,59 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getAllLocalCommunityProfiles,
+  isAuthenticatedActor,
   resolveServerActor,
   upsertLocalCommunityProfile,
 } from "@/lib/server/social-store";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sanitizeSafeImageUrl,
+} from "@/lib/server/rate-limit";
 import type { PublicUserProfile } from "@/types/media";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+function redactPrivateProfile(
+  profile: PublicUserProfile,
+  requesterId: string | null
+): PublicUserProfile {
+  if (profile.isActivityPublic || (requesterId && requesterId === profile.id)) {
+    return profile;
+  }
+  return {
+    ...profile,
+    favoriteMedia: [],
+    libraryPreview: [],
+    sharedCollections: [],
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapSupabasePublicProfile(row: any): PublicUserProfile {
   const displayName = String(row.display_name || row.username || "Membre Shiori");
   const statsRaw = row.stats_summary && typeof row.stats_summary === "object" ? row.stats_summary : {};
+  const isPublic = row.is_activity_public !== false;
   return {
     id: String(row.id),
     username: String(row.username),
     displayName,
-    avatarUrl: row.avatar_url ?? null,
+    avatarUrl: sanitizeSafeImageUrl(row.avatar_url),
+    bannerUrl: sanitizeSafeImageUrl(row.banner_url),
     avatarInitials: displayName.slice(0, 2).toUpperCase(),
     bio: String(row.bio ?? ""),
-    accentColor: String(row.accent_color || "#E5484D"),
-    isActivityPublic: row.is_activity_public !== false,
+    accentColor: typeof row.accent_color === "string" && HEX_COLOR_RE.test(row.accent_color)
+      ? row.accent_color
+      : "#E5484D",
+    isActivityPublic: isPublic,
     joinedAt: row.joined_at ?? row.created_at ?? new Date().toISOString(),
     favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
-    favoriteMedia: Array.isArray(row.favorite_media) ? row.favorite_media : [],
-    libraryPreview: Array.isArray(statsRaw.libraryPreview) ? statsRaw.libraryPreview : [],
+    favoriteMedia: isPublic && Array.isArray(row.favorite_media) ? row.favorite_media : [],
+    libraryPreview: isPublic && Array.isArray(statsRaw.libraryPreview) ? statsRaw.libraryPreview : [],
+    sharedCollections: isPublic && Array.isArray(statsRaw.sharedCollections) ? statsRaw.sharedCollections : [],
     stats: {
       totalEntries: Number(statsRaw.totalEntries ?? 0),
       animeCount: Number(statsRaw.animeCount ?? 0),
@@ -45,6 +73,8 @@ function mapSupabasePublicProfile(row: any): PublicUserProfile {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get("q") ?? "").trim().replace(/^@+/, "").toLowerCase();
+  const requester = await resolveServerActor();
+  const requesterId = isAuthenticatedActor(requester) ? requester.id : null;
 
   const byKey = new Map<string, PublicUserProfile>();
 
@@ -60,7 +90,7 @@ export async function GET(request: NextRequest) {
 
       if (!error && Array.isArray(data)) {
         for (const row of data) {
-          const mapped = mapSupabasePublicProfile(row);
+          const mapped = redactPrivateProfile(mapSupabasePublicProfile(row), requesterId);
           byKey.set(mapped.username.toLowerCase(), mapped);
         }
       }
@@ -73,7 +103,7 @@ export async function GET(request: NextRequest) {
   for (const p of getAllLocalCommunityProfiles()) {
     const k = p.username.toLowerCase();
     if (!byKey.has(k)) {
-      byKey.set(k, p);
+      byKey.set(k, redactPrivateProfile(p, requesterId));
     }
   }
 
@@ -93,35 +123,63 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const actor = await resolveServerActor({
-      userId: body?.id,
-      username: body?.username,
-      displayName: body?.displayName,
-      avatarUrl: body?.avatarUrl,
-      accentColor: body?.accentColor,
-    });
+    const actor = await resolveServerActor();
+    if (!isAuthenticatedActor(actor)) {
+      return NextResponse.json(
+        { ok: false, error: "Authentification requise pour mettre à jour le profil." },
+        { status: 401 }
+      );
+    }
 
-    const displayName = String(body?.displayName || actor.displayName).trim() || "Membre Shiori";
-    const username =
-      String(body?.username || actor.username)
+    const limit = checkRateLimit(`profiles:post:${actor.id}`, 30, 60_000);
+    if (!limit.ok) {
+      return rateLimitResponse(limit.retryAfterSec);
+    }
+
+    const body = await request.json();
+    const displayName =
+      String(body?.displayName || actor.displayName)
         .trim()
-        .replace(/\s+/g, "_")
-        .replace(/^@/, "") || "shiori_user";
+        .slice(0, 60) || "Membre Shiori";
+    const rawUsername = String(body?.username || actor.username)
+      .trim()
+      .replace(/^@+/, "")
+      .replace(/[^a-zA-Z0-9_.-]/g, "_")
+      .slice(0, 30);
+    const username = rawUsername.length >= 2 ? rawUsername : actor.username;
+
+    const safeAvatarUrl =
+      body?.avatarUrl !== undefined
+        ? sanitizeSafeImageUrl(body.avatarUrl, { allowDataImage: true })
+        : sanitizeSafeImageUrl(actor.avatarUrl, { allowDataImage: true });
+    const safeBannerUrl =
+      body?.bannerUrl !== undefined ? sanitizeSafeImageUrl(body.bannerUrl) : null;
+    const accentColor =
+      typeof body?.accentColor === "string" && HEX_COLOR_RE.test(body.accentColor)
+        ? body.accentColor
+        : HEX_COLOR_RE.test(actor.accentColor)
+          ? actor.accentColor
+          : "#E5484D";
+
+    const isActivityPublic = body?.isActivityPublic !== false;
 
     const publicProfile: PublicUserProfile = {
       id: actor.id,
       username,
       displayName,
-      avatarUrl: body?.avatarUrl !== undefined ? body.avatarUrl : actor.avatarUrl,
+      avatarUrl: safeAvatarUrl,
+      bannerUrl: safeBannerUrl,
       avatarInitials: displayName.slice(0, 2).toUpperCase(),
-      bio: typeof body?.bio === "string" ? body.bio : "",
-      accentColor: typeof body?.accentColor === "string" ? body.accentColor : actor.accentColor,
-      isActivityPublic: body?.isActivityPublic !== false,
+      bio: typeof body?.bio === "string" ? body.bio.trim().slice(0, 400) : "",
+      accentColor,
+      isActivityPublic,
       joinedAt: typeof body?.joinedAt === "string" ? body.joinedAt : new Date().toISOString(),
       favoriteStaff: Array.isArray(body?.favoriteStaff) ? body.favoriteStaff.slice(0, 30) : [],
       favoriteMedia: Array.isArray(body?.favoriteMedia) ? body.favoriteMedia.slice(0, 40) : [],
       libraryPreview: Array.isArray(body?.libraryPreview) ? body.libraryPreview.slice(0, 80) : [],
+      sharedCollections: Array.isArray(body?.sharedCollections)
+        ? body.sharedCollections.slice(0, 12)
+        : [],
       stats: {
         totalEntries: Number(body?.stats?.totalEntries ?? 0),
         animeCount: Number(body?.stats?.animeCount ?? 0),
@@ -142,7 +200,7 @@ export async function POST(request: NextRequest) {
       source: actor.source === "supabase" ? "supabase" : "local",
     };
 
-    // 1) Sync to Supabase `profiles` FIRST if authenticated via Supabase (never blocked by local FS!)
+    // 1) Sync to Supabase `profiles` when authenticated via Supabase
     let savedToSupabase = false;
     let supabaseError: string | undefined;
     if (actor.source === "supabase") {
@@ -154,14 +212,16 @@ export async function POST(request: NextRequest) {
             username: publicProfile.username,
             display_name: publicProfile.displayName,
             avatar_url: publicProfile.avatarUrl,
+            banner_url: publicProfile.bannerUrl ?? null,
             bio: publicProfile.bio,
             accent_color: publicProfile.accentColor,
             is_activity_public: publicProfile.isActivityPublic,
             favorite_staff: publicProfile.favoriteStaff,
-            favorite_media: publicProfile.favoriteMedia,
+            favorite_media: isActivityPublic ? publicProfile.favoriteMedia : [],
             stats_summary: {
               ...publicProfile.stats,
-              libraryPreview: publicProfile.libraryPreview ?? [],
+              libraryPreview: isActivityPublic ? (publicProfile.libraryPreview ?? []) : [],
+              sharedCollections: isActivityPublic ? (publicProfile.sharedCollections ?? []) : [],
             },
             unlocked_badges: publicProfile.unlockedBadges ?? [],
             pinned_badges: publicProfile.pinnedBadges ?? [],
@@ -173,7 +233,6 @@ export async function POST(request: NextRequest) {
           if (!error) {
             savedToSupabase = true;
           } else if (error.code === "23505") {
-            // Username collision: retry with unique short suffix
             const uniqueUsername = `${publicProfile.username.slice(0, 22)}_${actor.id.slice(0, 5)}`;
             const retry = await supabase
               .from("profiles")
@@ -182,29 +241,41 @@ export async function POST(request: NextRequest) {
               savedToSupabase = true;
               publicProfile.username = uniqueUsername;
             } else {
-              supabaseError = retry.error.message;
+              supabaseError = "Impossible de mettre à jour le profil Supabase.";
             }
           } else {
-            supabaseError = error.message;
+            supabaseError = "Impossible de mettre à jour le profil Supabase.";
           }
         }
-      } catch (err) {
-        supabaseError = err instanceof Error ? err.message : "Erreur Supabase profiles";
+      } catch {
+        supabaseError = "Erreur de synchronisation Supabase.";
       }
+
+      return NextResponse.json({
+        ok: savedToSupabase,
+        profile: publicProfile,
+        savedToSupabase,
+        supabaseError,
+      });
     }
 
-    // 2) Best-effort local store mirror (serverless-safe, never crashes on read-only FS)
-    try {
-      upsertLocalCommunityProfile(publicProfile);
-    } catch {
-      // non-fatal
+    // 2) Local account store — enforce unique username across distinct user IDs
+    const existingCollision = getAllLocalCommunityProfiles().find(
+      (p) => p.id !== actor.id && p.username.toLowerCase() === publicProfile.username.toLowerCase()
+    );
+    if (existingCollision) {
+      return NextResponse.json(
+        { ok: false, error: "Ce nom d'utilisateur est déjà pris." },
+        { status: 409 }
+      );
     }
+
+    upsertLocalCommunityProfile(publicProfile);
 
     return NextResponse.json({
       ok: true,
       profile: publicProfile,
-      savedToSupabase,
-      supabaseError,
+      savedToSupabase: false,
     });
   } catch {
     return NextResponse.json({ ok: false, error: "Payload profil invalide" }, { status: 400 });

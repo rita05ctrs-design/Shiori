@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   ensureServerSupabaseProfile,
+  isAuthenticatedActor,
   makeId,
   pushLocalActivity,
   readSocialDb,
   resolveServerActor,
 } from "@/lib/server/social-store";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sanitizeSafeImageUrl,
+} from "@/lib/server/rate-limit";
 import type {
   BadgeRarity,
   CommunityActivityItem,
@@ -36,6 +42,19 @@ interface IncomingSyncEvent {
  */
 export async function POST(request: NextRequest) {
   try {
+    const actor = await resolveServerActor();
+    if (!isAuthenticatedActor(actor)) {
+      return NextResponse.json(
+        { ok: false, error: "Authentification requise." },
+        { status: 401 }
+      );
+    }
+
+    const limit = checkRateLimit(`activity:sync:${actor.id}`, 10, 60_000);
+    if (!limit.ok) {
+      return rateLimitResponse(limit.retryAfterSec);
+    }
+
     const body = await request.json();
     if (body?.isPublic === false) {
       return NextResponse.json({ ok: true, insertedCount: 0, skipped: true });
@@ -49,14 +68,6 @@ export async function POST(request: NextRequest) {
     if (validEvents.length === 0) {
       return NextResponse.json({ ok: true, insertedCount: 0 });
     }
-
-    const actor = await resolveServerActor({
-      userId: body?.userId,
-      username: body?.actorUsername,
-      displayName: body?.actorDisplayName,
-      avatarUrl: body?.actorAvatarUrl,
-      accentColor: body?.actorAccentColor,
-    });
 
     const actorPinnedBadges: string[] = Array.isArray(body?.actorPinnedBadges)
       ? body.actorPinnedBadges.filter((x: unknown) => typeof x === "string").slice(0, 3)
@@ -86,15 +97,15 @@ export async function POST(request: NextRequest) {
             .map((e) => ({
               user_id: actor.id,
               media_id: Number(e.mediaId ?? 0),
-              media_title: e.mediaTitle.trim(),
+              media_title: e.mediaTitle.trim().slice(0, 200),
               media_type: e.mediaType === "MANGA" ? "MANGA" : "ANIME",
-              cover_image: e.coverImage ?? null,
-              action: e.action.trim(),
+              cover_image: sanitizeSafeImageUrl(e.coverImage),
+              action: String(e.action).trim().slice(0, 300),
               event_kind: e.kind,
               is_public: true,
               actor_username: ensured.username || actor.username,
               actor_display_name: actor.displayName,
-              actor_avatar_url: actor.avatarUrl,
+              actor_avatar_url: sanitizeSafeImageUrl(actor.avatarUrl),
               metadata: {
                 isStaff: e.mediaType === "STAFF" || e.kind === "FAVORITE_STAFF",
                 isBadge: e.mediaType === "BADGE" || e.kind === "BADGE_UNLOCKED",
@@ -114,9 +125,16 @@ export async function POST(request: NextRequest) {
       } catch {
         // non-fatal
       }
+
+      return NextResponse.json({
+        ok: true,
+        insertedCount: insertedCloud,
+        insertedCloud,
+        insertedLocal: 0,
+      });
     }
 
-    // 2) Also backfill into local community feed (deduplicated per actor + kind + mediaId)
+    // 2) Backfill into local community feed for server account mode
     let insertedLocal = 0;
     try {
       const db = readSocialDb();
@@ -130,7 +148,6 @@ export async function POST(request: NextRequest) {
           .map((a) => `${a.kind}:${a.mediaId}`)
       );
 
-      // Push in reverse order so the top favorite ends up newest at top of the feed
       const missingLocal = validEvents
         .filter((e) => !existingLocalKeys.has(`${e.kind}:${Number(e.mediaId ?? 0)}`))
         .slice(0, 6);
@@ -145,15 +162,15 @@ export async function POST(request: NextRequest) {
           userId: actor.id,
           actorUsername: actor.username,
           actorDisplayName: actor.displayName,
-          actorAvatarUrl: actor.avatarUrl,
+          actorAvatarUrl: sanitizeSafeImageUrl(actor.avatarUrl),
           actorAccentColor: actor.accentColor,
           actorPinnedBadges,
           kind: e.kind,
           mediaId: Number(e.mediaId ?? 0),
-          mediaTitle: e.mediaTitle.trim(),
+          mediaTitle: e.mediaTitle.trim().slice(0, 200),
           mediaType: isBadge ? "BADGE" : isStaff ? "STAFF" : e.mediaType === "MANGA" ? "MANGA" : "ANIME",
-          coverImage: e.coverImage ?? null,
-          action: e.action.trim(),
+          coverImage: sanitizeSafeImageUrl(e.coverImage),
+          action: String(e.action).trim().slice(0, 300),
           score: typeof e.score === "number" ? e.score : null,
           badgeId: e.badgeId,
           badgeRarity: e.badgeRarity,
@@ -171,14 +188,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      insertedCount: Math.max(insertedCloud, insertedLocal),
-      insertedCloud,
+      insertedCount: insertedLocal,
+      insertedCloud: 0,
       insertedLocal,
     });
   } catch {
     return NextResponse.json(
       { ok: false, error: "Erreur lors de la synchronisation de l'activité." },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }

@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   addLocalActivityComment,
+  isAuthenticatedActor,
   makeId,
+  readSocialDb,
   resolveServerActor,
 } from "@/lib/server/social-store";
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  sanitizeSafeImageUrl,
+} from "@/lib/server/rate-limit";
 import type { ActivityCommentItem } from "@/types/media";
 
 export const runtime = "nodejs";
@@ -17,7 +24,23 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id: activityId } = await context.params;
-  const body = await request.json().catch(() => ({}));
+  const actor = await resolveServerActor();
+  if (!isAuthenticatedActor(actor)) {
+    return NextResponse.json(
+      { error: "Connectez-vous pour commenter une activité." },
+      { status: 401 }
+    );
+  }
+
+  const limit = checkRateLimit(`activity:comment:${actor.id}`, 25, 60_000);
+  if (!limit.ok) {
+    return rateLimitResponse(limit.retryAfterSec);
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Requête JSON invalide." }, { status: 400 });
+  }
   const text = String(body?.body ?? "").trim();
 
   if (!text || text.length > 600) {
@@ -27,16 +50,9 @@ export async function POST(
     );
   }
 
-  const actor = await resolveServerActor({
-    userId: body?.userId,
-    username: body?.username,
-    displayName: body?.displayName,
-    avatarUrl: body?.avatarUrl,
-    accentColor: body?.accentColor,
-  });
-
   let commentId = makeId("cmt");
-  const createdAt = new Date().toISOString();
+  let createdAt = new Date().toISOString();
+  const safeAvatar = sanitizeSafeImageUrl(actor.avatarUrl);
 
   if (actor.source === "supabase" && UUID_RE.test(activityId)) {
     try {
@@ -49,19 +65,47 @@ export async function POST(
             user_id: actor.id,
             author_username: actor.username,
             author_display_name: actor.displayName,
-            author_avatar_url: actor.avatarUrl,
+            author_avatar_url: safeAvatar,
             body: text,
           })
           .select("id, created_at")
           .single();
 
-        if (!error && inserted?.id) {
-          commentId = String(inserted.id);
+        if (error || !inserted?.id) {
+          return NextResponse.json(
+            { error: "Impossible de publier ce commentaire." },
+            { status: 400 }
+          );
         }
+        commentId = String(inserted.id);
+        createdAt = inserted.created_at ?? createdAt;
+
+        const comment: ActivityCommentItem = {
+          id: commentId,
+          activityId,
+          userId: actor.id,
+          authorUsername: actor.username,
+          authorDisplayName: actor.displayName,
+          authorAvatarUrl: safeAvatar,
+          authorAccentColor: actor.accentColor,
+          body: text,
+          createdAt,
+        };
+        return NextResponse.json({ ok: true, comment });
       }
     } catch {
-      // fall through to local cache
+      return NextResponse.json(
+        { error: "Erreur serveur lors de la publication du commentaire." },
+        { status: 500 }
+      );
     }
+  }
+
+  // Local social store: verify target activity exists first
+  const db = readSocialDb();
+  const target = db.activities.find((a) => a.id === activityId);
+  if (!target || (!target.isPublic && target.userId !== actor.id)) {
+    return NextResponse.json({ error: "Activité introuvable." }, { status: 404 });
   }
 
   const comment: ActivityCommentItem = {
@@ -70,7 +114,7 @@ export async function POST(
     userId: actor.id,
     authorUsername: actor.username,
     authorDisplayName: actor.displayName,
-    authorAvatarUrl: actor.avatarUrl,
+    authorAvatarUrl: safeAvatar,
     authorAccentColor: actor.accentColor,
     body: text,
     createdAt,

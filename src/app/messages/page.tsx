@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: "Messages Privés",
   description:
     "Discutez directement en message privé avec les autres membres inscrits sur Shiori.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function MessagesPage() {

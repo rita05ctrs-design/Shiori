@@ -29,7 +29,6 @@ import {
   formatSeason,
   getDisplayTitle,
   getStatusLabel,
-  stripHtml,
 } from "@/lib/utils";
 import type { MediaItem } from "@/types/media";
 
@@ -139,7 +138,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
         }
       }}
       className={cn(
-        "relative w-full min-h-[520px] sm:min-h-[610px] lg:min-h-[660px] flex items-end overflow-hidden pt-[calc(4.75rem+env(safe-area-inset-top))] pb-10 sm:pb-14 select-none",
+        "relative w-full min-h-[370px] sm:min-h-[420px] lg:min-h-[460px] flex items-end overflow-hidden pt-[calc(4.75rem+env(safe-area-inset-top))] pb-8 sm:pb-10 select-none",
         heroDragging ? "cursor-grabbing" : "cursor-grab"
       )}
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, X, Clock, ArrowRight, ListChecks } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
@@ -19,7 +19,11 @@ interface HomeWeeklyCheckStripProps {
  */
 export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps) {
   const { getEntry, upsertEntry } = useShiori();
-  const nowSec = Math.floor(Date.now() / 1000);
+  const [nowSec, setNowSec] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNowSec(Math.floor(Date.now() / 1000));
+  }, []);
 
   // Deduplicate by mediaId, prioritizing user's tracked shows & recently aired episodes
   const featured = useMemo(() => {
@@ -32,9 +36,11 @@ export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps)
         const aTracked = Boolean(getEntry(a.media.id));
         const bTracked = Boolean(getEntry(b.media.id));
         if (aTracked !== bTracked) return aTracked ? -1 : 1;
-        const aAired = a.airingAt <= nowSec;
-        const bAired = b.airingAt <= nowSec;
-        if (aAired !== bAired) return aAired ? -1 : 1;
+        if (nowSec !== null) {
+          const aAired = a.airingAt <= nowSec;
+          const bAired = b.airingAt <= nowSec;
+          if (aAired !== bAired) return aAired ? -1 : 1;
+        }
         return a.airingAt - b.airingAt;
       })
       .slice(0, 4);
@@ -79,7 +85,7 @@ export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps)
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 relative z-10">
         {featured.map((slot) => {
           const entry = getEntry(slot.media.id);
-          const isAired = slot.airingAt <= nowSec;
+          const isAired = nowSec !== null ? slot.airingAt <= nowSec : false;
           const targetEp = isAired ? slot.episode : Math.max(1, slot.episode - 1);
           const isWatched = Boolean(entry && entry.progress >= targetEp);
           const title = getDisplayTitle(slot.media);
@@ -118,7 +124,9 @@ export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps)
                   </p>
                   <p className="text-[11px] font-mono text-[#8C91A6] flex items-center gap-1 mt-0.5 truncate">
                     <Clock className="w-3 h-3 text-kinpaku shrink-0" />
-                    <span className="truncate">{formatCountdown(slot.airingAt)}</span>
+                    <span suppressHydrationWarning className="truncate">
+                      {nowSec !== null ? formatCountdown(slot.airingAt) : "Planning hebdo"}
+                    </span>
                   </p>
                 </div>
               </Link>

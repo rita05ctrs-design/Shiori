@@ -4,6 +4,7 @@ import {
   ANILIST_STATE_COOKIE,
   buildAniListAuthorizeUrl,
 } from "@/lib/server/anilist-oauth";
+import { isSecureRequest } from "@/lib/server/auth-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
   response.cookies.set(ANILIST_STATE_COOKIE, state, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecureRequest(request),
     path: "/",
     maxAge: 60 * 10, // 10 minutes
   });

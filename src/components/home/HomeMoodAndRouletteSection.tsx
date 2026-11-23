@@ -21,7 +21,6 @@ import {
   formatFormat,
   formatScore,
   getDisplayTitle,
-  stripHtml,
 } from "@/lib/utils";
 import type { MediaItem } from "@/types/media";
 

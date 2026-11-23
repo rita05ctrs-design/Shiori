@@ -75,16 +75,12 @@ export function ThemeSettingsCard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <span className="inline-flex items-center gap-1.5 text-[10.5px] font-mono uppercase tracking-[0.16em] text-accent-soft">
-            <Palette className="w-3.5 h-3.5 text-accent" />
-            Studio de Personnalisation · Temps Réel
-          </span>
-          <h2 className="text-lg sm:text-xl font-semibold text-white mt-0.5">
-            Couleurs, Ambiance & Style de l&apos;Application
+          <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+            <Palette className="w-4 h-4 text-accent" />
+            <span>Thème & Couleurs</span>
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-0.5">
-            Adaptez l&apos;identité visuelle de Shiori selon vos goûts : thèmes signature, couleur libre,
-            atmosphère de fond et finitions d&apos;interface.
+            Choisissez un thème prêt à l&apos;emploi ou personnalisez les couleurs et le fond.
           </p>
         </div>
 
