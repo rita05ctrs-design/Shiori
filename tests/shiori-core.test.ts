@@ -18,6 +18,13 @@ import {
 import { computeProfileAffinity } from "../src/lib/affinity.ts";
 import { evaluateAllBadges, extractBadgeMetrics } from "../src/lib/badges.ts";
 import { normalizeContentLanguage } from "../src/lib/i18n.ts";
+import {
+  DEFAULT_DISCOVER_STATE,
+  discoverStateToSearchParams,
+  libraryStateToSearchParams,
+  searchParamsToDiscoverState,
+  searchParamsToLibraryState,
+} from "../src/lib/filter-persistence.ts";
 import type {
   AiringScheduleItem,
   CustomCollection,
@@ -392,4 +399,58 @@ test("stress & missing data: 2,000-entry library stays fast, coherent & NaN-safe
   );
   assert.ok(filtered.length > 0);
   assert.equal(libraryToCsv(large).split("\n").length, 2001);
+});
+
+test("filter-persistence: round-trips Library and Discover filters cleanly via URL params", () => {
+  const libState = {
+    filters: {
+      ...DEFAULT_LIBRARY_FILTERS,
+      status: "WATCHING" as const,
+      mediaType: "ANIME" as const,
+      genre: "Action",
+      year: "2024",
+      season: "FALL",
+      studio: "Madhouse",
+      format: "TV",
+      scoreFilter: "8" as const,
+      progressFilter: "STARTED" as const,
+      favoritesOnly: true,
+      search: "frieren",
+    },
+    sortBy: "SCORE" as const,
+    view: "list" as const,
+    showAdvancedFilters: true,
+  };
+  const libParams = libraryStateToSearchParams(libState);
+  const libRestored = searchParamsToLibraryState(libParams, { showAdvancedFilters: true });
+  assert.deepEqual(libRestored.filters, libState.filters);
+  assert.equal(libRestored.sortBy, "SCORE");
+  assert.equal(libRestored.view, "list");
+  assert.equal(libRestored.showAdvancedFilters, true);
+
+  const discState = {
+    ...DEFAULT_DISCOVER_STATE,
+    type: "MANGA" as const,
+    search: "berserk",
+    selectedGenres: ["Action", "Drama"],
+    selectedTags: ["Seinen"],
+    year: "1989",
+    format: "MANGA",
+    minScore: "85",
+    minUnits: "100",
+    sort: "SCORE_DESC",
+    hideInLibrary: true,
+    showFilters: true,
+  };
+  const discParams = discoverStateToSearchParams(discState);
+  const discRestored = searchParamsToDiscoverState(discParams);
+  assert.equal(discRestored.type, "MANGA");
+  assert.equal(discRestored.search, "berserk");
+  assert.deepEqual(discRestored.selectedGenres, ["Action", "Drama"]);
+  assert.deepEqual(discRestored.selectedTags, ["Seinen"]);
+  assert.equal(discRestored.format, "MANGA");
+  assert.equal(discRestored.minScore, "85");
+  assert.equal(discRestored.minUnits, "100");
+  assert.equal(discRestored.hideInLibrary, true);
+  assert.equal(discRestored.showFilters, true);
 });

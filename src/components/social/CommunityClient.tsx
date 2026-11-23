@@ -24,6 +24,14 @@ import { ActivityCard } from "@/components/social/ActivityCard";
 import { AniListActivityFeed } from "@/components/social/AniListActivityFeed";
 import { FriendActionButton } from "@/components/social/FriendActionButton";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
+import {
+  clearSessionState,
+  FILTER_STORAGE_KEYS,
+  readSessionState,
+  syncUrlSearchParams,
+  writeSessionState,
+  type PersistedCommunityState,
+} from "@/lib/filter-persistence";
 import { cn } from "@/lib/utils";
 import type {
   CommunityActivityItem,
@@ -61,6 +69,7 @@ export function CommunityClient() {
   const [feedSource, setFeedSource] = useState<FeedSource>("shiori");
   const [kindFilter, setKindFilter] = useState<"ALL" | CommunityActivityKind>("ALL");
   const [memberQuery, setMemberQuery] = useState("");
+  const [filtersReady, setFiltersReady] = useState(false);
   const [directAddUsername, setDirectAddUsername] = useState("");
   const [addingDirect, setAddingDirect] = useState(false);
   const [friendFeedback, setFriendFeedback] = useState<{
@@ -75,17 +84,85 @@ export function CommunityClient() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const param = new URLSearchParams(window.location.search).get("tab");
-    if (param === "friends") setTab("friends");
-    else if (param === "members") setTab("members");
-    else if (param === "anilist") {
-      setTab("feed");
-      setFeedSource("anilist");
-    } else if (param === "activity") {
-      setTab("feed");
-      setFeedSource("shiori");
+    const params = new URLSearchParams(window.location.search);
+    const saved = readSessionState<PersistedCommunityState>(FILTER_STORAGE_KEYS.community);
+    const hasUrl = Array.from(params.keys()).length > 0;
+
+    if (hasUrl) {
+      const tabParam = params.get("tab");
+      if (tabParam === "friends") setTab("friends");
+      else if (tabParam === "members") setTab("members");
+      else if (tabParam === "anilist") {
+        setTab("feed");
+        setFeedSource("anilist");
+      } else if (tabParam === "activity") {
+        setTab("feed");
+        setFeedSource("shiori");
+      }
+
+      const sourceParam = params.get("source");
+      if (sourceParam === "anilist" || sourceParam === "shiori") {
+        setFeedSource(sourceParam);
+      }
+
+      const kindParam = params.get("kind");
+      if (
+        kindParam === "ALL" ||
+        kindParam === "FAVORITE_MEDIA" ||
+        kindParam === "COMPLETED" ||
+        kindParam === "SCORED" ||
+        kindParam === "BADGE_UNLOCKED" ||
+        kindParam === "FAVORITE_STAFF"
+      ) {
+        setKindFilter(kindParam);
+      }
+
+      const qParam = params.get("q");
+      if (qParam) setMemberQuery(qParam);
+    } else if (saved) {
+      if (saved.tab === "feed" || saved.tab === "friends" || saved.tab === "members") {
+        setTab(saved.tab);
+      }
+      if (saved.feedSource === "shiori" || saved.feedSource === "anilist") {
+        setFeedSource(saved.feedSource);
+      }
+      if (
+        saved.kindFilter === "ALL" ||
+        saved.kindFilter === "FAVORITE_MEDIA" ||
+        saved.kindFilter === "COMPLETED" ||
+        saved.kindFilter === "SCORED" ||
+        saved.kindFilter === "BADGE_UNLOCKED" ||
+        saved.kindFilter === "FAVORITE_STAFF"
+      ) {
+        setKindFilter(saved.kindFilter);
+      }
+      if (typeof saved.memberQuery === "string" && saved.memberQuery) {
+        setMemberQuery(saved.memberQuery);
+      }
     }
+    setFiltersReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    const params = new URLSearchParams();
+    if (tab !== "feed") params.set("tab", tab);
+    if (feedSource !== "shiori") params.set("source", feedSource);
+    if (kindFilter !== "ALL") params.set("kind", kindFilter);
+    if (memberQuery.trim()) params.set("q", memberQuery.trim());
+
+    const qs = syncUrlSearchParams("/community", params);
+    if (qs) {
+      writeSessionState<PersistedCommunityState>(FILTER_STORAGE_KEYS.community, {
+        tab,
+        feedSource,
+        kindFilter,
+        memberQuery,
+      });
+    } else {
+      clearSessionState(FILTER_STORAGE_KEYS.community);
+    }
+  }, [filtersReady, tab, feedSource, kindFilter, memberQuery]);
 
   const loadActivities = useCallback(async () => {
     setLoadingFeed(true);
@@ -123,15 +200,17 @@ export function CommunityClient() {
   }, []);
 
   useEffect(() => {
+    if (!filtersReady) return;
     void loadActivities();
-  }, [loadActivities, profile.id, profile.mode, profile.isActivityPublic]);
+  }, [filtersReady, loadActivities, profile.id, profile.mode, profile.isActivityPublic]);
 
   useEffect(() => {
+    if (!filtersReady) return;
     const t = setTimeout(() => {
       void loadProfiles(memberQuery);
     }, memberQuery ? 220 : 0);
     return () => clearTimeout(t);
-  }, [memberQuery, loadProfiles, profile.id, profile.mode, profile.username]);
+  }, [filtersReady, memberQuery, loadProfiles, profile.id, profile.mode, profile.username]);
 
   // Subscribe to realtime updates transparently in the background
   useEffect(() => {

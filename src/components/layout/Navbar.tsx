@@ -29,6 +29,7 @@ import { useShiori } from "@/context/ShioriContext";
 import { CONTENT_LANGUAGES } from "@/lib/i18n";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
+import { LanguageQuickPopover } from "@/components/layout/LanguageQuickPopover";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { cn } from "@/lib/utils";
 
@@ -273,6 +274,9 @@ export function Navbar() {
 
             {/* Quick Theme Customizer (Desktop & Mobile — 2 taps anywhere) */}
             <ThemeQuickPopover />
+
+            {/* Synopsis Content Language Selector (FR / EN / ES / IT) */}
+            <LanguageQuickPopover />
 
             {/* Private Messages Shortcut (shown in top bar when authenticated) */}
             {isAuthenticated && (

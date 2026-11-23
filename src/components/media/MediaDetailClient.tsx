@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -53,7 +54,20 @@ interface MediaDetailClientProps {
 }
 
 export function MediaDetailClient({ media }: MediaDetailClientProps) {
+  const router = useRouter();
   const { getEntry, upsertEntry } = useShiori();
+
+  const handleBack = () => {
+    if (
+      typeof window !== "undefined" &&
+      window.history.length > 1 &&
+      (!document.referrer || document.referrer.startsWith(window.location.origin))
+    ) {
+      router.back();
+    } else {
+      router.push("/discover");
+    }
+  };
 
   const entry = getEntry(media.id);
   const title = getDisplayTitle(media);
@@ -104,15 +118,16 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/55 to-obsidian/35" />
         <div className="absolute inset-0 bg-gradient-to-r from-obsidian/85 via-transparent to-obsidian/40" />
 
-        {/* Back link */}
+        {/* Smart Back button — preserves caller route & active filters */}
         <div className="absolute top-20 inset-x-0 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 z-10">
-          <Link
-            href="/discover"
-            className="group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur-md border border-white/[0.12] text-xs font-medium text-[#E4E6F0] transition-colors"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur-md border border-white/[0.12] text-xs font-medium text-[#E4E6F0] transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
-            <span>Catalogue</span>
-          </Link>
+            <span>Retour</span>
+          </button>
         </div>
       </ParallaxBanner>
 

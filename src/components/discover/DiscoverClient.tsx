@@ -48,6 +48,18 @@ import {
   type SituationGroupId,
   type TagCategory,
 } from "@/lib/discover-taxonomy";
+import {
+  clearSessionState,
+  DEFAULT_DISCOVER_STATE,
+  discoverStateToSearchParams,
+  FILTER_STORAGE_KEYS,
+  readSessionState,
+  sanitizeDiscoverState,
+  searchParamsToDiscoverState,
+  syncUrlSearchParams,
+  writeSessionState,
+  type PersistedDiscoverState,
+} from "@/lib/filter-persistence";
 import { cn } from "@/lib/utils";
 import type { MediaItem, MediaType } from "@/types/media";
 
@@ -150,70 +162,50 @@ interface DiscoverClientProps {
 
 export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientProps) {
   const searchParams = useSearchParams();
+  const searchParamsKey = searchParams.toString();
   const { library } = useShiori();
-  const [hideInLibrary, setHideInLibrary] = useState(false);
 
-  const initialGenre = searchParams.get("genre");
-  const initialMoodParam = searchParams.get("mood");
-  const initialMoodPreset = initialMoodParam
-    ? MOOD_PRESETS.find((m) => m.id === initialMoodParam) ?? null
-    : null;
+  // Compute initial state synchronously from URL params when present (Back button & deep links)
+  const initialStateRef = useRef<PersistedDiscoverState | null>(null);
+  if (initialStateRef.current === null) {
+    initialStateRef.current = searchParamsKey
+      ? searchParamsToDiscoverState(
+          new URLSearchParams(searchParamsKey),
+          undefined,
+          MOOD_PRESETS
+        )
+      : DEFAULT_DISCOVER_STATE;
+  }
+  const init = initialStateRef.current;
 
-  const [type, setType] = useState<MediaType>(
-    searchParams.get("type") === "MANGA" ? "MANGA" : "ANIME"
-  );
-  const [search, setSearch] = useState(searchParams.get("search") ?? "");
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [hideInLibrary, setHideInLibrary] = useState(init.hideInLibrary);
+  const [type, setType] = useState<MediaType>(init.type);
+  const [search, setSearch] = useState(init.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(init.search);
 
   // Multi-select Genres & Tags (Situations, Universes, Themes, Demographics)
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(
-    initialMoodPreset
-      ? initialMoodPreset.genres
-      : initialGenre && initialGenre !== "ALL"
-        ? [initialGenre]
-        : []
-  );
-  const [selectedTags, setSelectedTags] = useState<string[]>(
-    initialMoodPreset ? initialMoodPreset.tags : []
-  );
-  const [activeMoodId, setActiveMoodId] = useState<string | null>(
-    initialMoodPreset ? initialMoodPreset.id : null
-  );
-  const [activeCategory, setActiveCategory] = useState<TagCategory["id"]>("situations");
-  const [situationGroup, setSituationGroup] = useState<SituationGroupId>("ALL");
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(init.selectedGenres);
+  const [selectedTags, setSelectedTags] = useState<string[]>(init.selectedTags);
+  const [activeMoodId, setActiveMoodId] = useState<string | null>(init.activeMoodId);
+  const [activeCategory, setActiveCategory] = useState<TagCategory["id"]>(init.activeCategory);
+  const [situationGroup, setSituationGroup] = useState<SituationGroupId>(init.situationGroup);
   const [tagSearch, setTagSearch] = useState("");
 
   // Structured Luxury Dropdown Filters
-  const [year, setYear] = useState(searchParams.get("year") ?? "ALL");
-  const [season, setSeason] = useState(searchParams.get("season") ?? "ALL");
-  const [format, setFormat] = useState(searchParams.get("format") ?? "ALL");
-  const [status, setStatus] = useState(searchParams.get("status") ?? "ALL");
-  const [minScore, setMinScore] = useState(
-    initialMoodPreset?.minScore ?? searchParams.get("minScore") ?? "ALL"
-  );
-  const [maxScore, setMaxScore] = useState(searchParams.get("maxScore") ?? "ALL");
-  const [minUnits, setMinUnits] = useState(
-    searchParams.get("minEpisodes") ?? searchParams.get("minChapters") ?? ""
-  );
-  const [maxUnits, setMaxUnits] = useState(
-    searchParams.get("maxEpisodes") ?? searchParams.get("maxChapters") ?? ""
-  );
-  const [debouncedMinUnits, setDebouncedMinUnits] = useState(minUnits);
-  const [debouncedMaxUnits, setDebouncedMaxUnits] = useState(maxUnits);
-  const [sort, setSort] = useState(
-    initialMoodPreset?.sort ?? searchParams.get("sort") ?? "TRENDING_DESC"
-  );
-  const hasInitialAdvancedParams = Boolean(
-    searchParams.get("year") ||
-      searchParams.get("season") ||
-      searchParams.get("format") ||
-      searchParams.get("status") ||
-      searchParams.get("minScore") ||
-      searchParams.get("minEpisodes") ||
-      searchParams.get("minChapters")
-  );
-  const [showFilters, setShowFilters] = useState(hasInitialAdvancedParams);
-  const [showMoods, setShowMoods] = useState(Boolean(initialMoodPreset));
+  const [year, setYear] = useState(init.year);
+  const [season, setSeason] = useState(init.season);
+  const [format, setFormat] = useState(init.format);
+  const [status, setStatus] = useState(init.status);
+  const [minScore, setMinScore] = useState(init.minScore);
+  const [maxScore, setMaxScore] = useState(init.maxScore);
+  const [minUnits, setMinUnits] = useState(init.minUnits);
+  const [maxUnits, setMaxUnits] = useState(init.maxUnits);
+  const [debouncedMinUnits, setDebouncedMinUnits] = useState(init.minUnits);
+  const [debouncedMaxUnits, setDebouncedMaxUnits] = useState(init.maxUnits);
+  const [sort, setSort] = useState(init.sort);
+  const [showFilters, setShowFilters] = useState(init.showFilters);
+  const [showMoods, setShowMoods] = useState(init.showMoods);
+  const [filtersReady, setFiltersReady] = useState(false);
 
   const [items, setItems] = useState<MediaItem[]>(initialItems);
   const [total, setTotal] = useState<number>(initialTotal);
@@ -222,6 +214,129 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const reqIdRef = useRef(0);
+  const didInitRef = useRef(false);
+  const lastWrittenQsRef = useRef<string | null>(null);
+
+  const applyDiscoverState = useCallback((next: PersistedDiscoverState) => {
+    setType(next.type);
+    setSearch(next.search);
+    setDebouncedSearch(next.search);
+    setSelectedGenres(next.selectedGenres);
+    setSelectedTags(next.selectedTags);
+    setActiveMoodId(next.activeMoodId);
+    setActiveCategory(next.activeCategory);
+    setSituationGroup(next.situationGroup);
+    setYear(next.year);
+    setSeason(next.season);
+    setFormat(next.format);
+    setStatus(next.status);
+    setMinScore(next.minScore);
+    setMaxScore(next.maxScore);
+    setMinUnits(next.minUnits);
+    setMaxUnits(next.maxUnits);
+    setDebouncedMinUnits(next.minUnits.trim());
+    setDebouncedMaxUnits(next.maxUnits.trim());
+    setSort(next.sort);
+    setHideInLibrary(next.hideInLibrary);
+    setShowFilters(next.showFilters);
+    setShowMoods(next.showMoods);
+  }, []);
+
+  // Restore saved filters on mount (Priority 1: URL query params; Priority 2: sessionStorage fallback)
+  useEffect(() => {
+    if (didInitRef.current && lastWrittenQsRef.current === searchParamsKey) {
+      return;
+    }
+
+    const saved = readSessionState<PersistedDiscoverState>(FILTER_STORAGE_KEYS.discover);
+
+    if (!didInitRef.current) {
+      didInitRef.current = true;
+      if (searchParamsKey) {
+        const parsed = searchParamsToDiscoverState(
+          new URLSearchParams(searchParamsKey),
+          {
+            activeCategory: saved?.activeCategory,
+            situationGroup: saved?.situationGroup,
+            showFilters: saved?.showFilters,
+            showMoods: saved?.showMoods,
+          },
+          MOOD_PRESETS
+        );
+        applyDiscoverState(parsed);
+      } else if (saved) {
+        applyDiscoverState(sanitizeDiscoverState(saved, MOOD_PRESETS));
+      }
+      setFiltersReady(true);
+      return;
+    }
+
+    // Subsequent external URL navigation while mounted (e.g. clicking a genre or mood deep link)
+    if (searchParamsKey) {
+      applyDiscoverState(
+        searchParamsToDiscoverState(
+          new URLSearchParams(searchParamsKey),
+          undefined,
+          MOOD_PRESETS
+        )
+      );
+    }
+  }, [searchParamsKey, applyDiscoverState]);
+
+  // Persist active discover filters to URL (replaceState) & sessionStorage so Back / revisit never loses them
+  useEffect(() => {
+    if (!filtersReady) return;
+    const snapshot: PersistedDiscoverState = {
+      type,
+      search: debouncedSearch,
+      selectedGenres,
+      selectedTags,
+      activeMoodId,
+      activeCategory,
+      situationGroup,
+      year,
+      season,
+      format,
+      status,
+      minScore,
+      maxScore,
+      minUnits: debouncedMinUnits,
+      maxUnits: debouncedMaxUnits,
+      sort,
+      hideInLibrary,
+      showFilters,
+      showMoods,
+    };
+    const qs = syncUrlSearchParams("/discover", discoverStateToSearchParams(snapshot));
+    lastWrittenQsRef.current = qs;
+
+    if (qs || showFilters || showMoods) {
+      writeSessionState(FILTER_STORAGE_KEYS.discover, snapshot);
+    } else {
+      clearSessionState(FILTER_STORAGE_KEYS.discover);
+    }
+  }, [
+    filtersReady,
+    type,
+    debouncedSearch,
+    selectedGenres,
+    selectedTags,
+    activeMoodId,
+    activeCategory,
+    situationGroup,
+    year,
+    season,
+    format,
+    status,
+    minScore,
+    maxScore,
+    debouncedMinUnits,
+    debouncedMaxUnits,
+    sort,
+    hideInLibrary,
+    showFilters,
+    showMoods,
+  ]);
 
   // Debounce search text & episode/chapter custom inputs
   useEffect(() => {
@@ -312,8 +427,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   );
 
   useEffect(() => {
+    if (!filtersReady) return;
     void fetchResults(1, false);
-  }, [fetchResults]);
+  }, [filtersReady, fetchResults]);
 
   const handleTypeSwitch = (next: MediaType) => {
     setType(next);

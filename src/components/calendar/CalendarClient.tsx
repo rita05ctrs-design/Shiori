@@ -35,6 +35,14 @@ import {
   formatTimeInTimezone,
 } from "@/lib/calendar-utils";
 import {
+  clearSessionState,
+  FILTER_STORAGE_KEYS,
+  readSessionState,
+  syncUrlSearchParams,
+  writeSessionState,
+  type PersistedCalendarState,
+} from "@/lib/filter-persistence";
+import {
   cn,
   formatCompactNumber,
   formatCountdown,
@@ -203,6 +211,76 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string>(defaultSeasonId);
   const [seasonFormat, setSeasonFormat] = useState<SeasonFormatFilter>("ALL");
   const [seasonSearch, setSeasonSearch] = useState("");
+  const [filtersReady, setFiltersReady] = useState(false);
+
+  // Restore calendar filters from URL query params or sessionStorage when navigating back
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const saved = readSessionState<PersistedCalendarState>(FILTER_STORAGE_KEYS.calendar);
+    const hasUrl = Array.from(params.keys()).length > 0;
+
+    const tz = hasUrl ? params.get("tz") : saved?.tzMode;
+    if (tz === "local" || tz === "jst") setTzMode(tz);
+
+    const vm = hasUrl ? params.get("view") : saved?.viewMode;
+    if (vm === "day" || vm === "week" || vm === "month") setViewMode(vm);
+
+    const onlyMyList = hasUrl
+      ? params.get("mylist") === "1"
+      : Boolean(saved?.scheduleOnlyMyList);
+    if (onlyMyList) setScheduleOnlyMyList(true);
+
+    const seasonId = hasUrl ? params.get("season") : saved?.selectedSeasonId;
+    if (seasonId && seasons.some((s) => s.id === seasonId)) {
+      setSelectedSeasonId(seasonId);
+    }
+
+    const fmt = hasUrl ? params.get("format") : saved?.seasonFormat;
+    if (fmt === "ALL" || fmt === "TV" || fmt === "MOVIE" || fmt === "ONA_OVA" || fmt === "MYLIST") {
+      setSeasonFormat(fmt);
+    }
+
+    const q = hasUrl ? (params.get("q") ?? "") : (saved?.seasonSearch ?? "");
+    if (q) setSeasonSearch(q);
+
+    setFiltersReady(true);
+  }, [seasons]);
+
+  // Persist calendar filters to URL & sessionStorage
+  useEffect(() => {
+    if (!filtersReady) return;
+    const params = new URLSearchParams();
+    if (tzMode !== "local") params.set("tz", tzMode);
+    if (viewMode !== "day") params.set("view", viewMode);
+    if (scheduleOnlyMyList) params.set("mylist", "1");
+    if (selectedSeasonId !== defaultSeasonId) params.set("season", selectedSeasonId);
+    if (seasonFormat !== "ALL") params.set("format", seasonFormat);
+    if (seasonSearch.trim()) params.set("q", seasonSearch.trim());
+
+    const qs = syncUrlSearchParams("/calendar", params);
+    if (qs) {
+      writeSessionState<PersistedCalendarState>(FILTER_STORAGE_KEYS.calendar, {
+        tzMode,
+        viewMode,
+        scheduleOnlyMyList,
+        selectedSeasonId,
+        seasonFormat,
+        seasonSearch,
+      });
+    } else {
+      clearSessionState(FILTER_STORAGE_KEYS.calendar);
+    }
+  }, [
+    filtersReady,
+    tzMode,
+    viewMode,
+    scheduleOnlyMyList,
+    selectedSeasonId,
+    defaultSeasonId,
+    seasonFormat,
+    seasonSearch,
+  ]);
 
   const nowTimeStr =
     nowMs !== null ? formatTimeInTimezone(Math.floor(nowMs / 1000), activeTimeZone) : "--:--";

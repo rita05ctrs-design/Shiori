@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Languages, Loader2, RotateCcw } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import {
+  CONTENT_LANGUAGES,
   CONTENT_LANGUAGE_MAP,
   sanitizeSynopsisHtml,
   synopsisHtmlToPlainText,
@@ -42,7 +43,7 @@ export function TranslatedSynopsis({
   lazy = false,
   className,
 }: TranslatedSynopsisProps) {
-  const { contentLanguage, hydrated } = useShiori();
+  const { contentLanguage, setContentLanguage, hydrated } = useShiori();
   const [showOriginal, setShowOriginal] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [inView, setInView] = useState(!lazy);
@@ -236,42 +237,64 @@ export function TranslatedSynopsis({
   // DETAIL PAGE FULL EDITORIAL MODE (preserves <br /> and <i>/<b> formatting!)
   return (
     <div className={cn("space-y-3", className)}>
-      {/* Header Row with Automatic Translation Badge & 1-Click Original Toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent">
-          Synopsis
-        </h2>
-
+      {/* Header Row with Inline Language Selector, Auto Translation Badge & 1-Click Original Toggle */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent">
+            Synopsis
+          </h2>
+
           {loading && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/[0.09] text-[10.5px] font-mono text-[#B5B9C9]">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.09] text-[10.5px] font-mono text-[#B5B9C9]">
               <Loader2 className="w-3 h-3 animate-spin text-accent-soft" />
               <span>Traduction ({langMeta?.shortLabel ?? contentLanguage.toUpperCase()})...</span>
             </span>
           )}
 
-          {!loading && contentLanguage !== "en" && isTranslated && (
-            <>
-              {showingTranslated && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/14 border border-accent/35 text-[10.5px] font-mono text-accent-soft">
-                  <Languages className="w-3 h-3" />
-                  <span>Traduit automatiquement</span>
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowOriginal((v) => !v)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.13] border border-white/[0.1] text-[11px] font-medium text-[#D6D9E6] hover:text-white transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>
-                  {showOriginal
-                    ? `Voir la traduction (${langMeta?.code ?? contentLanguage.toUpperCase()})`
-                    : "Voir l'original (EN)"}
-                </span>
-              </button>
-            </>
+          {!loading && showingTranslated && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/14 border border-accent/35 text-[10px] font-mono text-accent-soft">
+              <Languages className="w-3 h-3" />
+              <span>Auto · {langMeta?.code ?? contentLanguage.toUpperCase()}</span>
+            </span>
           )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Direct 1-click Synopsis Language Picker (FR / EN / ES / IT) */}
+          <div
+            role="group"
+            aria-label="Choisir la langue du synopsis"
+            className="inline-flex items-center p-0.5 rounded-full bg-white/[0.04] border border-white/[0.09]"
+          >
+            {CONTENT_LANGUAGES.map((lang) => {
+              const isSelected =
+                lang.id === "en"
+                  ? contentLanguage === "en" || showOriginal
+                  : contentLanguage === lang.id && !showOriginal;
+              return (
+                <button
+                  key={lang.id}
+                  type="button"
+                  onClick={() => {
+                    setShowOriginal(false);
+                    if (lang.id !== contentLanguage) {
+                      setContentLanguage(lang.id);
+                    }
+                  }}
+                  title={lang.label}
+                  aria-pressed={isSelected}
+                  className={cn(
+                    "px-2.5 py-0.5 rounded-full font-mono text-[10.5px] font-bold transition-all cursor-pointer",
+                    isSelected
+                      ? "bg-accent text-accent-fg shadow-[0_2px_10px_rgb(var(--shiori-accent-rgb)/0.38)]"
+                      : "text-[#9A9EAE] hover:text-white"
+                  )}
+                >
+                  {lang.code}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

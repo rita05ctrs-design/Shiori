@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -57,11 +58,23 @@ import {
   type ProgressFilter,
   type ScoreFilter,
 } from "@/lib/library-utils";
+import {
+  clearSessionState,
+  FILTER_STORAGE_KEYS,
+  libraryStateToSearchParams,
+  readSessionState,
+  sanitizeLibraryState,
+  searchParamsToLibraryState,
+  syncUrlSearchParams,
+  writeSessionState,
+  type LibraryViewMode,
+  type PersistedLibraryState,
+} from "@/lib/filter-persistence";
 import { cn, formatFormat, getStatusLabel, STATUS_CONFIG } from "@/lib/utils";
 import type { LibraryStatus, MediaType } from "@/types/media";
 
 type FilterTab = "ALL" | LibraryStatus;
-type ViewMode = "grid" | "list" | "table";
+type ViewMode = LibraryViewMode;
 
 const TABS: { id: FilterTab; label: string }[] = [
   { id: "ALL", label: "Tous" },
@@ -134,7 +147,10 @@ function getFormatMeta(format: string): {
   }
 }
 
-export default function LibraryPage() {
+function LibraryPageInner() {
+  const searchParams = useSearchParams();
+  const searchParamsKey = searchParams.toString();
+
   const {
     library,
     orderedFavorites,
@@ -153,41 +169,75 @@ export default function LibraryPage() {
   const [sortBy, setSortBy] = useState<LibrarySortKey>("UPDATED");
   const [view, setView] = useState<ViewMode>("grid");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [filtersReady, setFiltersReady] = useState(false);
   const [organizingFavorites, setOrganizingFavorites] = useState(false);
   const [managingCollections, setManagingCollections] = useState(false);
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(36);
   const toolsRef = useRef<HTMLDivElement>(null);
+  const didInitRef = useRef(false);
+  const lastWrittenQsRef = useRef<string | null>(null);
 
-  // Sync deep links like /library?favorites=1 or /library?status=WATCHING or /library?type=MANGA
+  // Restore filters from URL query params (Priority 1: Back button & deep links like /library?favorites=1)
+  // or sessionStorage fallback (Priority 2: returning via Navbar link after viewing an anime)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const favParam = params.get("favorites");
-    const statusParam = params.get("status");
-    const typeParam = params.get("type");
-    const patch: Partial<LibraryFilterState> = {};
+    if (didInitRef.current && lastWrittenQsRef.current === searchParamsKey) {
+      return;
+    }
 
-    if (favParam === "1" || favParam === "true") {
-      patch.favoritesOnly = true;
-      setSortBy("FAVORITE_RANK");
+    const saved = readSessionState<PersistedLibraryState>(FILTER_STORAGE_KEYS.library);
+
+    if (!didInitRef.current) {
+      didInitRef.current = true;
+      const restored = searchParamsKey
+        ? searchParamsToLibraryState(new URLSearchParams(searchParamsKey), {
+            showAdvancedFilters: saved?.showAdvancedFilters,
+            view: saved?.view,
+          })
+        : saved
+          ? sanitizeLibraryState(saved)
+          : null;
+
+      if (restored) {
+        setFilters(restored.filters);
+        setSortBy(restored.sortBy);
+        setView(restored.view);
+        setShowAdvancedFilters(restored.showAdvancedFilters);
+      }
+      setFiltersReady(true);
+      return;
     }
-    if (
-      statusParam === "WATCHING" ||
-      statusParam === "COMPLETED" ||
-      statusParam === "ON_HOLD" ||
-      statusParam === "DROPPED" ||
-      statusParam === "PLAN_TO_WATCH"
-    ) {
-      patch.status = statusParam;
+
+    // Subsequent external URL navigation while mounted (e.g. clicking "Mes favoris" -> /library?favorites=1)
+    if (searchParamsKey) {
+      const parsed = searchParamsToLibraryState(new URLSearchParams(searchParamsKey), {
+        showAdvancedFilters: saved?.showAdvancedFilters,
+        view: saved?.view,
+      });
+      setFilters(parsed.filters);
+      setSortBy(parsed.sortBy);
+      setView(parsed.view);
     }
-    if (typeParam === "ANIME" || typeParam === "MANGA") {
-      patch.mediaType = typeParam;
+  }, [searchParamsKey]);
+
+  // Persist active library filters to URL (replaceState) & sessionStorage so Back / revisit never loses them
+  useEffect(() => {
+    if (!filtersReady) return;
+    const snapshot: PersistedLibraryState = {
+      filters,
+      sortBy,
+      view,
+      showAdvancedFilters,
+    };
+    const qs = syncUrlSearchParams("/library", libraryStateToSearchParams(snapshot));
+    lastWrittenQsRef.current = qs;
+
+    if (qs || showAdvancedFilters) {
+      writeSessionState(FILTER_STORAGE_KEYS.library, snapshot);
+    } else {
+      clearSessionState(FILTER_STORAGE_KEYS.library);
     }
-    if (Object.keys(patch).length > 0) {
-      setFilters((prev) => ({ ...prev, ...patch }));
-    }
-  }, []);
+  }, [filtersReady, filters, sortBy, view, showAdvancedFilters]);
 
   useEffect(() => {
     if (!toolsMenuOpen) return;
@@ -214,6 +264,8 @@ export default function LibraryPage() {
   const resetAllFilters = () => {
     setFilters(DEFAULT_LIBRARY_FILTERS);
     setSortBy("UPDATED");
+    clearSessionState(FILTER_STORAGE_KEYS.library);
+    lastWrittenQsRef.current = syncUrlSearchParams("/library", new URLSearchParams());
   };
 
   const favoriteRankMap = useMemo(() => {
@@ -1542,5 +1594,19 @@ export default function LibraryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function LibraryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="h-10 w-64 rounded-xl bg-white/[0.06] animate-pulse" />
+        </div>
+      }
+    >
+      <LibraryPageInner />
+    </Suspense>
   );
 }
