@@ -1,6 +1,6 @@
 <div align="center">
 
-![Bannière Shiori](https://capsule-render.vercel.app/api?type=waving&color=0:07080C,55:E5484D,100:F0B95B&height=230&section=header&text=Shiori%20%E6%A0%9E&fontSize=68&fontColor=F4F3EE&fontAlignY=38&desc=Suivi%20Anime%20%26%20Manga%20%E2%80%A2%20Biblioth%C3%A8que%2C%20Simulcast%2C%20Communaut%C3%A9%20%26%20Sync%20AniList&descSize=16&descAlignY=60&animation=fadeIn)
+![Bannière Shiori](./public/banner.svg)
 
 <br />
 
@@ -85,6 +85,7 @@ Elle réunit gestion de bibliothèque, calendrier simulcast, découverte avancé
 shiori/
 ├── public/
 │   ├── apple-touch-icon.png
+│   ├── banner.svg                            # Bannière vectorielle Shiori (README)
 │   ├── icon-192.png
 │   ├── icon-512.png
 │   ├── icon.svg
@@ -281,11 +282,3 @@ La suite `tests/shiori-core.test.ts` couvre 11 scénarios critiques :
 ```bash
 npm run typecheck && npm run lint && npm test
 ```
-
----
-
-<div align="center">
-
-![Footer Shiori](https://capsule-render.vercel.app/api?type=waving&color=0:F0B95B,45:E5484D,100:07080C&height=110&section=footer)
-
-</div>
