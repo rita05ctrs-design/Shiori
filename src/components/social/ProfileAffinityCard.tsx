@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Check,
+  ChevronDown,
+  Flame,
+  Handshake,
   Heart,
   Mic2,
   Plus,
+  Scale,
   Sparkles,
   Star,
   TrendingUp,
@@ -46,6 +50,7 @@ const TONE_STYLES = {
 
 export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps) {
   const { library, favoriteStaff, getEntry, upsertEntry } = useShiori();
+  const [showComparator, setShowComparator] = useState(false);
 
   const affinity = useMemo(
     () =>
@@ -164,10 +169,174 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                   {affinity.sharedStaff.length} Seiyuu en commun
                 </span>
               )}
+              {affinity.commonTitles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowComparator((v) => !v)}
+                  className={cn(
+                    "px-3 py-1 rounded-full border text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer",
+                    showComparator
+                      ? "bg-accent border-accent text-accent-fg"
+                      : "bg-white/[0.06] hover:bg-white/[0.12] border-white/[0.14] text-white"
+                  )}
+                >
+                  <Scale className="w-3 h-3" />
+                  <span>{showComparator ? "Masquer le comparateur" : "Comparer nos notes"}</span>
+                  <ChevronDown
+                    className={cn(
+                      "w-3 h-3 transition-transform",
+                      showComparator && "rotate-180"
+                    )}
+                  />
+                </button>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* EXPANDABLE SIDE-BY-SIDE FRIEND COMPARATOR */}
+      <AnimatePresence initial={false}>
+        {showComparator && affinity.commonTitles.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            className="relative z-10 overflow-hidden"
+          >
+            <div className="pt-4 border-t border-white/[0.07] space-y-4">
+              {/* Shared Genres Overlap */}
+              {affinity.sharedGenres.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#858A9E] mr-1">
+                    Genres partagés :
+                  </span>
+                  {affinity.sharedGenres.map((g) => (
+                    <span
+                      key={g.genre}
+                      className="px-2.5 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.09] text-[11px] text-[#D6D9E6]"
+                    >
+                      {g.genre}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Agreements vs Debates */}
+              {(affinity.biggestAgreements.length > 0 || affinity.biggestDebates.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-emerald-500/[0.06] border border-emerald-400/25 p-3.5 space-y-2">
+                    <p className="text-xs font-bold text-emerald-200 flex items-center gap-1.5">
+                      <Handshake className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Vos accords parfaits</span>
+                    </p>
+                    {affinity.biggestAgreements.length === 0 ? (
+                      <p className="text-[11px] text-[#8A8FA4]">
+                        Pas encore assez de titres notés en commun.
+                      </p>
+                    ) : (
+                      affinity.biggestAgreements.map((m) => (
+                        <Link
+                          key={`agree-${m.mediaId}`}
+                          href={`/media/${m.mediaId}`}
+                          className="flex items-center justify-between gap-2 text-xs hover:text-white transition-colors"
+                        >
+                          <span className="text-[#E4E6F0] truncate">{m.title}</span>
+                          <span className="font-mono text-[11px] text-emerald-300 shrink-0">
+                            ★ {m.viewerScore?.toFixed(1)} vs ★ {m.targetScore?.toFixed(1)}
+                          </span>
+                        </Link>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl bg-amber-500/[0.06] border border-amber-400/25 p-3.5 space-y-2">
+                    <p className="text-xs font-bold text-amber-200 flex items-center gap-1.5">
+                      <Flame className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Vos plus gros débats</span>
+                    </p>
+                    {affinity.biggestDebates.length === 0 ? (
+                      <p className="text-[11px] text-[#8A8FA4]">
+                        Aucun désaccord majeur — vous êtes sur la même longueur d&apos;onde !
+                      </p>
+                    ) : (
+                      affinity.biggestDebates.map((m) => (
+                        <Link
+                          key={`debate-${m.mediaId}`}
+                          href={`/media/${m.mediaId}`}
+                          className="flex items-center justify-between gap-2 text-xs hover:text-white transition-colors"
+                        >
+                          <span className="text-[#E4E6F0] truncate">{m.title}</span>
+                          <span className="font-mono text-[11px] text-amber-300 shrink-0">
+                            ★ {m.viewerScore?.toFixed(1)} vs ★ {m.targetScore?.toFixed(1)} (Δ{" "}
+                            {m.scoreDiff?.toFixed(1)})
+                          </span>
+                        </Link>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Compact Side-by-Side Table */}
+              <div className="rounded-2xl bg-obsidian/70 border border-white/[0.07] overflow-hidden">
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-white/[0.03] border-b border-white/[0.07] font-mono text-[10px] uppercase tracking-wider text-[#858A9E]">
+                      <tr>
+                        <th className="px-3.5 py-2">Œuvre en commun</th>
+                        <th className="px-3 py-2 text-right">Vous</th>
+                        <th className="px-3 py-2 text-right truncate max-w-[110px]">
+                          {targetProfile.displayName}
+                        </th>
+                        <th className="px-3 py-2 text-right">Écart</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.05]">
+                      {affinity.commonTitles.slice(0, 15).map((m) => (
+                        <tr key={`cmp-${m.mediaId}`} className="hover:bg-white/[0.03]">
+                          <td className="px-3.5 py-2">
+                            <Link
+                              href={`/media/${m.mediaId}`}
+                              className="font-medium text-white hover:text-accent-hover line-clamp-1"
+                            >
+                              {m.title}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono text-[#D6D9E6]">
+                            {m.viewerScore !== null ? `★ ${m.viewerScore.toFixed(1)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono text-kinpaku">
+                            {m.targetScore !== null ? `★ ${m.targetScore.toFixed(1)}` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono">
+                            {m.scoreDiff !== null ? (
+                              <span
+                                className={cn(
+                                  m.scoreDiff <= 1
+                                    ? "text-emerald-300"
+                                    : m.scoreDiff >= 2
+                                      ? "text-rose-300"
+                                      : "text-amber-300"
+                                )}
+                              >
+                                {m.scoreDiff === 0 ? "=" : `±${m.scoreDiff.toFixed(1)}`}
+                              </span>
+                            ) : (
+                              <span className="text-[#5E6377]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* BOTTOM 2-COLUMN SHOWCASE: Shared Favorites & Common Titles + 3 Recs from Target's List */}
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 pt-4 border-t border-white/[0.07]">

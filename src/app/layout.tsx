@@ -5,12 +5,9 @@ import { ShioriProvider } from "@/context/ShioriContext";
 import { MotionRoot } from "@/components/motion/MotionRoot";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { CommandPalette } from "@/components/layout/CommandPalette";
+import { GlobalModals } from "@/components/layout/GlobalModals";
 import { ToastContainer } from "@/components/layout/ToastContainer";
 import { BadgeUnlockToast } from "@/components/badges/BadgeUnlockToast";
-import { QuickEditModal } from "@/components/media/QuickEditModal";
-import { TrailerModal } from "@/components/media/TrailerModal";
-import { AuthModal } from "@/components/auth/AuthModal";
 import { PwaRegistrar } from "@/components/pwa/PwaRegistrar";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
@@ -153,10 +150,7 @@ export default function RootLayout({
             <Navbar />
             <main className="flex-1 min-w-0">{children}</main>
             <Footer />
-            <CommandPalette />
-            <QuickEditModal />
-            <TrailerModal />
-            <AuthModal />
+            <GlobalModals />
             <ToastContainer />
             <BadgeUnlockToast />
             <PwaRegistrar />

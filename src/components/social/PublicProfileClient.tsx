@@ -27,6 +27,7 @@ import { ActivityCard } from "@/components/social/ActivityCard";
 import { VoiceActorFavoritesManager } from "@/components/social/VoiceActorFavoritesManager";
 import { FriendActionButton } from "@/components/social/FriendActionButton";
 import { ProfileAffinityCard } from "@/components/social/ProfileAffinityCard";
+import { ProfileTopTenPodium } from "@/components/social/ProfileTopTenPodium";
 import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
 import { BadgesShowcase } from "@/components/badges/BadgesShowcase";
@@ -646,6 +647,13 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         {/* Allow owner to search & edit Seiyuu directly on their own profile */}
         {isOwnProfile && <VoiceActorFavoritesManager compact />}
       </section>
+
+      {/* Visual Top 10 Podium Showcase (Shareable) */}
+      <ProfileTopTenPodium
+        displayName={displayProfile.displayName}
+        username={displayProfile.username}
+        favorites={displayProfile.favoriteMedia}
+      />
 
       {/* Favorite Anime & Manga — Ranked #1 -> Last with Interactive Drag & Drop on Own Profile */}
       <FavoritesOrganizer

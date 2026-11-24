@@ -184,15 +184,28 @@ interface ShioriContextValue {
     updates: Partial<
       Pick<
         LibraryEntry,
-        "status" | "progress" | "score" | "isFavorite" | "notes" | "startedAt" | "completedAt"
+        | "status"
+        | "progress"
+        | "progressVolumes"
+        | "score"
+        | "isFavorite"
+        | "notes"
+        | "startedAt"
+        | "completedAt"
       >
     >
   ) => void;
   quickAdd: (media: MediaItem, status?: LibraryStatus) => void;
   incrementProgress: (mediaId: number, delta?: number) => void;
+  incrementVolumeProgress: (mediaId: number, delta?: number) => void;
   toggleFavorite: (mediaId: number) => void;
   removeEntry: (mediaId: number) => void;
   importLibraryJson: (jsonText: string) => { ok: boolean; count: number; error?: string };
+  importEntriesBulk: (
+    entries: LibraryEntry[],
+    mode?: "merge" | "replace",
+    sourceLabel?: string
+  ) => { added: number; updated: number; skipped: number; total: number };
   exportLibraryJson: () => string;
   exportFullAccountJson: () => Promise<string>;
   deleteAccount: (
@@ -2528,7 +2541,14 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       updates: Partial<
         Pick<
           LibraryEntry,
-          "status" | "progress" | "score" | "isFavorite" | "notes" | "startedAt" | "completedAt"
+          | "status"
+          | "progress"
+          | "progressVolumes"
+          | "score"
+          | "isFavorite"
+          | "notes"
+          | "startedAt"
+          | "completedAt"
         >
       >
     ) => {
@@ -2536,7 +2556,12 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       const existing = library.find((e) => e.mediaId === mediaId);
 
       const base: LibraryEntry = existing
-        ? { ...existing }
+        ? {
+            ...existing,
+            totalVolumes:
+              existing.totalVolumes ??
+              (!isLibraryEntry(media) ? media.volumes ?? null : media.totalVolumes ?? null),
+          }
         : isLibraryEntry(media)
           ? { ...media }
           : {
@@ -2547,6 +2572,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
               coverImage: media.coverImage.extraLarge,
               bannerImage: media.bannerImage,
               totalUnits: media.type === "MANGA" ? media.chapters : media.episodes,
+              totalVolumes: media.type === "MANGA" ? media.volumes ?? null : null,
               duration: media.duration,
               genres: media.genres,
               studio: media.studio,
@@ -2556,6 +2582,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
               averageScore: media.averageScore,
               status: "WATCHING",
               progress: 0,
+              progressVolumes: 0,
               score: null,
               isFavorite: false,
               notes: "",
@@ -2568,11 +2595,25 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         nextProgress = clampProgress(base.totalUnits, base.totalUnits);
       }
 
+      let nextVolumes = clampProgress(
+        updates.progressVolumes ?? base.progressVolumes ?? 0,
+        base.totalVolumes ?? null
+      );
+      if (
+        base.type === "MANGA" &&
+        nextStatus === "COMPLETED" &&
+        base.totalVolumes &&
+        updates.progressVolumes === undefined
+      ) {
+        nextVolumes = clampProgress(base.totalVolumes, base.totalVolumes);
+      }
+
       const merged: LibraryEntry = {
         ...base,
         ...updates,
         status: nextStatus,
         progress: nextProgress,
+        ...(base.type === "MANGA" ? { progressVolumes: nextVolumes } : {}),
         updatedAt: new Date().toISOString(),
         completedAt:
           nextStatus === "COMPLETED"
@@ -2776,6 +2817,117 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       publishCommunityActivity,
       toast,
     ]
+  );
+
+  const incrementVolumeProgress = useCallback(
+    (mediaId: number, delta = 1) => {
+      const existing = library.find((e) => e.mediaId === mediaId);
+      if (!existing || existing.type !== "MANGA") return;
+
+      const currentVol = existing.progressVolumes ?? 0;
+      const nextVol = clampProgress(currentVol + delta, existing.totalVolumes ?? null);
+      if (nextVol === currentVol) return;
+
+      const nextStatus =
+        delta > 0 && existing.status === "PLAN_TO_WATCH" ? "WATCHING" : existing.status;
+
+      const updated: LibraryEntry = {
+        ...existing,
+        progressVolumes: nextVol,
+        status: nextStatus,
+        updatedAt: new Date().toISOString(),
+        startedAt:
+          delta > 0 && !existing.startedAt
+            ? new Date().toISOString().slice(0, 10)
+            : existing.startedAt,
+      };
+
+      setLibrary((prev) => prev.map((e) => (e.mediaId === mediaId ? updated : e)));
+
+      addActivity(
+        updated,
+        `Tome ${nextVol}${existing.totalVolumes ? ` / ${existing.totalVolumes}` : ""}`
+      );
+
+      if (profile.mode === "supabase") {
+        void syncEntryToCloud(profile.id, updated);
+      }
+
+      toast({
+        title: delta > 0 ? `+${delta} tome` : `${delta} tome`,
+        description: `${existing.title} · Tome ${nextVol}${existing.totalVolumes ? `/${existing.totalVolumes}` : ""}`,
+        variant: "info",
+        coverImage: existing.coverImage,
+        status: updated.status,
+        mediaId: existing.mediaId,
+      });
+    },
+    [library, addActivity, profile, toast]
+  );
+
+  const importEntriesBulk = useCallback(
+    (
+      incoming: LibraryEntry[],
+      mode: "merge" | "replace" = "merge",
+      sourceLabel = "Import"
+    ) => {
+      const sanitized = incoming.filter(
+        (e) => e && typeof e.mediaId === "number" && e.mediaId > 0 && typeof e.title === "string"
+      );
+      let added = 0;
+      let updated = 0;
+      const skipped = incoming.length - sanitized.length;
+
+      let nextLibrary: LibraryEntry[] = [];
+      if (mode === "replace") {
+        nextLibrary = sanitized;
+        added = sanitized.length;
+      } else {
+        const byId = new Map<number, LibraryEntry>(library.map((e) => [e.mediaId, e]));
+        for (const item of sanitized) {
+          const prev = byId.get(item.mediaId);
+          if (!prev) {
+            byId.set(item.mediaId, item);
+            added++;
+          } else {
+            const mergedItem: LibraryEntry = {
+              ...prev,
+              ...item,
+              progress: Math.max(prev.progress, item.progress),
+              progressVolumes: Math.max(
+                prev.progressVolumes ?? 0,
+                item.progressVolumes ?? 0
+              ),
+              totalVolumes: item.totalVolumes ?? prev.totalVolumes ?? null,
+              score: item.score ?? prev.score,
+              notes: item.notes || prev.notes,
+              isFavorite: prev.isFavorite || item.isFavorite,
+              updatedAt: new Date().toISOString(),
+            };
+            byId.set(item.mediaId, mergedItem);
+            updated++;
+          }
+        }
+        nextLibrary = Array.from(byId.values());
+      }
+
+      setLibrary(nextLibrary);
+
+      if (profile.mode === "supabase" && sanitized.length > 0) {
+        void syncEntriesBatchToCloud(profile.id, nextLibrary);
+      }
+
+      toast({
+        title: `${sourceLabel} terminé`,
+        description: `${added} ajouté${added > 1 ? "s" : ""}${
+          updated > 0 ? ` · ${updated} fusionné${updated > 1 ? "s" : ""}` : ""
+        }`,
+        variant: "success",
+      });
+
+      return { added, updated, skipped, total: nextLibrary.length };
+    },
+    [library, profile.id, profile.mode, toast]
   );
 
   const toggleFavorite = useCallback(
@@ -3598,9 +3750,11 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     upsertEntry,
     quickAdd,
     incrementProgress,
+    incrementVolumeProgress,
     toggleFavorite,
     removeEntry,
     importLibraryJson,
+    importEntriesBulk,
     exportLibraryJson,
     exportFullAccountJson,
     deleteAccount,

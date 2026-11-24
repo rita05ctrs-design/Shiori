@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useShiori } from "@/context/ShioriContext";
+import { checkAndNotifyEpisodeReleases } from "@/lib/push-reminders";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -70,6 +72,8 @@ export function usePwaInstall() {
  * native `beforeinstallprompt` event so Desktop & Mobile users can install Shiori as a native app.
  */
 export function PwaRegistrar() {
+  const { library, hydrated, profile } = useShiori();
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -101,6 +105,22 @@ export function PwaRegistrar() {
       window.removeEventListener("appinstalled", onAppInstalled);
     };
   }, []);
+
+  // Periodic background episode release notifications when user opted into PWA system alerts
+  useEffect(() => {
+    if (!hydrated || !profile.notificationPrefs.airingAlerts) return;
+    const initialTimer = window.setTimeout(() => {
+      void checkAndNotifyEpisodeReleases(library);
+    }, 4500);
+    const interval = window.setInterval(() => {
+      void checkAndNotifyEpisodeReleases(library);
+    }, 15 * 60 * 1000);
+
+    return () => {
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+    };
+  }, [hydrated, library, profile.notificationPrefs.airingAlerts]);
 
   return null;
 }

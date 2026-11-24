@@ -123,6 +123,7 @@ export interface LibraryEntry {
   coverImage: string;
   bannerImage: string | null;
   totalUnits: number | null; // episodes for ANIME, chapters for MANGA
+  totalVolumes?: number | null; // volumes/tomes for MANGA
   duration: number | null; // minutes per ep
   genres: string[];
   studio: string | null;
@@ -132,6 +133,7 @@ export interface LibraryEntry {
   averageScore: number | null;
   status: LibraryStatus;
   progress: number;
+  progressVolumes?: number; // read volumes/tomes for MANGA
   score: number | null; // 0 to 10 (0.5 step)
   isFavorite: boolean;
   notes: string;

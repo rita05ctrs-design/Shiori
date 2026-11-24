@@ -9,6 +9,7 @@ import {
   sanitizeSynopsisHtml,
   synopsisHtmlToPlainText,
 } from "@/lib/i18n";
+import { synopsisPersistentCache } from "@/lib/client-cache";
 import { cn } from "@/lib/utils";
 import type { ContentLanguage } from "@/types/media";
 
@@ -113,8 +114,10 @@ export function TranslatedSynopsis({
       return;
     }
 
-    const hit = clientTranslationCache.get(cacheKey);
+    const hit =
+      clientTranslationCache.get(cacheKey) ?? synopsisPersistentCache.get(cacheKey);
     if (hit) {
+      clientTranslationCache.set(cacheKey, hit);
       setTranslatedHtml(hit.html);
       setIsTranslated(hit.translated);
       setLoading(false);
@@ -151,6 +154,7 @@ export function TranslatedSynopsis({
               translated: true,
             };
             clientTranslationCache.set(cacheKey, entry);
+            synopsisPersistentCache.set(cacheKey, entry);
             setTranslatedHtml(entry.html);
             setIsTranslated(true);
             setFailed(false);

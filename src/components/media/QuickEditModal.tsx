@@ -63,6 +63,7 @@ function extractInfo(item: MediaItem | LibraryEntry) {
       coverImage: item.coverImage,
       bannerImage: item.bannerImage,
       totalUnits: item.totalUnits,
+      totalVolumes: item.totalVolumes ?? null,
     };
   }
   return {
@@ -72,6 +73,7 @@ function extractInfo(item: MediaItem | LibraryEntry) {
     coverImage: item.coverImage.extraLarge,
     bannerImage: item.bannerImage,
     totalUnits: item.type === "MANGA" ? item.chapters : item.episodes,
+    totalVolumes: item.type === "MANGA" ? item.volumes : null,
   };
 }
 
@@ -88,6 +90,7 @@ export function QuickEditModal() {
 
   const [status, setStatus] = useState<LibraryStatus>("WATCHING");
   const [progress, setProgress] = useState<number>(0);
+  const [progressVolumes, setProgressVolumes] = useState<number>(0);
   const [score, setScore] = useState<number | null>(null);
   const [hoverScore, setHoverScore] = useState<number | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -106,6 +109,7 @@ export function QuickEditModal() {
     if (existing) {
       setStatus(existing.status);
       setProgress(existing.progress);
+      setProgressVolumes(existing.progressVolumes ?? 0);
       setScore(existing.score);
       setIsFavorite(existing.isFavorite);
       setNotes(existing.notes ?? "");
@@ -114,6 +118,7 @@ export function QuickEditModal() {
     } else {
       setStatus("WATCHING");
       setProgress(0);
+      setProgressVolumes(0);
       setScore(null);
       setIsFavorite(false);
       setNotes("");
@@ -133,8 +138,11 @@ export function QuickEditModal() {
 
   const handleStatusChange = (next: LibraryStatus) => {
     setStatus(next);
-    if (next === "COMPLETED" && info?.totalUnits) {
-      setProgress(info.totalUnits);
+    if (next === "COMPLETED") {
+      if (info?.totalUnits) setProgress(info.totalUnits);
+      if (info?.type === "MANGA" && info.totalVolumes) {
+        setProgressVolumes(info.totalVolumes);
+      }
     }
   };
 
@@ -145,6 +153,9 @@ export function QuickEditModal() {
     upsertEntry(editingMedia, {
       status,
       progress: clampProgress(progress, info.totalUnits),
+      ...(info.type === "MANGA"
+        ? { progressVolumes: clampProgress(progressVolumes, info.totalVolumes) }
+        : {}),
       score,
       isFavorite,
       notes: notes.trim(),
@@ -415,6 +426,57 @@ export function QuickEditModal() {
                     <Plus className="w-4 h-4" />
                   </motion.button>
                 </div>
+
+                {/* Manga Volumes / Tomes Counter */}
+                {info.type === "MANGA" && (
+                  <div className="pt-3 mt-1 border-t border-white/[0.07] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-violet-300">
+                        Tomes / Volumes
+                      </label>
+                      <span className="text-xs font-mono text-[#9A9EAE]">
+                        {info.totalVolumes
+                          ? `${progressVolumes} / ${info.totalVolumes} tomes`
+                          : `${progressVolumes} tome${progressVolumes > 1 ? "s" : ""}`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setProgressVolumes((v) => Math.max(0, v - 1))}
+                        className="w-10 h-10 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] flex items-center justify-center text-white cursor-pointer"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </motion.button>
+                      <input
+                        type="number"
+                        min={0}
+                        max={info.totalVolumes ?? 999}
+                        value={progressVolumes}
+                        onChange={(e) => {
+                          const v = Math.max(0, Number(e.target.value) || 0);
+                          setProgressVolumes(
+                            info.totalVolumes ? Math.min(info.totalVolumes, v) : v
+                          );
+                        }}
+                        className="flex-1 h-10 rounded-xl bg-[#08090E] border border-white/[0.09] text-center font-mono text-sm font-semibold text-white focus:outline-none focus:border-violet-400"
+                      />
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() =>
+                          setProgressVolumes((v) =>
+                            info.totalVolumes ? Math.min(info.totalVolumes, v + 1) : v + 1
+                          )
+                        }
+                        className="w-10 h-10 rounded-xl bg-violet-500/22 hover:bg-violet-500/38 border border-violet-400/40 flex items-center justify-center text-violet-200 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </motion.button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Interactive Visual 1–10 Score Picker (+0.5 Precision Toggle) */}

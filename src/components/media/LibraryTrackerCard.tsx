@@ -101,6 +101,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
     getEntry,
     upsertEntry,
     incrementProgress,
+    incrementVolumeProgress,
     toggleFavorite,
     removeEntry,
     openQuickEdit,
@@ -562,6 +563,50 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                   </motion.button>
                 </div>
               </div>
+
+              {/* Manga Volume / Tome Tracker */}
+              {media.type === "MANGA" && (
+                <div className="pt-2.5 mt-1 border-t border-white/[0.07] space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-[#8E93A6]">Tomes / Volumes</span>
+                    <span className="text-violet-200 font-semibold flex items-center gap-1">
+                      <span>Tome</span>
+                      <span>{entry.progressVolumes ?? 0}</span>
+                      {(media.volumes ?? entry.totalVolumes) ? (
+                        <span className="text-[#787D91]">
+                          / {media.volumes ?? entry.totalVolumes}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.88 }}
+                      onClick={() => incrementVolumeProgress(media.id, -1)}
+                      disabled={(entry.progressVolumes ?? 0) <= 0}
+                      aria-label="Retirer 1 tome"
+                      className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.94 }}
+                      onClick={() => incrementVolumeProgress(media.id, 1)}
+                      disabled={Boolean(
+                        (media.volumes ?? entry.totalVolumes) &&
+                          (entry.progressVolumes ?? 0) >= (media.volumes ?? entry.totalVolumes ?? 0)
+                      )}
+                      className="flex-1 h-8 rounded-xl bg-violet-500/20 hover:bg-violet-500/32 disabled:opacity-40 border border-violet-400/35 text-violet-100 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+1 tome</span>
+                    </motion.button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Inline Interactive 1–10 Star Score Picker */}

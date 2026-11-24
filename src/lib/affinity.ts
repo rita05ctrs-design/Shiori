@@ -29,6 +29,12 @@ export interface ProfileAffinityRecommendation {
   reason: string;
 }
 
+export interface SharedGenreOverlap {
+  genre: string;
+  viewerCount: number;
+  targetCount: number;
+}
+
 export interface ProfileAffinityResult {
   compatibilityPct: number;
   tierLabel: string;
@@ -36,6 +42,9 @@ export interface ProfileAffinityResult {
   commonTitles: CommonMediaMatch[];
   sharedFavorites: CommonMediaMatch[];
   sharedStaff: FavoriteVoiceActor[];
+  sharedGenres: SharedGenreOverlap[];
+  biggestAgreements: CommonMediaMatch[];
+  biggestDebates: CommonMediaMatch[];
   avgScoreDiff: number | null;
   ratedCommonCount: number;
   recommendationsFromTarget: ProfileAffinityRecommendation[];
@@ -139,23 +148,60 @@ export function computeProfileAffinity(input: {
       ) / 10
     : null;
 
-  // Genre overlap similarity (cosine similarity on genre frequency vectors)
+  // Shared genre counts & weighted cosine similarity
   const viewerGenreWeights = new Map<string, number>();
+  const viewerGenreCounts = new Map<string, { label: string; count: number }>();
   for (const e of viewerLibrary) {
     const w = e.isFavorite ? 2.5 : (e.score ?? 7) >= 8 ? 1.5 : 1;
     for (const g of e.genres ?? []) {
       const k = g.toLowerCase();
       viewerGenreWeights.set(k, (viewerGenreWeights.get(k) ?? 0) + w);
+      const prev = viewerGenreCounts.get(k);
+      viewerGenreCounts.set(k, { label: prev?.label ?? g, count: (prev?.count ?? 0) + 1 });
     }
   }
   const targetGenreWeights = new Map<string, number>();
+  const targetGenreCounts = new Map<string, { label: string; count: number }>();
   for (const t of targetPool) {
     const w = t.isFavorite ? 2.5 : (t.score ?? 7) >= 8 ? 1.5 : 1;
     for (const g of t.genres ?? []) {
       const k = g.toLowerCase();
       targetGenreWeights.set(k, (targetGenreWeights.get(k) ?? 0) + w);
+      const prev = targetGenreCounts.get(k);
+      targetGenreCounts.set(k, { label: prev?.label ?? g, count: (prev?.count ?? 0) + 1 });
     }
   }
+
+  const sharedGenres: SharedGenreOverlap[] = [];
+  for (const [k, vInfo] of viewerGenreCounts.entries()) {
+    const tInfo = targetGenreCounts.get(k);
+    if (!tInfo) continue;
+    sharedGenres.push({
+      genre: vInfo.label,
+      viewerCount: vInfo.count,
+      targetCount: tInfo.count,
+    });
+  }
+  sharedGenres.sort(
+    (a, b) =>
+      Math.min(b.viewerCount, b.targetCount) - Math.min(a.viewerCount, a.targetCount) ||
+      b.viewerCount + b.targetCount - (a.viewerCount + a.targetCount)
+  );
+
+  // Biggest agreements (diff <= 1.0) & biggest debates (diff >= 1.5) on commonly rated titles
+  const biggestAgreements = [...ratedCommon]
+    .filter((c) => (c.scoreDiff ?? 99) <= 1.0)
+    .sort(
+      (a, b) =>
+        (a.scoreDiff ?? 99) - (b.scoreDiff ?? 99) ||
+        (b.viewerScore ?? 0) + (b.targetScore ?? 0) - ((a.viewerScore ?? 0) + (a.targetScore ?? 0))
+    )
+    .slice(0, 3);
+
+  const biggestDebates = [...ratedCommon]
+    .filter((c) => (c.scoreDiff ?? 0) >= 1.5)
+    .sort((a, b) => (b.scoreDiff ?? 0) - (a.scoreDiff ?? 0))
+    .slice(0, 3);
 
   let genreSimilarity = 0;
   if (viewerGenreWeights.size > 0 && targetGenreWeights.size > 0) {
@@ -274,6 +320,9 @@ export function computeProfileAffinity(input: {
     commonTitles,
     sharedFavorites,
     sharedStaff,
+    sharedGenres: sharedGenres.slice(0, 6),
+    biggestAgreements,
+    biggestDebates,
     avgScoreDiff,
     ratedCommonCount: ratedCommon.length,
     recommendationsFromTarget,

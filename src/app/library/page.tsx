@@ -157,6 +157,7 @@ function LibraryPageInner() {
     collections,
     displayPrefs,
     incrementProgress,
+    incrementVolumeProgress,
     toggleFavorite,
     openQuickEdit,
     removeEntry,
@@ -1260,12 +1261,19 @@ function LibraryPageInner() {
                       </div>
 
                       <div className="space-y-2.5">
-                        <div className="flex items-center justify-between text-xs font-mono">
-                          <span className="text-[#B6BAC9]">
+                        <div className="flex items-center justify-between gap-2 text-xs font-mono">
+                          <span className="text-[#B6BAC9] truncate">
                             {unit} <strong className="text-white">{entry.progress}</strong>
                             {entry.totalUnits ? ` / ${entry.totalUnits}` : " / ?"}
+                            {entry.type === "MANGA" &&
+                              ((entry.progressVolumes ?? 0) > 0 || entry.totalVolumes) && (
+                                <span className="ml-1.5 text-violet-300">
+                                  · T.{entry.progressVolumes ?? 0}
+                                  {entry.totalVolumes ? `/${entry.totalVolumes}` : ""}
+                                </span>
+                              )}
                           </span>
-                          <span className="text-[11px] text-[#7D8296]">
+                          <span className="text-[11px] text-[#7D8296] shrink-0">
                             {exactPct !== null ? `${exactPct}%` : "En cours"}
                           </span>
                         </div>
@@ -1296,6 +1304,20 @@ function LibraryPageInner() {
                             <Plus className="w-3.5 h-3.5 shrink-0" />
                             <span>+1 {entry.type === "MANGA" ? "ch." : "ép."}</span>
                           </button>
+                          {entry.type === "MANGA" && (
+                            <button
+                              type="button"
+                              onClick={() => incrementVolumeProgress(entry.mediaId, 1)}
+                              disabled={Boolean(
+                                entry.totalVolumes &&
+                                  (entry.progressVolumes ?? 0) >= entry.totalVolumes
+                              )}
+                              title="Ajouter 1 tome lu"
+                              className="h-8 px-2 rounded-xl bg-violet-500/16 hover:bg-violet-500/30 disabled:opacity-40 border border-violet-400/35 text-[11px] font-mono font-semibold text-violet-200 flex items-center justify-center gap-0.5 whitespace-nowrap transition-colors cursor-pointer"
+                            >
+                              +1 T.
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => openQuickEdit(entry)}

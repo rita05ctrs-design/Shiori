@@ -25,6 +25,8 @@ import {
   searchParamsToDiscoverState,
   searchParamsToLibraryState,
 } from "../src/lib/filter-persistence.ts";
+import { parseMalXml } from "../src/lib/mal-import.ts";
+import { BoundedClientCache } from "../src/lib/client-cache.ts";
 import type {
   AiringScheduleItem,
   CustomCollection,
@@ -453,4 +455,145 @@ test("filter-persistence: round-trips Library and Discover filters cleanly via U
   assert.equal(discRestored.minUnits, "100");
   assert.equal(discRestored.hideInLibrary, true);
   assert.equal(discRestored.showFilters, true);
+});
+
+test("mal-import: parses MyAnimeList Anime & Manga XML with CDATA, entities, dates, and volumes", () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  <myanimelist>
+    <myinfo>
+      <user_name>kuro_shiori</user_name>
+    </myinfo>
+    <anime>
+      <series_animedb_id>52991</series_animedb_id>
+      <series_title><![CDATA[Sousou no Frieren & Beyond]]></series_title>
+      <series_episodes>28</series_episodes>
+      <my_watched_episodes>28</my_watched_episodes>
+      <my_start_date>2024-01-10</my_start_date>
+      <my_finish_date>2024-03-22</my_finish_date>
+      <my_score>10</my_score>
+      <my_status>Completed</my_status>
+      <my_comments><![CDATA[Chef-d'oeuvre absolu]]></my_comments>
+    </anime>
+    <manga>
+      <manga_mangadb_id>2</manga_mangadb_id>
+      <manga_title>Berserk &amp; Co</manga_title>
+      <manga_volumes>42</manga_volumes>
+      <manga_chapters>376</manga_chapters>
+      <my_read_volumes>18</my_read_volumes>
+      <my_read_chapters>150</my_read_chapters>
+      <my_start_date>0000-00-00</my_start_date>
+      <my_finish_date>0000-00-00</my_finish_date>
+      <my_score>0</my_score>
+      <my_status>Reading</my_status>
+      <my_comments></my_comments>
+    </manga>
+  </myanimelist>`;
+
+  const parsed = parseMalXml(xml);
+  assert.equal(parsed.username, "kuro_shiori");
+  assert.equal(parsed.mediaType, "MIXED");
+  assert.equal(parsed.items.length, 2);
+
+  const anime = parsed.items[0];
+  assert.equal(anime.malId, 52991);
+  assert.equal(anime.type, "ANIME");
+  assert.equal(anime.title, "Sousou no Frieren & Beyond");
+  assert.equal(anime.status, "COMPLETED");
+  assert.equal(anime.progress, 28);
+  assert.equal(anime.score, 10);
+  assert.equal(anime.startedAt, "2024-01-10");
+  assert.equal(anime.completedAt, "2024-03-22");
+  assert.equal(anime.notes, "Chef-d'oeuvre absolu");
+
+  const manga = parsed.items[1];
+  assert.equal(manga.malId, 2);
+  assert.equal(manga.type, "MANGA");
+  assert.equal(manga.title, "Berserk & Co");
+  assert.equal(manga.status, "WATCHING");
+  assert.equal(manga.progress, 150);
+  assert.equal(manga.progressVolumes, 18);
+  assert.equal(manga.totalVolumes, 42);
+  assert.equal(manga.score, null);
+  assert.equal(manga.startedAt, null);
+});
+
+test("client-cache: enforces TTL expiration and LRU eviction cleanly", () => {
+  const backing = new Map<string, string>();
+  const mockStorage = {
+    getItem: (k: string) => backing.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      backing.set(k, v);
+    },
+    removeItem: (k: string) => {
+      backing.delete(k);
+    },
+  };
+
+  const cache = new BoundedClientCache<string>({
+    storageKey: "test_cache",
+    maxEntries: 4,
+    ttlMs: 5000,
+    storage: mockStorage,
+  });
+
+  cache.set("a", "1", 1000);
+  cache.set("b", "2", 1001);
+  cache.set("c", "3", 1002);
+  cache.set("d", "4", 1003);
+  // Touch "a" so "b" becomes least recently used
+  assert.equal(cache.get("a", 1010), "1");
+  cache.set("e", "5", 1011);
+
+  assert.equal(cache.size, 4);
+  assert.equal(cache.get("b", 1020), null);
+  assert.equal(cache.get("a", 1020), "1");
+  assert.equal(cache.get("e", 1020), "5");
+  // Expire after TTL
+  assert.equal(cache.get("a", 7000), null);
+});
+
+test("affinity: surfaces shared genres, agreements, and score debates", () => {
+  const viewerLibrary: LibraryEntry[] = [
+    makeEntry({ mediaId: 10, title: "Frieren", score: 9.5, isFavorite: true, genres: ["Fantasy", "Drama"] }),
+    makeEntry({ mediaId: 20, title: "Divisive Show", score: 9.0, isFavorite: false, genres: ["Action"] }),
+  ];
+  const targetProfile: PublicUserProfile = {
+    id: "u-friend",
+    username: "hana",
+    displayName: "Hana",
+    avatarUrl: null,
+    avatarInitials: "HA",
+    bio: "",
+    accentColor: "#E5484D",
+    isActivityPublic: true,
+    joinedAt: "2025-01-01T00:00:00.000Z",
+    favoriteStaff: [],
+    favoriteMedia: [
+      { mediaId: 10, type: "ANIME", title: "Frieren", coverImage: "", score: 9.5 },
+    ],
+    libraryPreview: [
+      { mediaId: 10, type: "ANIME", title: "Frieren", coverImage: "", score: 9.5, isFavorite: true, genres: ["Fantasy", "Drama"] },
+      { mediaId: 20, type: "ANIME", title: "Divisive Show", coverImage: "", score: 6.0, genres: ["Action"] },
+    ],
+    stats: {
+      totalEntries: 2,
+      animeCount: 2,
+      mangaCount: 0,
+      episodesWatched: 40,
+      chaptersRead: 0,
+      completedCount: 2,
+      meanScore: 7.8,
+    },
+  };
+
+  const aff = computeProfileAffinity({
+    viewerLibrary,
+    viewerFavoriteStaff: [],
+    targetProfile,
+  });
+
+  assert.ok(aff.sharedGenres.some((g) => g.genre === "Fantasy"));
+  assert.equal(aff.biggestAgreements[0]?.mediaId, 10);
+  assert.equal(aff.biggestDebates[0]?.mediaId, 20);
+  assert.equal(aff.biggestDebates[0]?.scoreDiff, 3);
 });

@@ -34,6 +34,7 @@ import {
 import { useShiori } from "@/context/ShioriContext";
 import { CONTENT_LANGUAGES } from "@/lib/i18n";
 import { AniListImportCard } from "@/components/settings/AniListImportCard";
+import { MalImportCard } from "@/components/settings/MalImportCard";
 import { AmbianceSettingsCard } from "@/components/settings/AmbianceSettingsCard";
 import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
 import { DisplayPreferencesCard } from "@/components/settings/DisplayPreferencesCard";
@@ -41,6 +42,14 @@ import { PwaInstallCard } from "@/components/settings/PwaInstallCard";
 import { VoiceActorFavoritesManager } from "@/components/social/VoiceActorFavoritesManager";
 import { BadgesShowcase } from "@/components/badges/BadgesShowcase";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import {
+  getBrowserNotificationPermission,
+  isBrowserAlertsEnabled,
+  requestBrowserNotificationPermission,
+  sendShioriSystemNotification,
+  setBrowserAlertsEnabled,
+  type BrowserNotifPermission,
+} from "@/lib/push-reminders";
 import { cn } from "@/lib/utils";
 
 type SettingsTab = "appearance" | "profile" | "account" | "anilist" | "data";
@@ -54,7 +63,7 @@ const SETTINGS_CATEGORIES: {
   { id: "appearance", label: "Apparence", desc: "Thème, affichage, langue", icon: Palette },
   { id: "profile", label: "Profil", desc: "Avatar, bio, confidentialité", icon: User },
   { id: "account", label: "Compte & Alertes", desc: "Connexion, notifications, app", icon: Bell },
-  { id: "anilist", label: "AniList", desc: "Synchro et import de liste", icon: ArrowLeftRight },
+  { id: "anilist", label: "AniList & MAL", desc: "Synchro AniList et import MAL XML", icon: ArrowLeftRight },
   { id: "data", label: "Données", desc: "Exports, sauvegarde, suppression", icon: Database },
 ];
 
@@ -72,7 +81,7 @@ function resolveTabFromHash(hash: string): SettingsTab | null {
   if (["personnalisation", "affichage", "ambiance", "langue"].includes(h)) return "appearance";
   if (["profil", "voice-actors", "badges", "bloques"].includes(h)) return "profile";
   if (["compte", "notifications", "pwa"].includes(h)) return "account";
-  if (["anilist-sync", "anilist-import", "anilist"].includes(h)) return "anilist";
+  if (["anilist-sync", "anilist-import", "anilist", "mal-import"].includes(h)) return "anilist";
   if (["donnees", "sauvegarde"].includes(h)) return "data";
   return null;
 }
@@ -116,6 +125,52 @@ export default function SettingsPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showBadgesPanel, setShowBadgesPanel] = useState(false);
   const [showSeiyuuPanel, setShowSeiyuuPanel] = useState(false);
+  const [browserNotifPerm, setBrowserNotifPerm] =
+    useState<BrowserNotifPermission>("default");
+  const [browserAlertsOn, setBrowserAlertsOn] = useState(false);
+
+  useEffect(() => {
+    setBrowserNotifPerm(getBrowserNotificationPermission());
+    setBrowserAlertsOn(isBrowserAlertsEnabled());
+  }, []);
+
+  const handleToggleBrowserAlerts = async () => {
+    if (browserAlertsOn) {
+      setBrowserAlertsEnabled(false);
+      setBrowserAlertsOn(false);
+      toast({
+        title: "Alertes système désactivées",
+        description: "Les notifications restent visibles dans la cloche Shiori.",
+        variant: "info",
+      });
+      return;
+    }
+
+    const perm = await requestBrowserNotificationPermission();
+    setBrowserNotifPerm(perm);
+    if (perm === "granted") {
+      setBrowserAlertsEnabled(true);
+      setBrowserAlertsOn(true);
+      updateNotificationPrefs({ airingAlerts: true });
+      await sendShioriSystemNotification({
+        title: "Alertes Shiori activées !",
+        body: "Vous serez prévenu dès la sortie d'un nouvel épisode suivi.",
+        url: "/episodes",
+        tag: "shiori-push-enabled",
+      });
+      toast({
+        title: "Notifications système activées",
+        description: "Les sorties d'épisodes apparaîtront aussi sur votre appareil.",
+        variant: "success",
+      });
+    } else if (perm === "denied") {
+      toast({
+        title: "Autorisation bloquée",
+        description: "Réactivez les notifications pour Shiori dans les réglages de votre navigateur.",
+        variant: "warning",
+      });
+    }
+  };
   const [exportingFull, setExportingFull] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [deleteZoneOpen, setDeleteZoneOpen] = useState(false);
@@ -928,16 +983,80 @@ export default function SettingsPage() {
                     );
                   })}
                 </div>
+
+                {/* System / PWA OS Notifications Control */}
+                <div className="pt-4 border-t border-white/[0.07] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-white flex items-center gap-2">
+                      <span>Notifications système &amp; PWA (appareil)</span>
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-mono border",
+                          browserAlertsOn && browserNotifPerm === "granted"
+                            ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-300"
+                            : browserNotifPerm === "denied"
+                              ? "bg-rose-500/15 border-rose-500/35 text-rose-300"
+                              : "bg-white/[0.06] border-white/[0.1] text-[#9A9EAE]"
+                        )}
+                      >
+                        {browserNotifPerm === "unsupported"
+                          ? "Non supporté"
+                          : browserNotifPerm === "denied"
+                            ? "Bloqué"
+                            : browserAlertsOn && browserNotifPerm === "granted"
+                              ? "Actif"
+                              : "Inactif"}
+                      </span>
+                    </p>
+                    <p className="text-xs text-[#808599] mt-0.5">
+                      Recevez une notification native sur ordinateur ou mobile (PWA) lorsqu&apos;un épisode de votre liste « En cours » sort.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {browserNotifPerm === "granted" && browserAlertsOn && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void sendShioriSystemNotification({
+                            title: "Test Shiori · Nouvel épisode",
+                            body: "Les alertes système fonctionnent parfaitement sur cet appareil !",
+                            url: "/episodes",
+                            tag: `shiori-test-${Date.now()}`,
+                          })
+                        }
+                        className="h-9 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-[#D6D9E6] hover:text-white transition-colors cursor-pointer"
+                      >
+                        Test OS
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={browserNotifPerm === "unsupported"}
+                      onClick={() => void handleToggleBrowserAlerts()}
+                      className={cn(
+                        "h-9 px-3.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-40",
+                        browserAlertsOn && browserNotifPerm === "granted"
+                          ? "bg-white/[0.07] hover:bg-white/[0.12] border-white/[0.14] text-white"
+                          : "bg-accent hover:bg-accent-hover border-accent text-accent-fg"
+                      )}
+                    >
+                      {browserAlertsOn && browserNotifPerm === "granted"
+                        ? "Désactiver"
+                        : "Activer les alertes"}
+                    </button>
+                  </div>
+                </div>
               </section>
 
               <PwaInstallCard />
             </>
           )}
 
-          {/* CATEGORY 4: ANILIST */}
+          {/* CATEGORY 4: ANILIST & MYANIMELIST */}
           {activeTab === "anilist" && (
             <>
               <AniListImportCard />
+              <MalImportCard />
               {!anilistConnection.connected && (
                 <div className="text-xs text-[#858A9E] flex items-center gap-2 px-1">
                   <Link2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />

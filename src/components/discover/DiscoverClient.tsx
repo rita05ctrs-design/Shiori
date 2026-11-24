@@ -60,6 +60,7 @@ import {
   writeSessionState,
   type PersistedDiscoverState,
 } from "@/lib/filter-persistence";
+import { discoverQueryCache } from "@/lib/client-cache";
 import { cn } from "@/lib/utils";
 import type { MediaItem, MediaType } from "@/types/media";
 
@@ -391,14 +392,38 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         if (format !== "ALL") qs.set("format", format);
         if (status !== "ALL") qs.set("status", status);
 
-        const res = await fetch(`/api/anilist?${qs.toString()}`);
+        const queryKey = qs.toString();
+        if (!append && targetPage === 1) {
+          const cached = discoverQueryCache.get(queryKey);
+          if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
+            setItems(cached.items as MediaItem[]);
+            setHasNextPage(Boolean(cached.hasNextPage));
+            setTotal(Number(cached.total ?? cached.items.length));
+            setPage(1);
+            setLoading(false);
+          }
+        }
+
+        const res = await fetch(`/api/anilist?${queryKey}`);
         if (!res.ok) throw new Error("fetch failed");
         const data = await res.json();
         if (reqId !== reqIdRef.current) return;
 
-        setItems((prev) => (append ? [...prev, ...(data.items ?? [])] : data.items ?? []));
-        setHasNextPage(Boolean(data.hasNextPage));
-        setTotal(Number(data.total ?? data.items?.length ?? 0));
+        const nextItems: MediaItem[] = data.items ?? [];
+        const nextHasPage = Boolean(data.hasNextPage);
+        const nextTotal = Number(data.total ?? nextItems.length ?? 0);
+
+        if (!append && targetPage === 1 && nextItems.length > 0) {
+          discoverQueryCache.set(queryKey, {
+            items: nextItems,
+            hasNextPage: nextHasPage,
+            total: nextTotal,
+          });
+        }
+
+        setItems((prev) => (append ? [...prev, ...nextItems] : nextItems));
+        setHasNextPage(nextHasPage);
+        setTotal(nextTotal);
         setPage(targetPage);
       } catch {
         // keep current items on error

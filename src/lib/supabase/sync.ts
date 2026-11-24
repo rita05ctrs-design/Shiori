@@ -16,13 +16,24 @@ import type {
 } from "@/types/media";
 import { normalizeContentLanguage } from "@/lib/i18n";
 
-function entryToRow(userId: string, entry: LibraryEntry) {
+let volumesColumnsSupported = true;
+
+function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "PGRST204" ||
+    error.code === "42703" ||
+    Boolean(error.message && /progress_volumes|total_volumes/i.test(error.message))
+  );
+}
+
+function entryToRow(userId: string, entry: LibraryEntry, includeVolumes = volumesColumnsSupported) {
   const safeScore =
     entry.score !== null && entry.score !== undefined && !Number.isNaN(entry.score)
       ? Math.max(0, Math.min(10, Math.round(entry.score * 10) / 10))
       : null;
 
-  return {
+  const base = {
     user_id: userId,
     media_id: entry.mediaId,
     media_type: entry.type,
@@ -42,6 +53,13 @@ function entryToRow(userId: string, entry: LibraryEntry) {
     notes: entry.notes ?? "",
     started_at: entry.startedAt ?? null,
     completed_at: entry.completedAt ?? null,
+  };
+
+  if (!includeVolumes) return base;
+  return {
+    ...base,
+    total_volumes: entry.totalVolumes ?? null,
+    progress_volumes: Math.max(0, Math.floor(entry.progressVolumes || 0)),
   };
 }
 
@@ -312,6 +330,14 @@ export async function syncEntryToCloud(userId: string, entry: LibraryEntry) {
     .from("library_entries")
     .upsert(entryToRow(userId, entry), { onConflict: "user_id,media_id" });
 
+  if (isMissingColumnError(error)) {
+    volumesColumnsSupported = false;
+    const retry = await supabase
+      .from("library_entries")
+      .upsert(entryToRow(userId, entry, false), { onConflict: "user_id,media_id" });
+    return { synced: !retry.error, error: retry.error?.message };
+  }
+
   return { synced: !error, error: error?.message };
 }
 
@@ -443,10 +469,25 @@ export async function syncEntriesBatchToCloud(
 
   let saved = 0;
   for (let i = 0; i < entries.length; i += chunkSize) {
-    const chunk = entries.slice(i, i + chunkSize).map((e) => entryToRow(userId, e));
+    const slice = entries.slice(i, i + chunkSize);
+    const chunk = slice.map((e) => entryToRow(userId, e));
     const { error } = await supabase
       .from("library_entries")
       .upsert(chunk, { onConflict: "user_id,media_id" });
+    if (isMissingColumnError(error)) {
+      volumesColumnsSupported = false;
+      const retry = await supabase
+        .from("library_entries")
+        .upsert(
+          slice.map((e) => entryToRow(userId, e, false)),
+          { onConflict: "user_id,media_id" }
+        );
+      if (retry.error) {
+        return { synced: saved > 0, count: saved, error: retry.error.message };
+      }
+      saved += slice.length;
+      continue;
+    }
     if (error) {
       return { synced: saved > 0, count: saved, error: error.message };
     }
@@ -487,6 +528,7 @@ export async function fetchCloudLibrary(userId: string): Promise<LibraryEntry[] 
     coverImage: row.cover_image,
     bannerImage: row.banner_image,
     totalUnits: row.total_units,
+    totalVolumes: typeof row.total_volumes === "number" ? row.total_volumes : null,
     duration: row.duration,
     genres: row.genres ?? [],
     studio: row.studio,
@@ -496,6 +538,7 @@ export async function fetchCloudLibrary(userId: string): Promise<LibraryEntry[] 
     averageScore: row.average_score,
     status: row.status,
     progress: row.progress,
+    progressVolumes: typeof row.progress_volumes === "number" ? row.progress_volumes : 0,
     score: row.score !== null ? Number(row.score) : null,
     isFavorite: Boolean(row.is_favorite),
     notes: row.notes ?? "",
