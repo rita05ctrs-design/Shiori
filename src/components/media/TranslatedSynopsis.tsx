@@ -86,11 +86,14 @@ export function TranslatedSynopsis({
     Boolean(cachedImmediate?.translated)
   );
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // Reset per-card "Voir l'original" toggle whenever user changes global language or mediaId
   useEffect(() => {
     setShowOriginal(false);
     setExpanded(false);
+    setFailed(false);
   }, [mediaId, contentLanguage]);
 
   useEffect(() => {
@@ -98,6 +101,7 @@ export function TranslatedSynopsis({
       setTranslatedHtml(null);
       setIsTranslated(false);
       setLoading(false);
+      setFailed(false);
       return;
     }
 
@@ -105,6 +109,7 @@ export function TranslatedSynopsis({
       setTranslatedHtml(originalHtml);
       setIsTranslated(false);
       setLoading(false);
+      setFailed(false);
       return;
     }
 
@@ -113,58 +118,71 @@ export function TranslatedSynopsis({
       setTranslatedHtml(hit.html);
       setIsTranslated(hit.translated);
       setLoading(false);
+      setFailed(false);
       return;
     }
 
     const controller = new AbortController();
     setLoading(true);
+    setFailed(false);
     setTranslatedHtml(null);
     setIsTranslated(false);
 
-    fetch("/api/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mediaId,
-        text: description ?? "",
-        targetLang: contentLanguage as ContentLanguage,
-      }),
-      signal: controller.signal,
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+    const requestTranslation = async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
         if (controller.signal.aborted) return;
-        if (data?.ok && typeof data.translatedText === "string" && data.translatedText) {
-          const entry: CachedClientTranslation = {
-            html: data.translatedText,
-            translated: Boolean(data.translated),
-          };
-          if (entry.translated) {
+        try {
+          const res = await fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mediaId,
+              text: description ?? "",
+              targetLang: contentLanguage as ContentLanguage,
+            }),
+            signal: controller.signal,
+          });
+          const data = res.ok ? await res.json() : null;
+          if (controller.signal.aborted) return;
+
+          if (data?.ok && data.translated && typeof data.translatedText === "string" && data.translatedText) {
+            const entry: CachedClientTranslation = {
+              html: data.translatedText,
+              translated: true,
+            };
             clientTranslationCache.set(cacheKey, entry);
+            setTranslatedHtml(entry.html);
+            setIsTranslated(true);
+            setFailed(false);
+            return;
           }
-          setTranslatedHtml(entry.html);
-          setIsTranslated(entry.translated);
-        } else {
-          setTranslatedHtml(originalHtml);
-          setIsTranslated(false);
+        } catch {
+          if (controller.signal.aborted) return;
         }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setTranslatedHtml(originalHtml);
-          setIsTranslated(false);
+
+        // Wait briefly before single automatic retry on transient failure
+        if (attempt === 0 && !controller.signal.aborted) {
+          await new Promise((r) => setTimeout(r, 450));
         }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
+      }
+
+      if (!controller.signal.aborted) {
+        setTranslatedHtml(originalHtml);
+        setIsTranslated(false);
+        setFailed(true);
+      }
+    };
+
+    void requestTranslation().finally(() => {
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
+    });
 
     return () => {
       controller.abort();
     };
-  }, [hydrated, inView, mediaId, description, originalHtml, contentLanguage, cacheKey]);
+  }, [hydrated, inView, mediaId, description, originalHtml, contentLanguage, cacheKey, retryNonce]);
 
   if (!originalHtml) {
     return (
@@ -257,6 +275,17 @@ export function TranslatedSynopsis({
               <span>Auto · {langMeta?.code ?? contentLanguage.toUpperCase()}</span>
             </span>
           )}
+
+          {!loading && failed && contentLanguage !== "en" && (
+            <button
+              type="button"
+              onClick={() => setRetryNonce((n) => n + 1)}
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/35 text-[10.5px] font-medium text-amber-200 transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Réessayer ({langMeta?.code ?? contentLanguage.toUpperCase()})</span>
+            </button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -279,6 +308,8 @@ export function TranslatedSynopsis({
                     setShowOriginal(false);
                     if (lang.id !== contentLanguage) {
                       setContentLanguage(lang.id);
+                    } else if (failed) {
+                      setRetryNonce((n) => n + 1);
                     }
                   }}
                   title={lang.label}
