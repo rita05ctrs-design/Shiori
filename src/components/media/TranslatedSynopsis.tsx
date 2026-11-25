@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Languages, Loader2, RotateCcw } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   CONTENT_LANGUAGES,
   CONTENT_LANGUAGE_MAP,
@@ -45,6 +46,7 @@ export function TranslatedSynopsis({
   className,
 }: TranslatedSynopsisProps) {
   const { contentLanguage, setContentLanguage, hydrated } = useShiori();
+  const { t } = useTranslation();
   const [showOriginal, setShowOriginal] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [inView, setInView] = useState(!lazy);
@@ -263,7 +265,7 @@ export function TranslatedSynopsis({
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent">
-            Synopsis
+            {t("detail.synopsis")}
           </h2>
 
           {loading && (
@@ -293,11 +295,11 @@ export function TranslatedSynopsis({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Direct 1-click Synopsis Language Picker (FR / EN / ES / IT) */}
+          {/* Direct 1-click Synopsis Language Picker (7 languages) */}
           <div
             role="group"
-            aria-label="Choisir la langue du synopsis"
-            className="inline-flex items-center p-0.5 rounded-full bg-white/[0.04] border border-white/[0.09]"
+            aria-label={t("nav.appLanguage")}
+            className="inline-flex flex-wrap items-center gap-0.5 p-0.5 rounded-2xl bg-white/[0.04] border border-white/[0.09]"
           >
             {CONTENT_LANGUAGES.map((lang) => {
               const isSelected =
@@ -349,7 +351,7 @@ export function TranslatedSynopsis({
           onClick={() => setExpanded((v) => !v)}
           className="text-xs font-semibold text-accent-hover hover:text-[#FF858A] cursor-pointer"
         >
-          {expanded ? "Réduire" : "Lire le synopsis complet"}
+          {expanded ? t("detail.showLess") : t("detail.readFullSynopsis")}
         </button>
       )}
     </div>

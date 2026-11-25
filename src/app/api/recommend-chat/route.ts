@@ -709,9 +709,11 @@ export async function POST(request: NextRequest) {
   }
 
   const clientLibrary = sanitizeClientLibrary(body.clientLibrary);
+  const preferredLang =
+    typeof body.language === "string" ? body.language.trim().toLowerCase() : "fr";
   const { entries, displayName, source } = await fetchServerUserLibraryContext(clientLibrary);
   const tasteSummary = buildUserTasteSummary(entries);
-  const systemPrompt = buildShioriSystemPrompt(tasteSummary, displayName);
+  const systemPrompt = buildShioriSystemPrompt(tasteSummary, displayName, preferredLang);
   const geminiKey = sanitizeApiKey(process.env.GEMINI_API_KEY);
   const candidateModels = getGeminiModelCandidates();
 

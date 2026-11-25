@@ -14,11 +14,13 @@ import {
   HardDrive,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { ShioriAiChatPanel } from "@/components/ai/ShioriAiChatPanel";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 
 export default function AssistantPage() {
   const { profile, isAuthenticated, library, orderedFavorites, openAuthModal } = useShiori();
+  const { t } = useTranslation();
 
   const watchingCount = library.filter((e) => e.status === "WATCHING").length;
   const completedCount = library.filter((e) => e.status === "COMPLETED").length;
@@ -45,19 +47,20 @@ export default function AssistantPage() {
                   {isAuthenticated ? (
                     <>
                       <Cloud className="w-3 h-3 text-emerald-400" />
-                      <span>Cloud actif</span>
+                      <span>{t("nav.cloudSync")}</span>
                     </>
                   ) : (
                     <>
                       <HardDrive className="w-3 h-3 text-kinpaku" />
-                      <span>Local</span>
+                      <span>{t("nav.localMode")}</span>
                     </>
                   )}
                 </span>
               </div>
               <p className="text-xs text-[#8A8FA4] font-mono mt-0.5">
-                @{profile.username} · {watchingCount} en cours · {completedCount} terminés ·{" "}
-                {orderedFavorites.length} favoris
+                @{profile.username} · {watchingCount} {t("home.inProgress").toLowerCase()} ·{" "}
+                {completedCount} {t("home.completed").toLowerCase()} · {orderedFavorites.length}{" "}
+                {t("nav.favorites").toLowerCase()}
               </p>
             </div>
           </div>
@@ -68,7 +71,7 @@ export default function AssistantPage() {
               onClick={() => openAuthModal("signin")}
               className="px-4 py-2 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors cursor-pointer self-start sm:self-auto"
             >
-              Se connecter / Sync
+              {t("nav.signIn")}
             </button>
           )}
         </div>
@@ -80,42 +83,44 @@ export default function AssistantPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#E8E9F0] whitespace-nowrap transition-colors"
           >
             <UserCircle2 className="w-3.5 h-3.5 text-accent" />
-            <span>Mon profil</span>
+            <span>{t("nav.myProfile")}</span>
           </Link>
           <Link
             href="/library?favorites=1"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#E8E9F0] whitespace-nowrap transition-colors"
           >
             <Heart className="w-3.5 h-3.5 text-rose-400" />
-            <span>Favoris ({orderedFavorites.length})</span>
+            <span>
+              {t("nav.favorites")} ({orderedFavorites.length})
+            </span>
           </Link>
           <Link
             href="/stats"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#E8E9F0] whitespace-nowrap transition-colors"
           >
             <BarChart3 className="w-3.5 h-3.5 text-kinpaku" />
-            <span>Statistiques</span>
+            <span>{t("nav.stats")}</span>
           </Link>
           <Link
             href="/community"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#E8E9F0] whitespace-nowrap transition-colors"
           >
             <Users className="w-3.5 h-3.5 text-sky-400" />
-            <span>Communauté</span>
+            <span>{t("nav.community")}</span>
           </Link>
           <Link
             href="/calendar"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#E8E9F0] whitespace-nowrap transition-colors"
           >
             <CalendarDays className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Calendrier</span>
+            <span>{t("nav.releases")}</span>
           </Link>
           <Link
             href="/settings"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#E8E9F0] whitespace-nowrap transition-colors"
           >
             <Settings className="w-3.5 h-3.5 text-[#9A9EAE]" />
-            <span>Paramètres</span>
+            <span>{t("nav.settings")}</span>
           </Link>
         </div>
       </section>
@@ -126,10 +131,10 @@ export default function AssistantPage() {
           <div>
             <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Recommandations IA personnalisées</span>
+              <span>{t("ai.eyebrow")}</span>
             </p>
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-gradient-editorial mt-0.5">
-              Assistant Shiori IA
+              {t("ai.pageTitle")}
             </h2>
           </div>
         </div>

@@ -31,6 +31,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn, formatRelativeTime, formatScore, getDisplayTitle } from "@/lib/utils";
 import { formatStreamingDisplayName } from "@/lib/streaming";
 import {
@@ -77,13 +78,6 @@ interface ChatMetaInfo {
   topGenres: string[];
   geminiConfigured: boolean;
 }
-
-const STARTER_PROMPTS = [
-  "Un anime sombre et psychologique que je n'ai pas encore vu",
-  "Un anime court (12 ép.) intense pour ce week-end",
-  "Dans le même esprit que mes favoris",
-  "Une pépite méconnue très bien notée",
-];
 
 /**
  * Safely renders simple inline markdown (**bold**, *italic*, `code`) as React nodes.
@@ -180,6 +174,11 @@ export function ShioriAiChatPanel({
   onNavigate,
 }: ShioriAiChatPanelProps) {
   const { library, orderedFavorites, getEntry, quickAdd, toast, contentLanguage } = useShiori();
+  const { t } = useTranslation();
+  const starterPrompts = useMemo(
+    () => [t("ai.starter1"), t("ai.starter2"), t("ai.starter3"), t("ai.starter4")],
+    [t]
+  );
   const [messages, setMessages] = useState<ChatBubbleMessage[]>([]);
   const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [savedChats, setSavedChats] = useState<SavedAiChat[]>([]);
@@ -746,6 +745,7 @@ export function ShioriAiChatPanel({
           body: JSON.stringify({
             messages: nextHistory,
             clientLibrary: clientLibraryPayload,
+            language: contentLanguage,
           }),
           signal: controller.signal,
         });
@@ -863,7 +863,7 @@ export function ShioriAiChatPanel({
         abortRef.current = null;
       }
     },
-    [messages, sending, clientLibraryPayload, speakMessage]
+    [messages, sending, clientLibraryPayload, contentLanguage, speakMessage]
   );
 
   useEffect(() => {
@@ -989,7 +989,7 @@ export function ShioriAiChatPanel({
         "flex flex-col overflow-hidden bg-surface-solid border border-white/[0.11]",
         compact
           ? "h-full rounded-2xl shadow-[0_28px_80px_rgba(0,0,0,0.88)]"
-          : "rounded-2xl sm:rounded-3xl min-h-[450px] h-[calc(100dvh-16.5rem)] sm:h-[calc(100dvh-16rem)] max-h-[760px] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+          : "rounded-2xl sm:rounded-3xl min-h-[340px] sm:min-h-[450px] h-[calc(100dvh-16.5rem)] sm:h-[calc(100dvh-16rem)] max-h-[760px] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
       )}
     >
       {/* Header */}
@@ -1069,7 +1069,7 @@ export function ShioriAiChatPanel({
                 <Bookmark className="w-3.5 h-3.5 shrink-0" />
               )}
               <span className="hidden sm:inline">
-                {isCurrentChatSaved ? "Enregistré" : "Enregistrer"}
+                {isCurrentChatSaved ? t("common.saved") : t("common.save")}
               </span>
             </button>
           )}
@@ -1146,7 +1146,9 @@ export function ShioriAiChatPanel({
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-kinpaku flex items-center gap-1.5">
                   <BookmarkCheck className="w-3.5 h-3.5" />
-                  <span>Chats enregistrés ({savedChats.length})</span>
+                  <span>
+                    {t("ai.savedChats")} ({savedChats.length})
+                  </span>
                 </p>
                 <button
                   type="button"
@@ -1154,15 +1156,13 @@ export function ShioriAiChatPanel({
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-accent text-[11px] font-semibold text-white transition-colors cursor-pointer"
                 >
                   <MessageSquarePlus className="w-3 h-3" />
-                  <span>Nouveau</span>
+                  <span>{t("common.new")}</span>
                 </button>
               </div>
 
               {savedChats.length === 0 ? (
                 <p className="text-xs text-[#8A8FA4] py-3 text-center">
-                  Aucune conversation enregistrée pour l&apos;instant. Lancez un chat puis cliquez
-                  sur <strong className="text-white">Enregistrer</strong> pour conserver vos animés
-                  conseillés.
+                  {t("ai.noSavedChats")}
                 </p>
               ) : (
                 <div className="space-y-1.5">
@@ -1251,17 +1251,16 @@ export function ShioriAiChatPanel({
               </div>
               <div>
                 <p className="text-base font-semibold text-[#F4F3EE]">
-                  Que voulez-vous regarder ce soir ?
+                  {t("ai.welcomeTitle")}
                 </p>
                 <p className="text-xs text-[#8E93A6] mt-1 leading-relaxed">
-                  J&apos;analyse vos favoris, vos meilleures notes et j&apos;exclus automatiquement
-                  tout ce que vous avez déjà vu pour ne vous proposer que de vraies découvertes.
+                  {t("ai.welcomeSub")}
                 </p>
               </div>
 
               {/* Quick Starter Prompt Chips */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-left">
-                {STARTER_PROMPTS.map((prompt) => (
+                {starterPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
@@ -1321,7 +1320,7 @@ export function ShioriAiChatPanel({
                       ) : (
                         <div className="flex items-center gap-2 text-xs text-[#9A9EAE] py-0.5">
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
-                          <span>Analyse de vos goûts en cours...</span>
+                          <span>{t("ai.analyzing")}</span>
                         </div>
                       )}
                     </div>
@@ -1343,12 +1342,12 @@ export function ShioriAiChatPanel({
                           {copiedId === msg.id ? (
                             <>
                               <Check className="w-3 h-3 text-emerald-400" />
-                              <span className="text-emerald-300">Copié</span>
+                              <span className="text-emerald-300">{t("common.copied")}</span>
                             </>
                           ) : (
                             <>
                               <Copy className="w-3 h-3" />
-                              <span>Copier</span>
+                              <span>{t("common.copy")}</span>
                             </>
                           )}
                         </button>
@@ -1359,8 +1358,8 @@ export function ShioriAiChatPanel({
                             onClick={() => speakMessage(msg.id, msg.content)}
                             aria-label={
                               speakingMsgId === msg.id
-                                ? "Arrêter la lecture vocale"
-                                : "Écouter cette réponse à voix haute"
+                                ? t("common.stop")
+                                : t("common.listen")
                             }
                             aria-pressed={speakingMsgId === msg.id}
                             className={cn(
@@ -1373,12 +1372,12 @@ export function ShioriAiChatPanel({
                             {speakingMsgId === msg.id ? (
                               <>
                                 <Square className="w-2.5 h-2.5 fill-current animate-pulse" />
-                                <span>Arrêter</span>
+                                <span>{t("common.stop")}</span>
                               </>
                             ) : (
                               <>
                                 <Volume2 className="w-3 h-3" />
-                                <span>Écouter</span>
+                                <span>{t("common.listen")}</span>
                               </>
                             )}
                           </button>
@@ -1471,12 +1470,12 @@ export function ShioriAiChatPanel({
                                       {entry ? (
                                         <>
                                           <Check className="w-3 h-3" />
-                                          <span>Ajouté</span>
+                                          <span>{t("common.added")}</span>
                                         </>
                                       ) : (
                                         <>
                                           <Plus className="w-3 h-3" />
-                                          <span>À voir</span>
+                                          <span>{t("ai.toWatchBtn")}</span>
                                         </>
                                       )}
                                     </button>
@@ -1546,16 +1545,16 @@ export function ShioriAiChatPanel({
               <div className="flex items-center gap-2 min-w-0">
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-kinpaku shrink-0" />
                 <span className="text-[#F4F3EE] font-medium truncate">
-                  Demande d&apos;autorisation du microphone… Autorisez l&apos;accès dans le navigateur
+                  {t("ai.requestingBanner")}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={cancelVoiceInput}
-                aria-label="Annuler la demande de microphone"
+                aria-label={t("common.cancel")}
                 className="px-2 py-0.5 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-[#D4D7E4] hover:text-white text-[11px] font-medium transition-colors cursor-pointer shrink-0"
               >
-                Annuler
+                {t("common.cancel")}
               </button>
             </motion.div>
           )}
@@ -1583,7 +1582,7 @@ export function ShioriAiChatPanel({
                   />
                 </span>
                 <span className="text-[#F4F3EE] font-medium truncate">
-                  Écoute en cours… Cliquez pour envoyer
+                  {t("ai.listeningBanner")}
                 </span>
                 <span className="font-mono text-[11px] text-kinpaku font-semibold shrink-0">
                   {formatRecordingDuration(recordingSeconds)}
@@ -1596,15 +1595,15 @@ export function ShioriAiChatPanel({
                   onClick={stopVoiceInput}
                   className="px-2.5 py-0.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-[11px] font-semibold transition-colors cursor-pointer"
                 >
-                  Envoyer
+                  {t("common.send")}
                 </button>
                 <button
                   type="button"
                   onClick={cancelVoiceInput}
-                  aria-label="Annuler l'enregistrement vocal"
+                  aria-label={t("common.cancel")}
                   className="px-2 py-0.5 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-[#D4D7E4] hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
                 >
-                  Annuler
+                  {t("common.cancel")}
                 </button>
               </div>
             </motion.div>
@@ -1623,16 +1622,16 @@ export function ShioriAiChatPanel({
               <div className="flex items-center gap-2 min-w-0">
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-kinpaku shrink-0" />
                 <span className="text-[#F4F3EE] font-medium truncate">
-                  Transcription Gemini en cours…
+                  {t("ai.transcribingBanner")}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={cancelVoiceInput}
-                aria-label="Annuler la transcription"
+                aria-label={t("common.cancel")}
                 className="px-2 py-0.5 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-[#D4D7E4] hover:text-white text-[11px] font-medium transition-colors cursor-pointer shrink-0"
               >
-                Annuler
+                {t("common.cancel")}
               </button>
             </motion.div>
           )}
@@ -1717,15 +1716,15 @@ export function ShioriAiChatPanel({
             }}
             placeholder={
               isRequestingMic
-                ? "Autorisation du microphone en cours..."
+                ? t("ai.placeholderRequesting")
                 : isRecording
-                  ? "Écoute en cours… cliquez sur le micro pour envoyer"
+                  ? t("ai.placeholderRecording")
                   : isTranscribing
-                    ? "Transcription de votre voix en cours..."
-                    : "Écris ou parle à Shiori IA..."
+                    ? t("ai.placeholderTranscribing")
+                    : t("ai.placeholder")
             }
             aria-label="Écrire ou dicter un message à Shiori IA"
-            className="flex-1 min-w-0 resize-none bg-transparent py-2 px-1 max-h-[120px] overflow-y-auto text-[13px] sm:text-sm text-[#F4F3EE] placeholder:text-[#7E849C] focus:outline-none leading-snug select-text"
+            className="flex-1 min-w-0 resize-none bg-transparent py-2 px-1 max-h-[120px] overflow-y-auto text-[16px] sm:text-sm text-[#F4F3EE] placeholder:text-[#7E849C] focus:outline-none leading-snug select-text touch-manipulation"
           />
 
           {/* Universal Voice Recording Microphone Button (MediaRecorder -> Gemini /api/transcribe) */}

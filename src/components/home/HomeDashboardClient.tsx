@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { HeroShowcase } from "@/components/media/HeroShowcase";
 import { PersonalizedRecommendationsSection } from "@/components/media/PersonalizedRecommendationsSection";
 import { HomeMoodAndRouletteSection } from "@/components/home/HomeMoodAndRouletteSection";
@@ -79,6 +80,7 @@ interface HomeDashboardClientProps {
 
 export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientProps) {
   const router = useRouter();
+  const { t, locale } = useTranslation();
   const {
     library,
     orderedFavorites,
@@ -141,9 +143,9 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
         return (
           <MediaRail
             key="trending_season"
-            eyebrow="Saison en cours"
-            title="Tendances de la saison"
-            subtitle="Les animés les plus suivis et commentés du moment"
+            eyebrow={t("home.trendingEyebrow")}
+            title={t("home.trendingTitle")}
+            subtitle={t("home.trendingSub")}
             href="/discover?sort=TRENDING_DESC&type=ANIME"
             items={data.trending}
           />
@@ -153,9 +155,9 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
         return (
           <MediaRail
             key="weekly_episodes"
-            eyebrow="Simulcast · 7 jours"
-            title="Sorties de la semaine"
-            subtitle="Les nouveaux épisodes diffusés cette semaine"
+            eyebrow={t("home.weeklyEyebrow")}
+            title={t("home.weeklyTitle")}
+            subtitle={t("home.weeklySub")}
             href="/episodes"
             items={weeklyReleaseItems}
           />
@@ -168,9 +170,9 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
         return (
           <MediaRail
             key="catalog_rails"
-            eyebrow="Lecture"
-            title="Sélection Manga"
-            subtitle="Les mangas incontournables du catalogue"
+            eyebrow={t("home.mangaEyebrow")}
+            title={t("home.mangaTitle")}
+            subtitle={t("home.mangaSub")}
             href="/discover?sort=SCORE_DESC&type=MANGA"
             items={data.manga}
           />
@@ -185,13 +187,13 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                 className="p-4 rounded-2xl card-surface border border-white/[0.08] hover:border-sky-400/40 transition-colors flex items-center justify-between gap-3"
               >
                 <div>
-                  <p className="text-xs text-[#8D92A6]">En cours</p>
+                  <p className="text-xs text-[#8D92A6]">{t("home.inProgress")}</p>
                   <p className="text-2xl font-bold font-mono text-white mt-0.5">
                     {watchingTotal}
                   </p>
                   <p className="text-[11px] text-[#7A7F94] mt-0.5">
-                    {stats.totalEpisodes.toLocaleString("fr-FR")} ép. ·{" "}
-                    {stats.totalChapters.toLocaleString("fr-FR")} ch.
+                    {stats.totalEpisodes.toLocaleString(locale)} {t("common.epShort")} ·{" "}
+                    {stats.totalChapters.toLocaleString(locale)} {t("common.chShort")}
                   </p>
                 </div>
                 <PlayCircle className="w-5 h-5 text-sky-400 shrink-0" />
@@ -202,12 +204,12 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                 className="p-4 rounded-2xl card-surface border border-white/[0.08] hover:border-rose-400/40 transition-colors flex items-center justify-between gap-3"
               >
                 <div>
-                  <p className="text-xs text-[#8D92A6]">Mes favoris</p>
+                  <p className="text-xs text-[#8D92A6]">{t("footer.myFavorites")}</p>
                   <p className="text-2xl font-bold font-mono text-white mt-0.5">
                     {orderedFavorites.length}
                   </p>
                   <p className="text-[11px] text-[#7A7F94] mt-0.5">
-                    Voir la sélection →
+                    {t("home.seeSelection")}
                   </p>
                 </div>
                 <Heart className="w-5 h-5 text-rose-400 fill-current shrink-0" />
@@ -218,12 +220,12 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                 className="p-4 rounded-2xl card-surface border border-white/[0.08] hover:border-emerald-400/40 transition-colors flex items-center justify-between gap-3"
               >
                 <div>
-                  <p className="text-xs text-[#8D92A6]">Terminés</p>
+                  <p className="text-xs text-[#8D92A6]">{t("home.completed")}</p>
                   <p className="text-2xl font-bold font-mono text-emerald-300 mt-0.5">
                     {stats.completedCount}
                   </p>
                   <p className="text-[11px] text-[#7A7F94] mt-0.5">
-                    {stats.totalDays} jours estimés
+                    {stats.totalDays} {t("home.estimatedDays")}
                   </p>
                 </div>
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -390,7 +392,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
             <span>
-              {customizing ? "Fermer la personnalisation" : "Personnaliser les sections de l'accueil"}
+              {customizing ? t("common.close") : t("home.customize")}
             </span>
           </button>
 

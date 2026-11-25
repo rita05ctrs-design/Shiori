@@ -32,6 +32,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { CONTENT_LANGUAGES } from "@/lib/i18n";
 import { AniListImportCard } from "@/components/settings/AniListImportCard";
 import { MalImportCard } from "@/components/settings/MalImportCard";
@@ -114,6 +115,7 @@ export default function SettingsPage() {
     toast,
   } = useShiori();
 
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [username, setUsername] = useState(profile.username);
@@ -335,10 +337,10 @@ export default function SettingsPage() {
       {/* Clean Header */}
       <div>
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-          Paramètres
+          {t("settings.title")}
         </h1>
         <p className="text-sm text-[#8A8FA4] mt-1">
-          Personnalisez l&apos;apparence, votre profil, vos préférences et vos sauvegardes.
+          {t("settings.subtitle")}
         </p>
       </div>
 
@@ -420,10 +422,10 @@ export default function SettingsPage() {
                   <div>
                     <h2 className="text-base font-semibold text-white flex items-center gap-2">
                       <Languages className="w-4 h-4 text-accent" />
-                      <span>Langue des synopsis</span>
+                      <span>{t("settings.langTitle")}</span>
                     </h2>
                     <p className="text-xs text-[#858A9E] mt-0.5">
-                      Traduit automatiquement les résumés des animés et mangas dans la langue choisie.
+                      {t("settings.langSub")}
                     </p>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-accent/15 border border-accent/35 font-mono text-[10.5px] font-bold text-accent-soft self-start sm:self-auto shrink-0">
@@ -431,7 +433,7 @@ export default function SettingsPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
                   {CONTENT_LANGUAGES.map((lang) => {
                     const active = contentLanguage === lang.id;
                     return (

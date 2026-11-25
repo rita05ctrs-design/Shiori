@@ -26,7 +26,9 @@ import {
   Languages,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { CONTENT_LANGUAGES } from "@/lib/i18n";
+import type { UiMessageKey } from "@/lib/ui-translations";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
 import { LanguageQuickPopover } from "@/components/layout/LanguageQuickPopover";
@@ -34,64 +36,74 @@ import { QuickEpisodesPopover } from "@/components/episodes/QuickEpisodesPopover
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/", label: "Accueil", icon: Home, match: (p: string) => p === "/" },
+const NAV_ITEMS: {
+  href: string;
+  labelKey: UiMessageKey;
+  icon: typeof Home;
+  match: (p: string) => boolean;
+}[] = [
+  { href: "/", labelKey: "nav.home", icon: Home, match: (p: string) => p === "/" },
   {
     href: "/library",
-    label: "Bibliothèque",
+    labelKey: "nav.library",
     icon: Library,
     match: (p: string) => p.startsWith("/library"),
   },
   {
     href: "/discover",
-    label: "Découvrir",
+    labelKey: "nav.discover",
     icon: Compass,
     match: (p: string) =>
       p.startsWith("/discover") || p.startsWith("/media") || p.startsWith("/anime"),
   },
   {
     href: "/calendar",
-    label: "Sorties",
+    labelKey: "nav.releases",
     icon: CalendarDays,
     match: (p: string) => p.startsWith("/calendar") || p.startsWith("/episodes"),
   },
   {
     href: "/stats",
-    label: "Stats",
+    labelKey: "nav.stats",
     icon: BarChart3,
     match: (p: string) => p.startsWith("/stats"),
   },
   {
     href: "/community",
-    label: "Communauté",
+    labelKey: "nav.community",
     icon: Users,
     match: (p: string) => p.startsWith("/community") || p.startsWith("/profile"),
   },
 ];
 
-const MOBILE_BOTTOM_NAV = [
+const MOBILE_BOTTOM_NAV: {
+  href: string;
+  labelKey: UiMessageKey;
+  icon: typeof ListChecks;
+  match: (p: string) => boolean;
+}[] = [
   {
     href: "/episodes",
-    label: "Semaine",
+    labelKey: "nav.week",
     icon: ListChecks,
     match: (p: string) => p.startsWith("/episodes") || p.startsWith("/calendar"),
   },
   {
     href: "/library",
-    label: "Ma Liste",
+    labelKey: "nav.myList",
     icon: Library,
     match: (p: string) => p.startsWith("/library"),
   },
   {
     href: "/discover",
-    label: "Découvrir",
+    labelKey: "nav.discover",
     icon: Compass,
     match: (p: string) =>
       p.startsWith("/discover") || p.startsWith("/media") || p.startsWith("/anime"),
   },
   {
     href: "/assistant",
-    label: "Profil/IA",
+    labelKey: "nav.profileAi",
     icon: Sparkles,
     match: (p: string) =>
       p.startsWith("/assistant") ||
@@ -105,6 +117,7 @@ const MOBILE_BOTTOM_NAV = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const {
     profile,
     isAuthenticated,
@@ -244,12 +257,13 @@ export function Navbar() {
             {NAV_ITEMS.map((item) => {
               const isActive = item.match(pathname);
               const Icon = item.icon;
+              const label = t(item.labelKey);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  title={item.label}
-                  aria-label={item.label}
+                  title={label}
+                  aria-label={label}
                   className={cn(
                     "relative px-2.5 lg:px-2 xl:px-3 py-1.5 rounded-full text-[11.5px] xl:text-[12.5px] font-medium transition-colors flex items-center gap-1 xl:gap-1.5 whitespace-nowrap shrink-0",
                     isActive
@@ -265,7 +279,7 @@ export function Navbar() {
                     />
                   )}
                   <Icon className="w-3.5 h-3.5 relative z-10 opacity-85 shrink-0" />
-                  <span className="hidden lg:inline relative z-10">{item.label}</span>
+                  <span className="hidden lg:inline relative z-10">{label}</span>
                   {item.href === "/library" && watchingCount > 0 && (
                     <span className="hidden xl:inline-flex relative z-10 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-accent/22 text-accent-soft border border-accent/35">
                       {watchingCount}
@@ -285,12 +299,12 @@ export function Navbar() {
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
-              aria-label="Rechercher ou ajouter un anime ou manga"
-              title="Rechercher (⌘K)"
+              aria-label={t("nav.search")}
+              title={`${t("nav.search")} (⌘K)`}
               className="group flex items-center justify-center gap-1.5 w-8.5 h-8.5 sm:w-9 sm:h-9 xl:w-auto xl:px-3 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] hover:border-white/[0.18] transition-all text-xs text-[#B8BCCB] hover:text-white cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 text-accent-soft group-hover:text-white transition-colors" />
-              <span className="hidden 2xl:inline">Rechercher</span>
+              <span className="hidden 2xl:inline">{t("nav.search")}</span>
               <kbd className="hidden xl:inline-flex items-center px-1.5 py-0.5 rounded bg-white/[0.07] text-[10px] font-mono text-[#9EA3B5] border border-white/[0.08]">
                 ⌘K
               </kbd>
@@ -381,18 +395,18 @@ export function Navbar() {
                         {isAuthenticated ? (
                           <>
                             <Cloud className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            <span>Compte connecté et sauvegardé</span>
+                            <span>{t("nav.cloudSync")}</span>
                           </>
                         ) : (
                           <>
                             <HardDrive className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            <span>Mode invité · Sauvegarde locale</span>
+                            <span>{t("nav.localMode")}</span>
                           </>
                         )}
                       </div>
                     </div>
 
-                    {/* Streamlined Plain-French Menu */}
+                    {/* Streamlined Localized Profile Menu */}
                     <div className="p-2 space-y-0.5">
                       <Link
                         href={`/profile/${encodeURIComponent(profile.username)}`}
@@ -400,7 +414,7 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <UserCircle2 className="w-4 h-4 text-accent" />
-                        <span>Mon profil</span>
+                        <span>{t("nav.myProfile")}</span>
                       </Link>
                       <Link
                         href="/library?favorites=1"
@@ -408,7 +422,7 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <Heart className="w-4 h-4 text-rose-400" />
-                        <span>Mes favoris</span>
+                        <span>{t("footer.myFavorites")}</span>
                         {orderedFavorites.length > 0 && (
                           <span className="ml-auto text-xs font-mono text-[#7C8194]">
                             {orderedFavorites.length}
@@ -421,7 +435,7 @@ export function Navbar() {
                         className="md:hidden flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <CalendarDays className="w-4 h-4 text-[#9A9EAE]" />
-                        <span>Sorties & Calendrier</span>
+                        <span>{t("footer.releasesCalendar")}</span>
                       </Link>
                       <Link
                         href="/episodes"
@@ -429,7 +443,7 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <ListChecks className="w-4 h-4 text-[#9A9EAE]" />
-                        <span>Épisodes de la semaine</span>
+                        <span>{t("episodes.title")}</span>
                       </Link>
                       <Link
                         href="/assistant"
@@ -437,7 +451,7 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <Sparkles className="w-4 h-4 text-kinpaku" />
-                        <span>Assistant Shiori IA</span>
+                        <span>{t("ai.pageTitle")}</span>
                       </Link>
                       <Link
                         href="/messages"
@@ -445,7 +459,7 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <MessageSquare className="w-4 h-4 text-[#9A9EAE]" />
-                        <span>Messages privés</span>
+                        <span>{t("nav.messages")}</span>
                         {unreadMessagesCount > 0 && (
                           <span className="ml-auto px-1.5 py-0.5 rounded-full bg-accent text-accent-fg text-[10px] font-mono font-bold">
                             {unreadMessagesCount}
@@ -458,22 +472,23 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
                       >
                         <Settings className="w-4 h-4 text-[#9A9EAE]" />
-                        <span>Paramètres</span>
+                        <span>{t("nav.settings")}</span>
                       </Link>
 
-                      {/* Inline Quick Preferences: Language + Ambiance */}
+                      {/* Inline Quick Preferences: Language (7 languages) + Ambiance */}
                       <div className="mt-1.5 pt-2 border-t border-white/[0.07] px-2.5 pb-1 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="space-y-1.5">
                           <span className="text-[11.5px] text-[#9A9EAE] flex items-center gap-1.5">
                             <Languages className="w-3.5 h-3.5 text-accent-soft" />
-                            <span>Synopsis</span>
+                            <span>{t("nav.appLanguage")}</span>
                           </span>
-                          <div className="inline-flex items-center gap-1">
+                          <div className="flex flex-wrap items-center gap-1">
                             {CONTENT_LANGUAGES.map((lang) => (
                               <button
                                 key={lang.id}
                                 type="button"
                                 onClick={() => setContentLanguage(lang.id)}
+                                title={lang.label}
                                 className={cn(
                                   "px-2 py-0.5 rounded-md font-mono text-[10.5px] font-bold transition-colors cursor-pointer",
                                   contentLanguage === lang.id
@@ -490,7 +505,7 @@ export function Navbar() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[11.5px] text-[#9A9EAE] flex items-center gap-1.5">
                             <Flower2 className="w-3.5 h-3.5 text-accent-soft" />
-                            <span>Effets d&apos;ambiance</span>
+                            <span>{t("nav.petals")}</span>
                           </span>
                           <button
                             type="button"
@@ -506,7 +521,7 @@ export function Navbar() {
                                 : "bg-accent/18 border-accent/40 text-accent-soft"
                             )}
                           >
-                            {ambiance.effect === "none" ? "Désactivés" : "Activés"}
+                            {ambiance.effect === "none" ? t("nav.petalsOff") : t("nav.petalsOn")}
                           </button>
                         </div>
                       </div>
@@ -523,7 +538,7 @@ export function Navbar() {
                             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-[13px] font-semibold text-accent-fg bg-accent hover:bg-accent-hover transition-colors cursor-pointer"
                           >
                             <Sparkles className="w-3.5 h-3.5" />
-                            <span>Créer un compte</span>
+                            <span>{t("auth.signUpTitle")}</span>
                           </button>
                           <button
                             type="button"
@@ -534,7 +549,7 @@ export function Navbar() {
                             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors cursor-pointer"
                           >
                             <User className="w-3.5 h-3.5 text-[#9A9EAE]" />
-                            <span>Se connecter</span>
+                            <span>{t("nav.signIn")}</span>
                           </button>
                         </div>
                       ) : (
@@ -547,7 +562,7 @@ export function Navbar() {
                           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer mt-1.5 border-t border-white/[0.07] pt-2.5"
                         >
                           <LogOut className="w-4 h-4" />
-                          <span>Déconnexion</span>
+                          <span>{t("nav.signOut")}</span>
                         </button>
                       )}
                     </div>
@@ -559,15 +574,16 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation — 4 clear mobile-first tabs: Semaine, Ma Liste, Découvrir, Profil/IA */}
+      {/* Mobile Bottom Navigation — 4 clear mobile-first tabs */}
       <nav
-        aria-label="Navigation mobile"
+        aria-label="Mobile navigation"
         className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-obsidian/95 backdrop-blur-xl border-t border-white/[0.08] px-1.5 pt-1.5 pb-[calc(0.45rem+env(safe-area-inset-bottom))]"
       >
         <div className="grid grid-cols-4 items-center gap-1">
           {MOBILE_BOTTOM_NAV.map((item) => {
             const isActive = item.match(pathname);
             const Icon = item.icon;
+            const label = t(item.labelKey);
             return (
               <Link
                 key={item.href}
@@ -588,7 +604,7 @@ export function Navbar() {
                   )}
                 </div>
                 <span className="text-[10.5px] font-semibold truncate max-w-full px-0.5">
-                  {item.label}
+                  {label}
                 </span>
               </Link>
             );

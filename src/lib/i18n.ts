@@ -3,6 +3,7 @@ import type { ContentLanguage } from "@/types/media";
 export interface ContentLanguageOption {
   id: ContentLanguage;
   code: string;
+  locale: string;
   label: string;
   shortLabel: string;
   description: string;
@@ -13,33 +14,64 @@ export const CONTENT_LANGUAGES: ContentLanguageOption[] = [
   {
     id: "fr",
     code: "FR",
-    label: "Français (Auto)",
+    locale: "fr-FR",
+    label: "Français",
     shortLabel: "Français",
-    description: "Traduction automatique en français avec cache partagé.",
+    description: "Interface en français + traduction auto des synopsis.",
     isAutoTranslated: true,
   },
   {
     id: "en",
     code: "EN",
-    label: "English (Original)",
+    locale: "en-US",
+    label: "English",
     shortLabel: "English",
-    description: "Texte original d'AniList sans traduction.",
+    description: "Full English interface + native AniList synopses.",
     isAutoTranslated: false,
   },
   {
     id: "es",
     code: "ES",
-    label: "Español (Auto)",
+    locale: "es-ES",
+    label: "Español",
     shortLabel: "Español",
-    description: "Traduction automatique en espagnol avec cache partagé.",
+    description: "Interfaz en español + traducción automática de sinopsis.",
+    isAutoTranslated: true,
+  },
+  {
+    id: "de",
+    code: "DE",
+    locale: "de-DE",
+    label: "Deutsch",
+    shortLabel: "Deutsch",
+    description: "Deutsche Oberfläche + automatische Übersetzung der Synopsen.",
     isAutoTranslated: true,
   },
   {
     id: "it",
     code: "IT",
-    label: "Italiano (Auto)",
+    locale: "it-IT",
+    label: "Italiano",
     shortLabel: "Italiano",
-    description: "Traduction automatique en italien avec cache partagé.",
+    description: "Interfaccia in italiano + traduzione automatica delle sinossi.",
+    isAutoTranslated: true,
+  },
+  {
+    id: "pt",
+    code: "PT",
+    locale: "pt-BR",
+    label: "Português",
+    shortLabel: "Português",
+    description: "Interface em português + tradução automática das sinopses.",
+    isAutoTranslated: true,
+  },
+  {
+    id: "ja",
+    code: "JA",
+    locale: "ja-JP",
+    label: "日本語",
+    shortLabel: "日本語",
+    description: "日本語インターフェース＋あらすじ自動翻訳。",
     isAutoTranslated: true,
   },
 ];
@@ -52,8 +84,16 @@ export const DEFAULT_CONTENT_LANGUAGE: ContentLanguage = "fr";
 
 export function normalizeContentLanguage(value: unknown): ContentLanguage {
   if (typeof value === "string") {
-    const clean = value.trim().toLowerCase();
-    if (clean === "fr" || clean === "en" || clean === "es" || clean === "it") {
+    const clean = value.trim().toLowerCase().split(/[-_]/)[0];
+    if (
+      clean === "fr" ||
+      clean === "en" ||
+      clean === "es" ||
+      clean === "de" ||
+      clean === "it" ||
+      clean === "pt" ||
+      clean === "ja"
+    ) {
       return clean;
     }
   }

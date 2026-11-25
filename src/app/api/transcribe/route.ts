@@ -223,9 +223,23 @@ export async function POST(request: NextRequest) {
   const arrayBuffer = await fileField.arrayBuffer();
   const base64Audio = Buffer.from(arrayBuffer).toString("base64");
 
+  const langName = rawLang.startsWith("en")
+    ? "anglais"
+    : rawLang.startsWith("es")
+      ? "espagnol"
+      : rawLang.startsWith("de")
+        ? "allemand"
+        : rawLang.startsWith("it")
+          ? "italien"
+          : rawLang.startsWith("pt")
+            ? "portugais"
+            : rawLang.startsWith("ja")
+              ? "japonais"
+              : "français";
+
   const instructionPrompt = [
     "Transcris exactement et fidèlement ce qui est dit dans cet enregistrement audio.",
-    `Langue attendue principale : ${rawLang.startsWith("en") ? "anglais" : rawLang.startsWith("es") ? "espagnol" : rawLang.startsWith("it") ? "italien" : "français"} (garde la langue réellement parlée, français ou anglais, ainsi que les titres d'animés/mangas prononcés).`,
+    `Langue attendue principale : ${langName} (garde toujours la langue réellement parlée ainsi que les titres d'animés/mangas prononcés).`,
     "Consignes strictes :",
     "- Renvoie UNIQUEMENT le texte transcrit exact.",
     "- N'ajoute aucun commentaire, aucune explication, aucun guillemet, aucune balise markdown ni ponctuation superflue.",

@@ -4,11 +4,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Languages } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { CONTENT_LANGUAGE_MAP, CONTENT_LANGUAGES } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function LanguageQuickPopover() {
   const { contentLanguage, setContentLanguage } = useShiori();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,9 +39,9 @@ export function LanguageQuickPopover() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label={`Langue des synopsis : ${active.label}`}
+        aria-label={`${t("nav.appLanguage")} : ${active.label}`}
         aria-expanded={open}
-        title={`Langue des synopsis : ${active.label}`}
+        title={`${t("nav.appLanguage")} : ${active.label}`}
         className={cn(
           "h-8.5 sm:h-9 px-2 sm:px-2.5 rounded-full border flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer",
           open
@@ -60,14 +62,14 @@ export function LanguageQuickPopover() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.96 }}
             transition={{ type: "spring", stiffness: 420, damping: 28 }}
-            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top))] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_24px_60px_rgba(0,0,0,0.88)] p-2.5 z-50 space-y-1.5"
+            className="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top))] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-72 max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_24px_60px_rgba(0,0,0,0.88)] p-2.5 z-50 space-y-1.5"
           >
             <div className="px-2 py-1 border-b border-white/[0.07]">
               <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-accent-soft">
-                Langue des synopsis
+                {t("nav.appLanguage")}
               </p>
               <p className="text-[11px] text-[#8E93A6] mt-0.5">
-                Traduction à la volée avec cache
+                {t("nav.appLanguageSub")}
               </p>
             </div>
 
@@ -103,7 +105,7 @@ export function LanguageQuickPopover() {
                       <div className="min-w-0">
                         <p className="text-xs font-semibold truncate">{lang.label}</p>
                         <p className="text-[10px] text-[#858A9E] truncate">
-                          {lang.isAutoTranslated ? "Traduit + mis en cache" : "Texte AniList natif"}
+                          {lang.description}
                         </p>
                       </div>
                     </div>

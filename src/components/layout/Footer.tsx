@@ -3,9 +3,11 @@
 import React from "react";
 import Link from "next/link";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export function Footer() {
   const { setCommandOpen, isAuthenticated, openAuthModal } = useShiori();
+  const { t } = useTranslation();
 
   return (
     <footer className="mt-16 sm:mt-20 border-t border-white/[0.06] bg-obsidian pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10">
@@ -21,33 +23,33 @@ export function Footer() {
               </span>
             </div>
             <p className="mt-3 text-sm text-[#858A9E] max-w-sm leading-relaxed">
-              Votre marque-page personnel pour suivre, organiser et découvrir vos animés et mangas en toute simplicité.
+              {t("footer.tagline")}
             </p>
           </div>
 
           <div className="md:col-span-3 space-y-2.5">
             <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6E7387]">
-              Navigation
+              {t("footer.navigation")}
             </h4>
             <ul className="space-y-2 text-sm text-[#9A9EAE]">
               <li>
                 <Link href="/" className="hover:text-white transition-colors">
-                  Accueil
+                  {t("nav.home")}
                 </Link>
               </li>
               <li>
                 <Link href="/library" className="hover:text-white transition-colors">
-                  Ma Bibliothèque
+                  {t("footer.myLibrary")}
                 </Link>
               </li>
               <li>
                 <Link href="/discover" className="hover:text-white transition-colors">
-                  Découvrir
+                  {t("nav.discover")}
                 </Link>
               </li>
               <li>
                 <Link href="/calendar" className="hover:text-white transition-colors">
-                  Sorties & Calendrier
+                  {t("footer.releasesCalendar")}
                 </Link>
               </li>
             </ul>
@@ -55,22 +57,22 @@ export function Footer() {
 
           <div className="md:col-span-4 space-y-2.5">
             <h4 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6E7387]">
-              Mon espace
+              {t("footer.mySpace")}
             </h4>
             <ul className="space-y-2 text-sm text-[#9A9EAE]">
               <li>
                 <Link href="/library?favorites=1" className="hover:text-white transition-colors">
-                  Mes favoris
+                  {t("footer.myFavorites")}
                 </Link>
               </li>
               <li>
                 <Link href="/stats" className="hover:text-white transition-colors">
-                  Statistiques
+                  {t("nav.stats")}
                 </Link>
               </li>
               <li>
                 <Link href="/settings" className="hover:text-white transition-colors">
-                  Paramètres & Apparence
+                  {t("footer.settingsAppearance")}
                 </Link>
               </li>
               <li>
@@ -79,7 +81,7 @@ export function Footer() {
                   onClick={() => setCommandOpen(true)}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
-                  Recherche rapide
+                  {t("footer.quickSearch")}
                 </button>
               </li>
               {!isAuthenticated && (
@@ -89,7 +91,7 @@ export function Footer() {
                     onClick={() => openAuthModal("signin")}
                     className="hover:text-white transition-colors cursor-pointer"
                   >
-                    Se connecter
+                    {t("nav.signIn")}
                   </button>
                 </li>
               )}
@@ -98,8 +100,10 @@ export function Footer() {
         </div>
 
         <div className="mt-8 pt-5 border-t border-white/[0.05] flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#666B7E]">
-          <span>© {new Date().getFullYear()} Shiori (栞) · Suivi Anime & Manga</span>
-          <span className="text-[11px] text-[#7D8296]">Catalogue fourni par AniList</span>
+          <span>
+            © {new Date().getFullYear()} Shiori (栞) · {t("footer.rights")}
+          </span>
+          <span className="text-[11px] text-[#7D8296]">{t("footer.catalogBy")}</span>
         </div>
       </div>
     </footer>

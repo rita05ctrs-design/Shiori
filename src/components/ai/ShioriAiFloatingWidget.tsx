@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, X } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const ShioriAiChatPanel = dynamic(
   () => import("@/components/ai/ShioriAiChatPanel").then((m) => m.ShioriAiChatPanel),
@@ -18,6 +19,7 @@ const ShioriAiChatPanel = dynamic(
  */
 export function ShioriAiFloatingWidget() {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function ShioriAiFloatingWidget() {
         {open ? (
           <>
             <X className="w-4 h-4" />
-            <span>Fermer Shiori IA</span>
+            <span>{t("ai.closeAi")}</span>
           </>
         ) : (
           <>

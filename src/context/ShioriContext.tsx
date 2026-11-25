@@ -56,6 +56,7 @@ import {
   DEFAULT_CONTENT_LANGUAGE,
   normalizeContentLanguage,
 } from "@/lib/i18n";
+import { translateUi } from "@/lib/ui-translations";
 import type {
   ActivityEvent,
   AmbianceSettings,
@@ -1653,10 +1654,19 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     setProfile((prev) => ({ ...prev, accentColor: DEFAULT_THEME.accentColor }));
   }, []);
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = contentLanguage;
+    }
+  }, [contentLanguage]);
+
   const setContentLanguage = useCallback(
     (lang: ContentLanguage, options?: { silent?: boolean }) => {
       const normalized = normalizeContentLanguage(lang);
       setContentLanguageState(normalized);
+      if (typeof document !== "undefined") {
+        document.documentElement.lang = normalized;
+      }
       setProfile((prev) =>
         prev.preferredLanguage === normalized ? prev : { ...prev, preferredLanguage: normalized }
       );
@@ -1677,10 +1687,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       if (!options?.silent) {
         const meta = CONTENT_LANGUAGE_MAP.get(normalized);
         toast({
-          title: `Langue des synopsis : ${meta?.label ?? normalized.toUpperCase()}`,
-          description: meta?.isAutoTranslated
-            ? "Les synopsis sont traduits automatiquement à la volée."
-            : "Affichage du texte anglais original d'AniList.",
+          title: `${translateUi(normalized, "nav.langUpdated")} · ${meta?.label ?? normalized.toUpperCase()}`,
+          description: meta?.description ?? translateUi(normalized, "nav.appLanguageSub"),
           variant: "info",
         });
       }

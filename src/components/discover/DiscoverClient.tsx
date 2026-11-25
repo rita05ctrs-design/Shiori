@@ -37,6 +37,7 @@ import {
   Gauge,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { MediaCard } from "@/components/media/MediaCard";
 import { MoodCarousel } from "@/components/discover/MoodCarousel";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
@@ -172,6 +173,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
   const { library } = useShiori();
+  const { t, tGenre } = useTranslation();
 
   // Compute initial state synchronously from URL params when present (Back button & deep links)
   const initialStateRef = useRef<PersistedDiscoverState | null>(null);
@@ -703,23 +705,23 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Découvrir {type === "ANIME" ? "les Animes" : "les Mangas"}
+            {type === "ANIME" ? t("discover.titleAnime") : t("discover.titleManga")}
           </h1>
           <p className="text-sm text-[#8A8FA4] mt-1">
-            Recherchez un titre ou parcourez par genre pour l&apos;ajouter à votre bibliothèque.
+            {t("discover.subtitle")}
           </p>
         </div>
 
         {/* Anime / Manga Switcher */}
         <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08] self-start md:self-auto">
-          {(["ANIME", "MANGA"] as MediaType[]).map((t) => {
-            const active = type === t;
-            const Icon = t === "ANIME" ? Tv : BookOpen;
+          {(["ANIME", "MANGA"] as MediaType[]).map((mt) => {
+            const active = type === mt;
+            const Icon = mt === "ANIME" ? Tv : BookOpen;
             return (
               <button
-                key={t}
+                key={mt}
                 type="button"
-                onClick={() => handleTypeSwitch(t)}
+                onClick={() => handleTypeSwitch(mt)}
                 className={cn(
                   "relative inline-flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer",
                   active ? "text-white" : "text-[#9A9EAE] hover:text-white"
@@ -733,7 +735,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                   />
                 )}
                 <Icon className="w-3.5 h-3.5 relative z-10" />
-                <span className="relative z-10">{t === "ANIME" ? "Animes" : "Mangas"}</span>
+                <span className="relative z-10">
+                  {mt === "ANIME" ? t("common.anime") : t("common.manga")}
+                </span>
               </button>
             );
           })}
@@ -750,7 +754,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Rechercher un ${type === "ANIME" ? "anime" : "manga"} (ex: Frieren, Berserk, One Piece)...`}
+              placeholder={t("discover.searchPlaceholder")}
               className="w-full h-10 pl-10 pr-9 rounded-xl bg-[#080A10] border border-white/[0.09] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/70 transition-all"
             />
             {search && (
@@ -803,7 +807,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               )}
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-accent-soft" />
-              <span>Filtres</span>
+              <span>{t("discover.filters")}</span>
               {activeFilterCount > 0 && (
                 <motion.span
                   key={activeFilterCount}
@@ -847,7 +851,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 : "bg-white/[0.03] border-white/[0.08] text-[#9A9EAE] hover:text-white"
             )}
           >
-            Tous
+            {t("common.all")}
           </button>
           {QUICK_GENRES.map((g) => {
             const selected = selectedGenres.includes(g.id);
@@ -863,7 +867,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.16]"
                 )}
               >
-                {g.label}
+                {tGenre(g.id)}
               </button>
             );
           })}

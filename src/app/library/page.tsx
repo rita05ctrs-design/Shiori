@@ -44,6 +44,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import { LuxurySelect, type LuxurySelectOption } from "@/components/ui/LuxurySelect";
 import { ContinueWatchingSection } from "@/components/media/ContinueWatchingSection";
@@ -166,6 +167,7 @@ function LibraryPageInner() {
     setCommandOpen,
     toast,
   } = useShiori();
+  const { t, tStatus, locale } = useTranslation();
 
   const [filters, setFilters] = useState<LibraryFilterState>(DEFAULT_LIBRARY_FILTERS);
   const [sortBy, setSortBy] = useState<LibrarySortKey>("UPDATED");
@@ -450,12 +452,13 @@ function LibraryPageInner() {
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Ma Bibliothèque
+            {t("library.title")}
           </h1>
           <p className="text-sm text-[#8A8FA4] mt-1">
-            {library.length.toLocaleString("fr-FR")}{" "}
-            {library.length > 1 ? "œuvres suivies" : "œuvre suivie"}
-            {orderedFavorites.length > 0 ? ` · ${orderedFavorites.length} favoris` : ""}
+            {library.length.toLocaleString(locale)} {t("common.titles")}
+            {orderedFavorites.length > 0
+              ? ` · ${orderedFavorites.length} ${t("library.favoritesOnly").toLowerCase()}`
+              : ""}
           </p>
         </div>
 
@@ -463,16 +466,16 @@ function LibraryPageInner() {
           {/* Media type segmented switch */}
           <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
             {[
-              { id: "ALL", label: "Tous" },
-              { id: "ANIME", label: "Animes" },
-              { id: "MANGA", label: "Mangas" },
-            ].map((t) => {
-              const active = filters.mediaType === t.id;
+              { id: "ALL", label: t("common.all") },
+              { id: "ANIME", label: t("common.anime") },
+              { id: "MANGA", label: t("common.manga") },
+            ].map((typeOpt) => {
+              const active = filters.mediaType === typeOpt.id;
               return (
                 <button
-                  key={t.id}
+                  key={typeOpt.id}
                   type="button"
-                  onClick={() => updateFilters({ mediaType: t.id as "ALL" | MediaType })}
+                  onClick={() => updateFilters({ mediaType: typeOpt.id as "ALL" | MediaType })}
                   className={cn(
                     "relative px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer",
                     active ? "text-white" : "text-[#9A9EAE] hover:text-white"
@@ -485,7 +488,7 @@ function LibraryPageInner() {
                       className="absolute inset-0 rounded-full bg-accent shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.35)]"
                     />
                   )}
-                  <span className="relative z-10">{t.label}</span>
+                  <span className="relative z-10">{typeOpt.label}</span>
                 </button>
               );
             })}
@@ -498,7 +501,7 @@ function LibraryPageInner() {
             className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-white text-[#0A0C12] hover:bg-[#ECEBE6] text-xs font-semibold transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Ajouter</span>
+            <span>{t("common.add")}</span>
           </button>
 
           {/* Secondary Tools Dropdown (Collections, Favorite Order, Import/Export) */}
@@ -608,7 +611,11 @@ function LibraryPageInner() {
               )}
             >
               <span className={cn("w-1.5 h-1.5 rounded-full", statusDot)} />
-              <span>{tab.label}</span>
+              <span>
+                {tab.id === "ALL"
+                  ? t("common.all")
+                  : tStatus(tab.id, filters.mediaType === "MANGA" ? "MANGA" : "ANIME")}
+              </span>
               <span
                 className={cn(
                   "text-[11px] font-mono px-1.5 py-0.5 rounded-md",
@@ -639,7 +646,7 @@ function LibraryPageInner() {
             type="text"
             value={filters.search}
             onChange={(e) => updateFilters({ search: e.target.value })}
-            placeholder="Rechercher dans ma bibliothèque..."
+            placeholder={t("library.searchPlaceholder")}
             className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.08] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/60"
           />
         </div>
@@ -661,7 +668,9 @@ function LibraryPageInner() {
             )}
           >
             <Heart className={cn("w-3.5 h-3.5", filters.favoritesOnly && "fill-current")} />
-            <span>Favoris ({orderedFavorites.length})</span>
+            <span>
+              {t("library.favoritesOnly")} ({orderedFavorites.length})
+            </span>
           </button>
 
           <button
@@ -675,7 +684,7 @@ function LibraryPageInner() {
             )}
           >
             <Filter className="w-3.5 h-3.5" />
-            <span>Filtres</span>
+            <span>{t("library.filters")}</span>
             {activeAdvancedCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-accent text-accent-fg font-mono text-[10px] font-bold">
                 {activeAdvancedCount}
@@ -1127,10 +1136,10 @@ function LibraryPageInner() {
         <div className="rounded-2xl card-surface py-16 px-6 text-center space-y-3">
           <Sparkles className="w-8 h-8 text-[#52576B] mx-auto" />
           <h3 className="text-base font-semibold text-white">
-            Aucun titre dans cette vue
+            {t("library.emptyTitle")}
           </h3>
           <p className="text-sm text-[#868B9F] max-w-md mx-auto">
-            Modifiez vos filtres combinés ou explorez le catalogue Shiori pour ajouter de nouveaux animés et mangas.
+            {t("library.emptySub")}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
             {(activeAdvancedCount > 0 || filters.favoritesOnly || filters.search || filters.status !== "ALL") && (
@@ -1139,14 +1148,14 @@ function LibraryPageInner() {
                 onClick={resetAllFilters}
                 className="px-4 py-2 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-white cursor-pointer"
               >
-                Réinitialiser les filtres
+                {t("discover.resetFilters")}
               </button>
             )}
             <Link
               href="/discover"
               className="px-5 py-2 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors"
             >
-              Découvrir des œuvres
+              {t("library.exploreCatalog")}
             </Link>
           </div>
         </div>

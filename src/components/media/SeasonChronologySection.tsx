@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useDragScroll } from "@/hooks/useDragScroll";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import type { SeasonTimelineEntry } from "@/types/media";
 
@@ -33,6 +34,7 @@ export function SeasonChronologySection({
   prevSeason,
   nextSeason,
 }: SeasonChronologySectionProps) {
+  const { t } = useTranslation();
   const activeCardRef = useRef<HTMLDivElement | null>(null);
   const {
     ref: scrollRef,
@@ -99,10 +101,10 @@ export function SeasonChronologySection({
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5" />
-            <span>Saisons & Chronologie</span>
+            <span>{t("detail.seasonsTitle")}</span>
           </p>
           <p className="text-xs text-[#8E93A6] mt-0.5">
-            Naviguez en un clic entre les {timeline.length} entrées de la franchise
+            {t("detail.seasonsSub")} ({timeline.length})
           </p>
         </div>
 
@@ -119,7 +121,7 @@ export function SeasonChronologySection({
                 )}
               >
                 <MoveHorizontal className="w-3 h-3" />
-                <span>{isDragging ? "Défilement..." : "Glisser"}</span>
+                <span>{isDragging ? t("common.scrolling") : t("common.drag")}</span>
               </span>
 
               <button
@@ -154,7 +156,7 @@ export function SeasonChronologySection({
                   className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-semibold text-[#E8E9F0] hover:text-white transition-colors"
                 >
                   <ArrowLeft className="w-3.5 h-3.5 text-accent-soft" />
-                  <span>Saison précédente</span>
+                  <span>{t("detail.prevSeason")}</span>
                 </Link>
               )}
               {nextSeason && (
@@ -162,7 +164,7 @@ export function SeasonChronologySection({
                   href={getSeasonHref(nextSeason)}
                   className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl bg-accent hover:bg-accent-hover border border-white/15 text-xs font-semibold text-accent-fg shadow-[0_8px_22px_rgba(229,72,77,0.32)] transition-colors"
                 >
-                  <span>Saison suivante</span>
+                  <span>{t("detail.nextSeason")}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               )}
@@ -274,7 +276,7 @@ export function SeasonChronologySection({
                     {isCurrent && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-accent text-accent-fg text-[9.5px] font-bold uppercase tracking-wider">
                         <Sparkles className="w-2.5 h-2.5" />
-                        Actuelle
+                        {t("detail.current")}
                       </span>
                     )}
                   </div>
@@ -349,7 +351,7 @@ export function SeasonChronologySection({
               className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3 rounded-xl bg-white/[0.06] border border-white/[0.1] text-xs font-semibold text-[#E8E9F0]"
             >
               <ArrowLeft className="w-3.5 h-3.5 text-accent-soft shrink-0" />
-              <span className="truncate">Saison précédente</span>
+              <span className="truncate">{t("detail.prevSeason")}</span>
             </Link>
           )}
           {nextSeason && (
@@ -357,7 +359,7 @@ export function SeasonChronologySection({
               href={getSeasonHref(nextSeason)}
               className="inline-flex items-center justify-center gap-1.5 min-h-[40px] px-3 rounded-xl bg-accent text-accent-fg text-xs font-semibold shadow-[0_6px_18px_rgba(229,72,77,0.3)]"
             >
-              <span className="truncate">Saison suivante</span>
+              <span className="truncate">{t("detail.nextSeason")}</span>
               <ArrowRight className="w-3.5 h-3.5 shrink-0" />
             </Link>
           )}

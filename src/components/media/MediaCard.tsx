@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { Star, Plus, Check, Edit3 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { StreamingIconsStrip } from "@/components/media/WhereToWatchSection";
 import {
   cn,
@@ -26,6 +27,7 @@ export const MediaCard = React.memo(function MediaCard({
   className,
 }: MediaCardProps) {
   const { getEntry, openQuickEdit } = useShiori();
+  const { t, tStatus } = useTranslation();
   const entry = getEntry(media.id);
   const title = getDisplayTitle(media);
   const statusCfg = entry ? STATUS_CONFIG[entry.status] : null;
@@ -75,8 +77,8 @@ export const MediaCard = React.memo(function MediaCard({
               <span className={cn("w-1.5 h-1.5 rounded-full", statusCfg.dot)} />
               <span>
                 {entry.progress > 0
-                  ? `${entry.type === "MANGA" ? "Ch." : "Ep."} ${entry.progress}`
-                  : statusCfg.shortLabel}
+                  ? `${entry.type === "MANGA" ? t("common.chShort") : t("common.epShort")} ${entry.progress}`
+                  : tStatus(entry.status, entry.type)}
               </span>
             </span>
           )}

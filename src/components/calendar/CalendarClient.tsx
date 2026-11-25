@@ -28,6 +28,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import { StreamingIconsStrip } from "@/components/media/WhereToWatchSection";
 import {
@@ -134,6 +135,7 @@ interface CalendarClientProps {
 
 export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   const { getEntry, quickAdd, upsertEntry, openQuickEdit, incrementProgress, openTrailer } = useShiori();
+  const { t } = useTranslation();
 
   const [tzMode, setTzMode] = useState<"local" | "jst">("local");
   const [localTimeZone, setLocalTimeZone] = useState<string>("UTC");
@@ -570,14 +572,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5 flex items-center gap-1.5">
             <CalendarDays className="w-3.5 h-3.5" />
-            <span>Simulcast du jour & Saisons Anime</span>
+            <span>{t("calendar.eyebrow")}</span>
           </p>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Calendrier & Saisons
+            {t("calendar.title")}
           </h1>
           <p className="text-sm text-[#8A8FA4] mt-1.5">
-            Suivez les épisodes qui sortent aujourd&apos;hui heure par heure, puis explorez les
-            prochaines saisons façon MyAnimeList.
+            {t("calendar.subtitle")}
           </p>
         </div>
 
@@ -680,7 +681,9 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               )}
             >
               <Bookmark className="w-3.5 h-3.5" />
-              <span>Ma Liste ({trackedThisWeek})</span>
+              <span>
+                {t("nav.myList")} ({trackedThisWeek})
+              </span>
             </button>
           </div>
         </div>

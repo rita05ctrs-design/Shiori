@@ -20,8 +20,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
-import { cn, getStatusLabel, STATUS_CONFIG } from "@/lib/utils";
+import { cn, STATUS_CONFIG } from "@/lib/utils";
 import type { LibraryStatus, MediaDetail } from "@/types/media";
 
 const STATUS_META: {
@@ -107,6 +108,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
     openQuickEdit,
     openTrailer,
   } = useShiori();
+  const { t, tStatus } = useTranslation();
 
   const entry = getEntry(media.id);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -226,7 +228,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
             栞
           </span>
           <span className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#9A9EAE]">
-            {entry ? "Dans ma bibliothèque" : "Suivi Shiori"}
+            {entry ? t("detail.inMyLibrary") : "Shiori"}
           </span>
         </div>
 
@@ -305,7 +307,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
             />
             <span className="relative z-10 flex items-center gap-2">
               <BookmarkPlus className="w-4 h-4" />
-              <span>Ajouter à ma bibliothèque</span>
+              <span>{t("detail.addToLibrary")}</span>
             </span>
             <ChevronDown
               className={cn(
@@ -348,7 +350,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
               </span>
               <ActiveIcon className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate text-[13px]">
-                {getStatusLabel(entry.status, media.type)}
+                {tStatus(entry.status, media.type)}
               </span>
             </span>
             <ChevronDown
@@ -408,7 +410,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                           isSelected ? cfg.color : "text-[#F4F3EE]"
                         )}
                       >
-                        {getStatusLabel(item.id, media.type)}
+                        {tStatus(item.id, media.type)}
                       </p>
                       <p className="text-[10.5px] text-[#7F8499] mt-0.5 truncate">
                         {media.type === "MANGA" ? item.mangaHint : item.hint}
@@ -470,12 +472,8 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                     )}
                   >
                     <Icon className={cn("w-3.5 h-3.5", cfg.color)} />
-                    <span className="text-[10px] font-medium text-[#D6D9E6] group-hover:text-white whitespace-nowrap">
-                      {s === "PLAN_TO_WATCH"
-                        ? "À voir"
-                        : s === "COMPLETED"
-                          ? "Terminé"
-                          : "En cours"}
+                    <span className="text-[10px] font-medium text-[#D6D9E6] group-hover:text-white whitespace-nowrap truncate max-w-full">
+                      {tStatus(s, media.type)}
                     </span>
                   </motion.button>
                 );
@@ -495,7 +493,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
             {/* Progress Meter & Stepper */}
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] space-y-2.5">
               <div className="flex items-center justify-between text-xs font-mono">
-                <span className="text-[#8E93A6]">Progression</span>
+                <span className="text-[#8E93A6]">{t("detail.progress")}</span>
                 <span className="text-white font-semibold flex items-center gap-1.5">
                   <span>{unitShort}</span>
                   <motion.span
@@ -614,7 +612,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="text-[#8E93A6] flex items-center gap-1.5 shrink-0">
                   <Star className="w-3.5 h-3.5 text-[#F0B95B] fill-[#F0B95B]" />
-                  <span>Note</span>
+                  <span>{t("detail.score")}</span>
                 </span>
                 <span className="font-mono font-semibold text-[#F0B95B] truncate text-[11.5px]">
                   {activeScorePreview
@@ -680,7 +678,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
             className="w-full h-9 rounded-xl bg-[#F0B95B]/12 hover:bg-[#F0B95B]/22 border border-[#F0B95B]/30 text-xs font-semibold text-[#F0B95B] flex items-center justify-center gap-2 transition-colors cursor-pointer"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Voir la bande-annonce</span>
+            <span>{t("detail.watchTrailer")}</span>
           </motion.button>
         )}
       </div>

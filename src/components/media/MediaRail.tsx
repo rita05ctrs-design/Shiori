@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, ArrowRight, MoveHorizontal } from "lucide-re
 import { MediaCard } from "./MediaCard";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
 import { useDragScroll } from "@/hooks/useDragScroll";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import type { MediaItem } from "@/types/media";
 
@@ -26,6 +27,7 @@ export function MediaRail({
   items,
   showRank = false,
 }: MediaRailProps) {
+  const { t } = useTranslation();
   const {
     ref: scrollRef,
     trackThumbRef,
@@ -66,7 +68,7 @@ export function MediaRail({
             )}
           >
             <MoveHorizontal className="w-3 h-3" />
-            <span>{isDragging ? "Défilement..." : "Glisser"}</span>
+            <span>{isDragging ? t("common.scrolling") : t("common.drag")}</span>
           </span>
 
           {href && (
@@ -74,7 +76,7 @@ export function MediaRail({
               href={href}
               className="group hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-[#A4A8BA] hover:text-white px-3 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.07] transition-all"
             >
-              <span>Voir tout</span>
+              <span>{t("common.viewAll")}</span>
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
             </Link>
           )}

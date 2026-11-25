@@ -16,6 +16,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { MediaCard } from "@/components/media/MediaCard";
 import { LibraryTrackerCard } from "@/components/media/LibraryTrackerCard";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
@@ -62,6 +63,7 @@ interface MediaDetailClientProps {
 export function MediaDetailClient({ media }: MediaDetailClientProps) {
   const router = useRouter();
   const { getEntry, upsertEntry } = useShiori();
+  const { t, tGenre, locale } = useTranslation();
 
   const handleBack = () => {
     if (
@@ -166,11 +168,11 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             {/* Metadata Card */}
             <div className="rounded-2xl card-surface p-4 space-y-3 text-xs">
               <h3 className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#858A9E]">
-                Fiche technique
+                {t("detail.techSheet")}
               </h3>
               <dl className="space-y-2.5">
                 <div className="flex justify-between gap-2">
-                  <dt className="text-[#7E8397]">Format</dt>
+                  <dt className="text-[#7E8397]">{t("discover.format")}</dt>
                   <dd className="text-[#ECEBE6] font-medium text-right">
                     {formatFormat(media.format)}
                   </dd>
@@ -178,9 +180,9 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 {media.type === "ANIME" ? (
                   <>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#7E8397]">Épisodes</dt>
+                      <dt className="text-[#7E8397]">{t("common.episodes")}</dt>
                       <dd className="text-[#ECEBE6] font-mono">
-                        {media.episodes ?? "En cours"}
+                        {media.episodes ?? "—"}
                       </dd>
                     </div>
                     {media.duration && (
@@ -193,9 +195,9 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 ) : (
                   <>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#7E8397]">Chapitres</dt>
+                      <dt className="text-[#7E8397]">{t("common.chapters")}</dt>
                       <dd className="text-[#ECEBE6] font-mono">
-                        {media.chapters ?? "En cours"}
+                        {media.chapters ?? "—"}
                       </dd>
                     </div>
                     {media.volumes && (
@@ -306,7 +308,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                     href={`/discover?genres=${encodeURIComponent(genre)}&type=${media.type}`}
                     className="group relative overflow-hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.045] hover:bg-accent/18 border border-white/[0.09] hover:border-accent/45 text-xs text-[#E4E6F0] hover:text-white transition-all"
                   >
-                    <span className="font-medium">{genre}</span>
+                    <span className="font-medium">{tGenre(genre)}</span>
                     {intensity !== null && (
                       <>
                         <span className="text-white/25">·</span>
@@ -347,7 +349,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
               {media.streamingLinks && media.streamingLinks.length > 0 && (
                 <div className="mt-3.5 flex flex-wrap items-center gap-2">
                   <span className="text-[11px] font-mono uppercase tracking-wider text-[#8E93A6]">
-                    {media.type === "MANGA" ? "Lire sur :" : "Regarder sur :"}
+                    {media.type === "MANGA" ? `${t("detail.whereToRead")} :` : `${t("detail.whereToWatch")} :`}
                   </span>
                   <StreamingPillsInline links={media.streamingLinks} max={4} />
                 </div>
@@ -399,14 +401,14 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                 <div>
                   <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent">
-                    Progression rapide
+                    {t("detail.quickProgress")}
                   </h2>
                   <p className="text-sm text-[#9A9EAE] mt-0.5">
-                    Cliquez sur un {unitLabel.toLowerCase()} pour mettre à jour votre avancement instantanément
+                    {t("library.resumeSub")}
                   </p>
                 </div>
                 <span className="font-mono text-xs text-[#C6CAD8]">
-                  Actuel : <strong className="text-white">{entry?.progress ?? 0}</strong>
+                  {t("detail.current")}: <strong className="text-white">{entry?.progress ?? 0}</strong>
                   {totalUnits ? ` / ${totalUnits}` : ""}
                 </span>
               </div>
@@ -461,7 +463,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                           >
                             <div
                               style={{ height: `${pct}%` }}
-                              title={`${bucket.score / 10}/10 : ${bucket.amount.toLocaleString("fr-FR")} votes`}
+                              title={`${bucket.score / 10}/10 : ${bucket.amount.toLocaleString(locale)}`}
                               className={cn(
                                 "w-full rounded-t-md transition-all",
                                 bucket.score >= 80
@@ -508,7 +510,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             {media.characters.length > 0 && (
               <RevealSection className="space-y-4">
                 <h2 className="text-lg font-semibold text-white">
-                  Personnages & Voix originales
+                  {t("detail.characters")}
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {media.characters.map((ch, idx) => (
@@ -598,7 +600,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             {media.recommendations.length > 0 && (
               <RevealSection className="space-y-4">
                 <h2 className="text-lg font-semibold text-white">
-                  Si vous aimez {title}
+                  {t("detail.recommendations")} · {title}
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                   {media.recommendations.slice(0, 8).map((rec) => (

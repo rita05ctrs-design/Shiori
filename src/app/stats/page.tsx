@@ -23,8 +23,9 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { computeLibraryAnalytics } from "@/lib/stats";
-import { cn, STATUS_CONFIG } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { LibraryStatus, MediaType } from "@/types/media";
 
 const StatsCoreCharts = dynamic(
@@ -71,6 +72,7 @@ const STATUS_COLORS_HEX: Record<LibraryStatus, string> = {
 
 export default function StatsPage() {
   const { library, activity, anilistStats } = useShiori();
+  const { t, tStatus } = useTranslation();
   const [scope, setScope] = useState<"ALL" | MediaType>("ALL");
   const [showWrapped, setShowWrapped] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -99,7 +101,7 @@ export default function StatsPage() {
     const statusData = statuses
       .map((s) => ({
         status: s,
-        name: STATUS_CONFIG[s].label,
+        name: tStatus(s, scope === "MANGA" ? "MANGA" : "ANIME"),
         value: analytics.statusCounts[s] ?? 0,
         color: STATUS_COLORS_HEX[s],
       }))
@@ -109,7 +111,7 @@ export default function StatsPage() {
       ...analytics,
       statusData,
     };
-  }, [entries, activity]);
+  }, [entries, activity, scope, tStatus]);
 
   const maxGenreCount = Math.max(1, ...metrics.topGenres.map((g) => g.count));
   const hasMonthlyActivity = metrics.monthlyActivity.some((m) => m.count > 0);
@@ -120,10 +122,10 @@ export default function StatsPage() {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Statistiques
+            {t("stats.title")}
           </h1>
           <p className="text-sm text-[#8A8FA4] mt-1">
-            L&apos;essentiel de votre bibliothèque Shiori, calculé en temps réel.
+            {t("stats.subtitle")}
           </p>
         </div>
 

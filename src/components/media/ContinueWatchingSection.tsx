@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, SlidersHorizontal, ArrowRight, BookOpen, Tv } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { CINEMA_EASE, RevealSection } from "@/components/motion/MotionPrimitives";
 
 interface ContinueWatchingSectionProps {
@@ -15,6 +16,7 @@ export function ContinueWatchingSection({
   embeddedInLibrary = false,
 }: ContinueWatchingSectionProps) {
   const { library, incrementProgress, openQuickEdit, setCommandOpen } = useShiori();
+  const { t } = useTranslation();
   const [pulseMap, setPulseMap] = useState<Record<number, number>>({});
   const [mediaFilter, setMediaFilter] = useState<"ALL" | "ANIME" | "MANGA">("ALL");
 
@@ -50,10 +52,10 @@ export function ContinueWatchingSection({
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
           <h2 className="text-lg sm:text-xl font-semibold tracking-tight text-[#F4F3EE]">
-            Reprendre la lecture
+            {t("library.resumeTitle")}
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-0.5">
-            Avancez votre progression en un clic (+ Ép. / + Ch.)
+            {t("library.resumeSub")}
           </p>
         </div>
 
@@ -63,9 +65,9 @@ export function ContinueWatchingSection({
             <div className="inline-flex items-center p-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px]">
               {(
                 [
-                  { id: "ALL", label: `Tous (${allWatching.length})` },
-                  { id: "ANIME", label: `Animes (${watchingAnimeCount})` },
-                  { id: "MANGA", label: `Mangas (${watchingMangaCount})` },
+                  { id: "ALL", label: `${t("common.all")} (${allWatching.length})` },
+                  { id: "ANIME", label: `${t("common.anime")} (${watchingAnimeCount})` },
+                  { id: "MANGA", label: `${t("common.manga")} (${watchingMangaCount})` },
                 ] as const
               ).map((opt) => (
                 <button
@@ -92,14 +94,14 @@ export function ContinueWatchingSection({
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Ajouter un titre</span>
+                <span>{t("common.add")}</span>
               </button>
 
               <Link
                 href="/library?status=WATCHING"
                 className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white transition-colors"
               >
-                <span>Bibliothèque</span>
+                <span>{t("nav.library")}</span>
                 <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </>
@@ -111,13 +113,13 @@ export function ContinueWatchingSection({
       {watching.length === 0 ? (
         <div className="rounded-2xl card-surface p-8 text-center">
           <p className="text-sm text-[#B7BBC9]">
-            Vous n&apos;avez aucun anime ou manga en cours pour l&apos;instant.
+            {t("library.emptySub")}
           </p>
           <Link
             href="/discover"
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hover transition-colors"
           >
-            Explorer le catalogue
+            {t("library.exploreCatalog")}
           </Link>
         </div>
       ) : (

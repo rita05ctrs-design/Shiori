@@ -83,7 +83,10 @@ export function resolveSpeechLocale(lang?: string | null): string {
   const clean = (lang ?? "fr").trim().toLowerCase();
   if (clean.startsWith("en")) return "en-US";
   if (clean.startsWith("es")) return "es-ES";
+  if (clean.startsWith("de")) return "de-DE";
   if (clean.startsWith("it")) return "it-IT";
+  if (clean.startsWith("pt")) return "pt-BR";
+  if (clean.startsWith("ja")) return "ja-JP";
   return "fr-FR";
 }
 

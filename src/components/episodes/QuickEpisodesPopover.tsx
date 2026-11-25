@@ -13,6 +13,7 @@ import {
   Tv,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import type { WatchingAiringItem } from "@/app/api/anilist/watching-airing/route";
 
@@ -46,6 +47,7 @@ function formatShortBroadcastDay(unixSec: number | null): string {
  */
 export function QuickEpisodesPopover() {
   const { library, hydrated, incrementProgress } = useShiori();
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [airingItems, setAiringItems] = useState<WatchingAiringItem[]>([]);
@@ -190,7 +192,7 @@ export function QuickEpisodesPopover() {
         )}
       >
         <ListChecks className="w-3.5 h-3.5 text-accent-soft shrink-0" />
-        <span className="hidden 2xl:inline whitespace-nowrap">À voir</span>
+        <span className="hidden 2xl:inline whitespace-nowrap">{t("nav.toWatch")}</span>
         {(unwatchedAiredCount > 0 || watchingAnime.length > 0) && (
           <span
             className={cn(
@@ -219,7 +221,7 @@ export function QuickEpisodesPopover() {
               <div>
                 <p className="text-xs font-bold text-white flex items-center gap-1.5">
                   <Flame className="w-3.5 h-3.5 text-accent" />
-                  <span>Épisodes de la semaine · À voir</span>
+                  <span>{t("episodes.quickHeader")}</span>
                 </p>
                 <p className="text-[11px] text-[#8A8FA4] mt-0.5">
                   {unwatchedAiredCount > 0
@@ -312,12 +314,12 @@ export function QuickEpisodesPopover() {
                           className="shrink-0 h-8.5 px-3 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-[11.5px] font-bold inline-flex items-center gap-1 shadow-[0_6px_16px_rgba(229,72,77,0.35)] transition-colors cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
-                          <span>+1 Vu</span>
+                          <span>{t("episodes.markWatched")}</span>
                         </motion.button>
                       ) : (
                         <span className="shrink-0 h-8 px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-[11px] font-semibold inline-flex items-center gap-1">
                           <Check className="w-3.5 h-3.5" />
-                          <span>Fini</span>
+                          <span>{t("home.completed")}</span>
                         </span>
                       )}
                     </div>
@@ -333,7 +335,7 @@ export function QuickEpisodesPopover() {
                 onClick={() => setOpen(false)}
                 className="w-full py-2 px-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.08] text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors"
               >
-                <span>Ouvrir toute la semaine</span>
+                <span>{t("episodes.seeFullWeek")}</span>
                 <ArrowRight className="w-3.5 h-3.5 text-accent-soft" />
               </Link>
             </div>

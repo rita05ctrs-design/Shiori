@@ -9,6 +9,7 @@ import {
   getStreamingPlatformMeta,
 } from "@/lib/streaming";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { MediaType, StreamingLink } from "@/types/media";
 
 function PlatformAvatar({
@@ -156,6 +157,7 @@ export function WhereToWatchSection({
   type: MediaType;
   links?: StreamingLink[];
 }) {
+  const { t } = useTranslation();
   const verifiedLinks = links ?? [];
   const regionalShortcuts = buildRegionalSearchLinks(title, type);
   const isManga = type === "MANGA";
@@ -169,22 +171,22 @@ export function WhereToWatchSection({
         <div>
           <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-accent flex items-center gap-1.5">
             {isManga ? <BookOpen className="w-3.5 h-3.5" /> : <Tv className="w-3.5 h-3.5" />}
-            <span>{isManga ? "Où lire officiellement" : "Où regarder"}</span>
+            <span>{isManga ? t("detail.whereToRead") : t("detail.whereToWatch")}</span>
           </h2>
           <p className="text-xs text-[#9A9EAE] mt-1">
             {verifiedLinks.length > 0
               ? isManga
-                ? "Plateformes officielles référencées sur AniList pour ce manga."
-                : "Plateformes de streaming officielles référencées sur AniList (la disponibilité peut varier selon le pays)."
+                ? t("detail.whereSubManga")
+                : t("detail.whereSubAnime")
               : isManga
-                ? "Aucune plateforme de lecture officielle n'est encore référencée sur AniList pour ce titre."
-                : "Aucune plateforme de streaming officielle n'est encore référencée sur AniList pour cet animé."}
+                ? t("detail.whereEmptyManga")
+                : t("detail.whereEmptyAnime")}
           </p>
         </div>
 
         {verifiedLinks.length > 0 && (
           <span className="px-2.5 py-1 rounded-full bg-white/[0.05] border border-white/[0.09] font-mono text-[10.5px] text-[#C8CCE0] shrink-0">
-            {verifiedLinks.length} plateforme{verifiedLinks.length > 1 ? "s" : ""}
+            {verifiedLinks.length} {t("detail.platformsCount")}
           </span>
         )}
       </div>
@@ -221,10 +223,10 @@ export function WhereToWatchSection({
                     </div>
                     <p className="text-[11px] text-[#858A9E] truncate">
                       {link.isSearchFallback
-                        ? "Rechercher sur la plateforme"
+                        ? t("detail.searchPlatform")
                         : isManga
-                          ? "Lire sur la plateforme"
-                          : "Regarder officiellement"}
+                          ? t("detail.readOfficial")
+                          : t("detail.watchOfficial")}
                     </p>
                   </div>
                 </div>
@@ -239,7 +241,7 @@ export function WhereToWatchSection({
       <div className="pt-3 border-t border-white/[0.07] flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-[#858A9E] inline-flex items-center gap-1.5 mr-1">
           <Search className="w-3 h-3 text-[#F0B95B]" />
-          <span>Vérifier la disponibilité en France :</span>
+          <span>{t("detail.checkAvailability")}</span>
         </span>
         {regionalShortcuts.map((sc) => (
           <a

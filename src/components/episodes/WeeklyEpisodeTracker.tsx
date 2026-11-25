@@ -22,6 +22,7 @@ import {
   Flame,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   cn,
   formatCountdown,
@@ -183,6 +184,7 @@ export function WeeklyEpisodeTracker({
     anilistAutoSync,
     toast,
   } = useShiori();
+  const { t } = useTranslation();
 
   const [watchingLive, setWatchingLive] = useState<WatchingAiringItem[]>([]);
   const [loadingMyAiring, setLoadingMyAiring] = useState(false);
@@ -600,18 +602,10 @@ export function WeeklyEpisodeTracker({
             <span>Semaine / Aujourd&apos;hui · Suivi Rapide</span>
           </p>
           <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Épisodes de la Semaine
+            {t("episodes.title")}
           </h1>
           <p className="text-xs sm:text-sm text-[#8A8FA4] mt-1 max-w-2xl">
-            <span className="sm:hidden">
-              Appuyez sur <strong className="text-white">+1 Vu</strong> pour mettre à jour en 1 clic.
-            </span>
-            <span className="hidden sm:inline">
-              Vos animés en cours ayant un nouvel épisode sorti aujourd&apos;hui ou à rattraper
-              s&apos;affichent en priorité. Cliquez sur{" "}
-              <strong className="text-white">+1 Vu</strong> pour enregistrer directement sans
-              modale.
-            </span>
+            {t("episodes.subtitle")}
           </p>
         </div>
 
@@ -627,7 +621,7 @@ export function WeeklyEpisodeTracker({
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-semibold text-white transition-colors"
           >
             <CalendarDays className="w-3.5 h-3.5 text-kinpaku" />
-            <span>Calendrier & Saisons</span>
+            <span>{t("calendar.title")}</span>
           </Link>
         </div>
       </div>
@@ -651,7 +645,7 @@ export function WeeklyEpisodeTracker({
               {stats.airedCount > 0 && stats.unwatchedCount === 0 && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-[11px] font-semibold text-emerald-300">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Tout est à jour !
+                  {t("episodes.allCaughtUp")}
                 </span>
               )}
             </div>
@@ -713,11 +707,11 @@ export function WeeklyEpisodeTracker({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
             {[
-              { id: "all" as const, label: "Semaine", count: stats.totalCount },
-              { id: "today" as const, label: "Aujourd'hui", count: stats.todayCount },
-              { id: "unwatched" as const, label: "À voir", count: stats.unwatchedCount },
-              { id: "watched" as const, label: "Vus ✓", count: stats.watchedCount },
-              { id: "upcoming" as const, label: "À venir", count: stats.upcomingCount },
+              { id: "all" as const, label: t("nav.week"), count: stats.totalCount },
+              { id: "today" as const, label: t("episodes.today"), count: stats.todayCount },
+              { id: "unwatched" as const, label: t("nav.toWatch"), count: stats.unwatchedCount },
+              { id: "watched" as const, label: `${t("common.saved")} ✓`, count: stats.watchedCount },
+              { id: "upcoming" as const, label: t("nav.releases"), count: stats.upcomingCount },
             ].map((tab) => {
               const active = filterTab === tab.id;
               return (
@@ -987,10 +981,10 @@ export function WeeklyEpisodeTracker({
                             >
                               <span className="inline-flex items-center gap-1">
                                 <Plus className="w-4 h-4 stroke-[2.8]" />
-                                <span>+1 Vu</span>
+                                <span>{t("episodes.markWatched")}</span>
                               </span>
                               <span className="font-mono text-[10px] opacity-85">
-                                Ép. {nextStepEp}
+                                {t("common.epShort")} {nextStepEp}
                               </span>
                             </motion.button>
                           )

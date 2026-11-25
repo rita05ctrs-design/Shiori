@@ -18,6 +18,8 @@ import {
   Clock,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { UiMessageKey } from "@/lib/ui-translations";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { ActivityCard } from "@/components/social/ActivityCard";
@@ -44,17 +46,18 @@ type FeedSource = "shiori" | "anilist";
 
 const ACTIVITY_FILTERS: {
   id: "ALL" | CommunityActivityKind;
-  label: string;
+  labelKey: UiMessageKey;
 }[] = [
-  { id: "ALL", label: "Tout" },
-  { id: "FAVORITE_MEDIA", label: "Favoris" },
-  { id: "COMPLETED", label: "Terminés" },
-  { id: "SCORED", label: "Notes" },
-  { id: "BADGE_UNLOCKED", label: "Badges" },
-  { id: "FAVORITE_STAFF", label: "Doubleurs" },
+  { id: "ALL", labelKey: "common.all" },
+  { id: "FAVORITE_MEDIA", labelKey: "community.filterFavorites" },
+  { id: "COMPLETED", labelKey: "community.filterCompleted" },
+  { id: "SCORED", labelKey: "community.filterScored" },
+  { id: "BADGE_UNLOCKED", labelKey: "community.filterBadges" },
+  { id: "FAVORITE_STAFF", labelKey: "community.filterStaff" },
 ];
 
 export function CommunityClient() {
+  const { t } = useTranslation();
   const {
     profile,
     friends,
@@ -244,10 +247,10 @@ export function CommunityClient() {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
-            Communauté
+            {t("community.title")}
           </h1>
           <p className="text-sm text-[#8A8FA4] mt-1">
-            Suivez l&apos;activité des membres, ajoutez vos amis et discutez en privé.
+            {t("community.subtitle")}
           </p>
         </div>
 
@@ -257,14 +260,14 @@ export function CommunityClient() {
             className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-white transition-colors"
           >
             <UserCircle2 className="w-3.5 h-3.5 text-accent" />
-            <span>Mon profil</span>
+            <span>{t("nav.myProfile")}</span>
           </Link>
           <Link
             href="/messages"
             className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors"
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>Messages</span>
+            <span>{t("nav.messages")}</span>
           </Link>
         </div>
       </div>
@@ -284,7 +287,7 @@ export function CommunityClient() {
               )}
             >
               <Activity className="w-3.5 h-3.5 shrink-0" />
-              <span>Fil d&apos;activité</span>
+              <span>{t("community.tabFeed")}</span>
             </button>
             <button
               type="button"
@@ -297,7 +300,9 @@ export function CommunityClient() {
               )}
             >
               <UserPlus className="w-3.5 h-3.5 shrink-0" />
-              <span>Amis ({friends.length})</span>
+              <span>
+                {t("community.tabFriends")} ({friends.length})
+              </span>
               {incomingFriendRequests.length > 0 && (
                 <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold leading-none">
                   +{incomingFriendRequests.length}
@@ -315,7 +320,9 @@ export function CommunityClient() {
               )}
             >
               <Users className="w-3.5 h-3.5 shrink-0" />
-              <span>Membres ({totalMembersCount || profiles.length})</span>
+              <span>
+                {t("community.tabMembers")} ({totalMembersCount || profiles.length})
+              </span>
             </button>
           </div>
         </div>
@@ -368,7 +375,7 @@ export function CommunityClient() {
               type="text"
               value={memberQuery}
               onChange={(e) => setMemberQuery(e.target.value)}
-              placeholder="Rechercher un membre ou @pseudo..."
+              placeholder={t("community.searchMember")}
               className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
             />
           </div>
@@ -396,7 +403,7 @@ export function CommunityClient() {
                         : "bg-obsidian/70 border-white/[0.08] text-[#9A9EAE] hover:text-white hover:border-white/[0.18]"
                     )}
                   >
-                    {f.label}
+                    {t(f.labelKey)}
                   </button>
                 ))}
               </div>
@@ -469,7 +476,7 @@ export function CommunityClient() {
                     <p className="font-mono text-base font-bold text-emerald-400">
                       {friends.length}
                     </p>
-                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">Amis</p>
+                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">{t("community.friends")}</p>
                   </button>
                   <button
                     type="button"
@@ -479,7 +486,7 @@ export function CommunityClient() {
                     <p className="font-mono text-base font-bold text-kinpaku">
                       {totalMembersCount || profiles.length}
                     </p>
-                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">Membres</p>
+                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">{t("community.members")}</p>
                   </button>
                   <button
                     type="button"
@@ -489,7 +496,7 @@ export function CommunityClient() {
                     <p className="font-mono text-base font-bold text-accent">
                       {incomingFriendRequests.length}
                     </p>
-                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">Demandes</p>
+                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">{t("community.requests")}</p>
                   </button>
                 </div>
 
@@ -500,14 +507,14 @@ export function CommunityClient() {
                     className="h-9 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-semibold text-white inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Gérer amis</span>
+                    <span>{t("community.manageFriends")}</span>
                   </button>
                   <Link
                     href="/messages"
                     className="h-9 px-3 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Messages</span>
+                    <span>{t("nav.messages")}</span>
                   </Link>
                 </div>
               </div>
@@ -517,14 +524,14 @@ export function CommunityClient() {
                 <div className="flex items-center justify-between gap-2">
                   <h2 className="text-xs font-mono uppercase tracking-[0.16em] text-kinpaku flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5" />
-                    <span>Membres actifs</span>
+                    <span>{t("community.activeMembers")}</span>
                   </h2>
                   <button
                     type="button"
                     onClick={() => setTab("members")}
                     className="text-[11px] font-semibold text-accent-soft hover:text-white transition-colors cursor-pointer"
                   >
-                    Voir tout
+                    {t("common.viewAll")}
                   </button>
                 </div>
 

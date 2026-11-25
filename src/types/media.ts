@@ -239,7 +239,7 @@ export interface FavoriteVoiceActor {
   notableRoles?: { name: string; mediaTitle?: string | null }[];
 }
 
-export type ContentLanguage = "fr" | "en" | "es" | "it";
+export type ContentLanguage = "fr" | "en" | "es" | "de" | "it" | "pt" | "ja";
 
 export type PosterSize = "compact" | "normal" | "large";
 export type LibraryDensity = "compact" | "comfortable";

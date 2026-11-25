@@ -126,11 +126,24 @@ export function buildUserTasteSummary(entries: TasteLibraryEntry[]): UserTasteSu
   };
 }
 
+const AI_LANGUAGE_LABEL: Record<string, string> = {
+  fr: "français",
+  en: "English",
+  es: "español",
+  de: "Deutsch",
+  it: "italiano",
+  pt: "português",
+  ja: "日本語 (Japanese)",
+};
+
 export function buildShioriSystemPrompt(
   summary: UserTasteSummary,
-  displayName?: string | null
+  displayName?: string | null,
+  preferredLanguage?: string | null
 ): string {
   const userLabel = displayName?.trim() ? displayName.trim() : "l'utilisateur";
+  const replyLang =
+    AI_LANGUAGE_LABEL[(preferredLanguage ?? "fr").trim().toLowerCase()] ?? "français";
 
   const favLine =
     summary.favorites.length > 0
@@ -163,7 +176,7 @@ export function buildShioriSystemPrompt(
 
   return [
     `Tu es Shiori IA, l'assistant personnel d'anime de ${userLabel} dans l'application Shiori.`,
-    `Ton style est naturel, passionné, précis et concis (réponds en français sauf si l'utilisateur écrit dans une autre langue).`,
+    `Ton style est naturel, passionné, précis et concis. Réponds en ${replyLang} (sauf si l'utilisateur écrit explicitement dans une autre langue).`,
     ``,
     `## Profil de goûts de ${userLabel}`,
     `- Favoris : ${favLine}`,

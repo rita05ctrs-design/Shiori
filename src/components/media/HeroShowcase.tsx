@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import { StreamingPillsInline } from "@/components/media/WhereToWatchSection";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
@@ -29,7 +30,6 @@ import {
   formatScore,
   formatSeason,
   getDisplayTitle,
-  getStatusLabel,
 } from "@/lib/utils";
 import type { MediaItem } from "@/types/media";
 
@@ -41,6 +41,7 @@ interface HeroShowcaseProps {
 
 export function HeroShowcase({ items }: HeroShowcaseProps) {
   const { getEntry, openQuickEdit, openTrailer } = useShiori();
+  const { t, tStatus, tGenre, tSeason } = useTranslation();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [heroDragging, setHeroDragging] = useState(false);
@@ -213,7 +214,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                 >
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/35 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-soft">
                     <Sparkles className="w-3 h-3" />
-                    Sélection Shiori
+                    {t("home.heroTrending")}
                   </span>
                   {active.averageScore && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md border border-white/[0.12] text-xs font-mono font-semibold text-[#F0B95B]">
@@ -224,11 +225,13 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.06] backdrop-blur-md border border-white/[0.08] text-xs text-[#CFD3E0]">
                     <Tv className="w-3 h-3 text-[#9A9EAE]" />
                     {formatFormat(active.format)}
-                    {active.episodes ? ` · ${active.episodes} ép.` : ""}
+                    {active.episodes ? ` · ${active.episodes} ${t("common.epShort")}` : ""}
                   </span>
                   {active.seasonYear && (
                     <span className="text-xs font-mono text-[#A6AAB8] px-1">
-                      {formatSeason(active.season, active.seasonYear)}
+                      {active.season
+                        ? `${tSeason(active.season)} ${active.seasonYear}`
+                        : formatSeason(active.season, active.seasonYear)}
                     </span>
                   )}
                 </motion.div>
@@ -281,7 +284,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                       href={`/discover?genre=${encodeURIComponent(g)}`}
                       className="px-2.5 py-0.5 rounded-full bg-white/[0.06] hover:bg-white/[0.14] border border-white/[0.08] text-[#D7DAE6] transition-colors"
                     >
-                      {g}
+                      {tGenre(g)}
                     </Link>
                   ))}
                 </motion.div>
@@ -296,7 +299,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                     className="mt-3 flex flex-wrap items-center gap-2"
                   >
                     <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE]">
-                      Regarder sur :
+                      {t("detail.whereToWatch")} :
                     </span>
                     <StreamingPillsInline links={active.streamingLinks} max={3} />
                   </motion.div>
@@ -331,7 +334,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                       className="inline-flex items-center gap-2 h-10 sm:h-11 px-4 sm:px-6 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs sm:text-sm font-semibold shadow-[0_12px_34px_rgb(var(--shiori-accent-rgb)/0.45)] transition-colors"
                     >
                       <Info className="w-4 h-4" />
-                      <span>Voir la fiche</span>
+                      <span>{t("home.heroViewSheet")}</span>
                     </Link>
                   </motion.div>
 
@@ -351,14 +354,14 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                       <>
                         <Check className="w-4 h-4 text-emerald-400" />
                         <span>
-                          {getStatusLabel(entry.status, entry.type)}
-                          {entry.progress > 0 ? ` · Ép. ${entry.progress}` : ""}
+                          {tStatus(entry.status, entry.type)}
+                          {entry.progress > 0 ? ` · ${entry.progress}` : ""}
                         </span>
                       </>
                     ) : (
                       <>
                         <Plus className="w-4 h-4" />
-                        <span>Ajouter à ma liste</span>
+                        <span>{t("home.heroAddToList")}</span>
                       </>
                     )}
                   </motion.button>
@@ -372,7 +375,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                       className="inline-flex items-center gap-2 h-10 sm:h-11 px-4 sm:px-5 rounded-full bg-black/45 hover:bg-black/70 backdrop-blur-md border border-white/[0.14] text-xs sm:text-sm font-medium text-[#E9E8E3] transition-all cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current text-[#F0B95B]" />
-                      <span>Bande-annonce</span>
+                      <span>{t("detail.watchTrailer")}</span>
                     </motion.button>
                   )}
                 </motion.div>

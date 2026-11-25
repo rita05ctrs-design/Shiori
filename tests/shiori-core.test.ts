@@ -17,7 +17,14 @@ import {
 } from "../src/lib/calendar-utils.ts";
 import { computeProfileAffinity } from "../src/lib/affinity.ts";
 import { evaluateAllBadges, extractBadgeMetrics } from "../src/lib/badges.ts";
-import { normalizeContentLanguage } from "../src/lib/i18n.ts";
+import { CONTENT_LANGUAGES, normalizeContentLanguage } from "../src/lib/i18n.ts";
+import {
+  translateGenreName,
+  translateLibraryStatus,
+  translateSeasonName,
+  translateUi,
+  UI_TRANSLATIONS,
+} from "../src/lib/ui-translations.ts";
 import {
   DEFAULT_DISCOVER_STATE,
   discoverStateToSearchParams,
@@ -1101,7 +1108,10 @@ test("ai-voice: resolves locales, merges voice transcripts, cleans markdown for 
   assert.equal(resolveSpeechLocale("fr"), "fr-FR");
   assert.equal(resolveSpeechLocale("en"), "en-US");
   assert.equal(resolveSpeechLocale("es"), "es-ES");
+  assert.equal(resolveSpeechLocale("de"), "de-DE");
   assert.equal(resolveSpeechLocale("it"), "it-IT");
+  assert.equal(resolveSpeechLocale("pt"), "pt-BR");
+  assert.equal(resolveSpeechLocale("ja"), "ja-JP");
   assert.equal(resolveSpeechLocale(null), "fr-FR");
 
   assert.equal(
@@ -1138,4 +1148,46 @@ test("ai-voice: resolves locales, merges voice transcripts, cleans markdown for 
   assert.ok(
     mapMediaDeviceErrorToFrench({ name: "SecurityError" }).includes("HTTPS")
   );
+});
+
+test("i18n & ui-translations: supports all 7 languages completely without missing keys", () => {
+  const expectedLangs = ["fr", "en", "es", "de", "it", "pt", "ja"] as const;
+  assert.deepEqual(
+    CONTENT_LANGUAGES.map((l) => l.id),
+    expectedLangs
+  );
+
+  assert.equal(normalizeContentLanguage("de-DE"), "de");
+  assert.equal(normalizeContentLanguage("pt-BR"), "pt");
+  assert.equal(normalizeContentLanguage("ja-JP"), "ja");
+  assert.equal(normalizeContentLanguage("it-IT"), "it");
+  assert.equal(normalizeContentLanguage("unknown-xx"), "fr");
+
+  const frKeys = Object.keys(UI_TRANSLATIONS.fr).sort();
+  assert.ok(frKeys.length >= 100, "Expected comprehensive UI translation dictionary");
+
+  for (const lang of expectedLangs) {
+    const dict = UI_TRANSLATIONS[lang];
+    assert.deepEqual(Object.keys(dict).sort(), frKeys, `Keys mismatch for language ${lang}`);
+    for (const key of frKeys) {
+      const value = dict[key as keyof typeof dict];
+      assert.equal(typeof value, "string", `Missing string for ${lang}.${key}`);
+      assert.ok(value.trim().length > 0, `Empty translation for ${lang}.${key}`);
+    }
+  }
+
+  assert.equal(translateUi("en", "nav.home"), "Home");
+  assert.equal(translateUi("es", "nav.library"), "Biblioteca");
+  assert.equal(translateUi("de", "nav.discover"), "Entdecken");
+  assert.equal(translateUi("ja", "nav.community"), "コミュニティ");
+  assert.equal(translateUi("pt", "nav.settings"), "Configurações");
+
+  assert.equal(translateLibraryStatus("en", "WATCHING", "ANIME"), "Watching");
+  assert.equal(translateLibraryStatus("en", "WATCHING", "MANGA"), "Reading");
+  assert.equal(translateLibraryStatus("ja", "COMPLETED", "ANIME"), "完了");
+  assert.equal(translateGenreName("fr", "Slice of Life"), "Tranche de vie");
+  assert.equal(translateGenreName("ja", "Fantasy"), "ファンタジー");
+  assert.equal(translateSeasonName("en", "SPRING"), "Spring");
+  assert.equal(translateSeasonName("de", "WINTER"), "Winter");
+  assert.equal(translateSeasonName("ja", "FALL"), "秋");
 });
