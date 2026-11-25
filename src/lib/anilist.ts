@@ -124,7 +124,9 @@ export function normalizeMedia(raw: any): MediaItem {
           episode: raw.nextAiringEpisode.episode,
         }
       : null,
-    streamingLinks: normalizeStreamingLinks(raw?.externalLinks, raw?.streamingEpisodes),
+    streamingLinks: normalizeStreamingLinks(raw?.externalLinks, raw?.streamingEpisodes, {
+      title: raw?.title?.english || raw?.title?.romaji || null,
+    }),
   };
 }
 

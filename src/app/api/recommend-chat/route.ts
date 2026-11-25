@@ -250,7 +250,9 @@ function normalizeAniListItem(raw: any): MediaItem {
     studio: raw.studios?.nodes?.[0]?.name ?? null,
     trailer: raw.trailer ?? null,
     nextAiringEpisode: raw.nextAiringEpisode ?? null,
-    streamingLinks: normalizeStreamingLinks(raw.externalLinks),
+    streamingLinks: normalizeStreamingLinks(raw.externalLinks, undefined, {
+      title: raw.title?.english || raw.title?.romaji || null,
+    }),
   };
 }
 

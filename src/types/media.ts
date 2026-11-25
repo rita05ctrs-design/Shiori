@@ -33,6 +33,7 @@ export interface StreamingLink {
   color: string | null;
   language: string | null;
   notes: string | null;
+  isSearchFallback?: boolean;
 }
 
 export interface MediaItem {

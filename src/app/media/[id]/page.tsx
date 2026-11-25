@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { fetchMediaDetail } from "@/lib/anilist";
+import { verifyStreamingLinksServer } from "@/lib/server/verify-streaming-links";
 import { MediaDetailClient } from "@/components/media/MediaDetailClient";
 
 export const revalidate = 300;
@@ -36,5 +37,14 @@ export default async function MediaDetailPage({
     );
   }
 
-  return <MediaDetailClient media={media} />;
+  const verifiedStreamingLinks = await verifyStreamingLinksServer(media.streamingLinks);
+
+  return (
+    <MediaDetailClient
+      media={{
+        ...media,
+        streamingLinks: verifiedStreamingLinks,
+      }}
+    />
+  );
 }

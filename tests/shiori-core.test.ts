@@ -640,28 +640,76 @@ test("affinity: surfaces shared genres, agreements, and score debates", () => {
   assert.equal(aff.biggestDebates[0]?.scoreDiff, 3);
 });
 
-test("streaming: prioritizes major platforms, upgrades https, filters unsafe/disabled links", () => {
+test("streaming: prioritizes EU-working platforms, repairs legacy Crunchyroll/Netflix/Amazon URLs, and filters dead/geo-locked links", () => {
   const links = normalizeStreamingLinks(
     [
+      // Geo-locked / dead / promo-channel links that must be dropped
       { id: 1, site: "Bilibili TV", url: "https://www.bilibili.tv/en/media/1", type: "STREAMING", isDisabled: false },
-      { id: 2, site: "Netflix", url: "https://www.netflix.com/title/123", type: "STREAMING", isDisabled: false },
-      { id: 3, site: "Crunchyroll", url: "http://www.crunchyroll.com/frieren", type: "STREAMING", isDisabled: false },
-      { id: 4, site: "Twitter", url: "https://twitter.com/anime", type: "SOCIAL", isDisabled: false },
-      { id: 5, site: "Evil", url: "javascript:alert(1)", type: "STREAMING", isDisabled: false },
-      { id: 6, site: "Hulu", url: "https://www.hulu.com/disabled", type: "STREAMING", isDisabled: true },
+      { id: 2, site: "Hulu", url: "https://www.hulu.com/attack-on-titan", type: "STREAMING", isDisabled: false },
+      { id: 3, site: "Tubi TV", url: "https://tubitv.com/series/1630/death_note", type: "STREAMING", isDisabled: false },
+      { id: 4, site: "Wakanim", url: "https://www.wakanim.tv/fr/v2/catalogue/show/1", type: "STREAMING", isDisabled: false },
+      { id: 5, site: "Netflix", url: "https://www.netflix.com/title/81215627", type: "STREAMING", notes: "IN", isDisabled: false },
+      { id: 6, site: "YouTube", url: "https://www.youtube.com/@AniOneAsia", type: "STREAMING", notes: "Ani-One Asia", isDisabled: false },
+      { id: 7, site: "Twitter", url: "https://twitter.com/anime", type: "SOCIAL", isDisabled: false },
+      { id: 8, site: "Evil", url: "javascript:alert(1)", type: "STREAMING", isDisabled: false },
+      // Valid & repairable links
+      { id: 9, site: "Netflix", url: "http://www.netflix.com/watch/81726714", type: "STREAMING", isDisabled: false },
+      { id: 10, site: "Crunchyroll", url: "http://www.crunchyroll.com/frieren", type: "STREAMING", isDisabled: false },
+      { id: 11, site: "Amazon Prime Video", url: "https://www.amazon.com/Frieren/dp/B0EXAMPLE", type: "STREAMING", isDisabled: false },
     ],
-    [{ site: "ADN", url: "https://animationdigitalnetwork.com/video/frieren" }]
+    [{ site: "ADN", url: "https://animedigitalnetwork.fr/video/frieren" }],
+    { title: "Frieren: Beyond Journey's End" }
   );
 
   assert.deepEqual(
     links.map((l) => l.site),
-    ["Crunchyroll", "ADN", "Netflix", "Bilibili TV"]
+    ["Crunchyroll", "ADN", "Netflix", "Amazon Prime Video"]
   );
-  assert.equal(links[0].url, "https://www.crunchyroll.com/frieren");
+  // Legacy Crunchyroll slug repaired cleanly to FR search
+  assert.equal(
+    links[0].url,
+    "https://www.crunchyroll.com/fr/search?q=Frieren%3A%20Beyond%20Journey's%20End"
+  );
+  assert.equal(links[0].isSearchFallback, true);
+  // Old animedigitalnetwork.fr domain migrated to animationdigitalnetwork.com
+  assert.equal(links[1].url, "https://animationdigitalnetwork.com/video/frieren");
+  // Netflix /watch/<id> normalized to /title/<id>
+  assert.equal(links[2].url, "https://www.netflix.com/title/81726714");
+  // Amazon US dp link repaired to EU Prime Video search
+  assert.equal(
+    links[3].url,
+    "https://www.primevideo.com/search?phrase=Frieren%3A%20Beyond%20Journey's%20End"
+  );
+  assert.equal(links[3].isSearchFallback, true);
 
-  const frLinks = buildRegionalSearchLinks("Frieren", "ANIME");
-  assert.equal(frLinks.length, 3);
-  assert.ok(frLinks[0].url.includes("justwatch.com/fr"));
+  // Modern Crunchyroll /series/<ID> URL must stay direct (not search fallback)
+  const modernCr = normalizeStreamingLinks(
+    [
+      {
+        id: 20,
+        site: "Crunchyroll",
+        url: "https://crunchyroll.com/series/GG5H5XQX4/frieren-beyond-journeys-end",
+        type: "STREAMING",
+        isDisabled: false,
+      },
+    ],
+    undefined,
+    { title: "Frieren" }
+  );
+  assert.equal(
+    modernCr[0].url,
+    "https://www.crunchyroll.com/series/GG5H5XQX4/frieren-beyond-journeys-end"
+  );
+  assert.equal(modernCr[0].isSearchFallback, undefined);
+
+  const frAnimeLinks = buildRegionalSearchLinks("Frieren", "ANIME");
+  assert.equal(frAnimeLinks.length, 4);
+  assert.ok(frAnimeLinks[0].url.includes("justwatch.com/fr"));
+
+  const frMangaLinks = buildRegionalSearchLinks("One Piece", "MANGA");
+  assert.equal(frMangaLinks.length, 3);
+  assert.ok(frMangaLinks.some((l) => l.url.includes("mangas.io/catalogue")));
+  assert.ok(!frMangaLinks.some((l) => l.url.includes("izneo.com/fr/search")));
 });
 
 test("ai-recommend: builds taste summary, strips streaming JSON cleanly, and excludes already-seen anime", () => {

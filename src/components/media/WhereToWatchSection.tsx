@@ -220,7 +220,11 @@ export function WhereToWatchSection({
                       )}
                     </div>
                     <p className="text-[11px] text-[#858A9E] truncate">
-                      {isManga ? "Lire sur la plateforme" : "Regarder officiellement"}
+                      {link.isSearchFallback
+                        ? "Rechercher sur la plateforme"
+                        : isManga
+                          ? "Lire sur la plateforme"
+                          : "Regarder officiellement"}
                     </p>
                   </div>
                 </div>
