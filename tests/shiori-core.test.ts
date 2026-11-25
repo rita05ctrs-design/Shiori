@@ -63,6 +63,12 @@ import {
   deriveAiChatTitle,
   upsertSavedAiChat,
 } from "../src/lib/ai-chat-storage.ts";
+import {
+  mapSpeechErrorToFrench,
+  mergeTranscriptWithDraft,
+  resolveSpeechLocale,
+  sanitizeTextForSpeech,
+} from "../src/lib/ai-voice.ts";
 import type {
   AiringScheduleItem,
   CustomCollection,
@@ -1039,4 +1045,32 @@ test("ai-chat-storage: saves, updates, extracts recommended covers, and deletes 
 
   const afterDelete = deleteSavedAiChat(updated.list, first.saved.id);
   assert.equal(afterDelete.length, 0);
+});
+
+test("ai-voice: resolves locales, merges voice transcripts, cleans markdown for TTS, and maps errors", () => {
+  assert.equal(resolveSpeechLocale("fr"), "fr-FR");
+  assert.equal(resolveSpeechLocale("en"), "en-US");
+  assert.equal(resolveSpeechLocale("es"), "es-ES");
+  assert.equal(resolveSpeechLocale("it"), "it-IT");
+  assert.equal(resolveSpeechLocale(null), "fr-FR");
+
+  assert.equal(
+    mergeTranscriptWithDraft("", "conseille moi un anime sombre"),
+    "conseille moi un anime sombre"
+  );
+  assert.equal(
+    mergeTranscriptWithDraft("Je cherche", "un thriller court  en 12 épisodes"),
+    "Je cherche un thriller court en 12 épisodes"
+  );
+
+  const cleaned = sanitizeTextForSpeech(
+    "✨ Voici **Erased** et *Pluto* (`12 ép.`) !\n- Très intense\n<<<SHIORI_RECS>>>[{\"title\":\"Erased\"}]"
+  );
+  assert.ok(cleaned.includes("Voici Erased et Pluto (12 ép.) !"));
+  assert.ok(!cleaned.includes("**"));
+  assert.ok(!cleaned.includes("SHIORI_RECS"));
+
+  assert.ok(mapSpeechErrorToFrench("not-allowed").includes("microphone"));
+  assert.ok(mapSpeechErrorToFrench("no-speech").includes("Aucune voix"));
+  assert.equal(mapSpeechErrorToFrench("aborted"), "");
 });

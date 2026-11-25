@@ -23,6 +23,10 @@ import {
   History,
   Trash2,
   MessageSquarePlus,
+  Mic,
+  Square,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { cn, formatRelativeTime, formatScore, getDisplayTitle } from "@/lib/utils";
@@ -39,6 +43,18 @@ import {
   writeSavedAiChats,
   type SavedAiChat,
 } from "@/lib/ai-chat-storage";
+import {
+  getSpeechRecognitionConstructor,
+  isSpeechSynthesisSupported,
+  mapSpeechErrorToFrench,
+  mergeTranscriptWithDraft,
+  pickPreferredSpeechVoice,
+  readVoiceAutoSpeakPref,
+  resolveSpeechLocale,
+  sanitizeTextForSpeech,
+  writeVoiceAutoSpeakPref,
+  type BrowserSpeechRecognition,
+} from "@/lib/ai-voice";
 import type { AiResolvedRecommendation } from "@/lib/ai-recommend";
 
 export interface ChatBubbleMessage {
@@ -158,7 +174,7 @@ export function ShioriAiChatPanel({
   onClose,
   onNavigate,
 }: ShioriAiChatPanelProps) {
-  const { library, orderedFavorites, getEntry, quickAdd, toast } = useShiori();
+  const { library, orderedFavorites, getEntry, quickAdd, toast, contentLanguage } = useShiori();
   const [messages, setMessages] = useState<ChatBubbleMessage[]>([]);
   const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
   const [savedChats, setSavedChats] = useState<SavedAiChat[]>([]);
@@ -170,12 +186,40 @@ export function ShioriAiChatPanel({
   const [meta, setMeta] = useState<ChatMetaInfo | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Voice dictation (SpeechRecognition) & Read-aloud (speechSynthesis) state
+  const [voiceInputSupported, setVoiceInputSupported] = useState(false);
+  const [speechOutputSupported, setSpeechOutputSupported] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [voiceAutoSpeak, setVoiceAutoSpeak] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const voiceDraftBaseRef = useRef<string>("");
+  const voiceFinalTextRef = useRef<string>("");
+  const voiceCancelledRef = useRef<boolean>(false);
+  const voiceAutoSpeakRef = useRef<boolean>(false);
+  const lastSpokenAutoMsgIdRef = useRef<string | null>(null);
+  const sendMessageRef = useRef<(rawPrompt: string) => Promise<void>>(async () => {});
 
-  // Hydrate saved chats + active conversation on mount so closing the widget never loses recommendations
+  const speechLocale = useMemo(
+    () => resolveSpeechLocale(contentLanguage),
+    [contentLanguage]
+  );
+
   useEffect(() => {
+    voiceAutoSpeakRef.current = voiceAutoSpeak;
+  }, [voiceAutoSpeak]);
+
+  // Hydrate saved chats, active conversation & browser voice capabilities on mount
+  useEffect(() => {
+    setVoiceInputSupported(Boolean(getSpeechRecognitionConstructor()));
+    setSpeechOutputSupported(isSpeechSynthesisSupported());
+    setVoiceAutoSpeak(readVoiceAutoSpeakPref());
+
     setSavedChats(readSavedAiChats());
     const active = readActiveAiChat();
     if (active && active.messages.length > 0) {
@@ -281,9 +325,244 @@ export function ShioriAiChatPanel({
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, sending]);
 
+  const stopSpeaking = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore browser synth errors
+      }
+    }
+    setSpeakingMsgId(null);
+  }, []);
+
+  const speakMessage = useCallback(
+    (msgId: string, rawText: string) => {
+      if (!isSpeechSynthesisSupported()) {
+        toast({
+          title: "Lecture vocale indisponible",
+          description: "Votre navigateur ne prend pas en charge la synthèse vocale.",
+          variant: "info",
+        });
+        return;
+      }
+
+      if (speakingMsgId === msgId) {
+        stopSpeaking();
+        return;
+      }
+
+      const cleanText = sanitizeTextForSpeech(rawText);
+      if (!cleanText) return;
+
+      try {
+        const synth = window.speechSynthesis;
+        synth.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.lang = speechLocale;
+        utterance.rate = 1.03;
+        const preferred = pickPreferredSpeechVoice(synth.getVoices(), speechLocale);
+        if (preferred) {
+          utterance.voice = preferred;
+        }
+        utterance.onend = () => {
+          setSpeakingMsgId((curr) => (curr === msgId ? null : curr));
+        };
+        utterance.onerror = () => {
+          setSpeakingMsgId((curr) => (curr === msgId ? null : curr));
+        };
+        setSpeakingMsgId(msgId);
+        synth.speak(utterance);
+      } catch {
+        setSpeakingMsgId(null);
+      }
+    },
+    [speakingMsgId, speechLocale, stopSpeaking, toast]
+  );
+
+  const toggleVoiceAutoSpeak = useCallback(() => {
+    if (!speechOutputSupported) {
+      toast({
+        title: "Synthèse vocale indisponible",
+        description: "Votre navigateur ne prend pas en charge la lecture à voix haute.",
+        variant: "info",
+      });
+      return;
+    }
+    setVoiceAutoSpeak((prev) => {
+      const next = !prev;
+      writeVoiceAutoSpeakPref(next);
+      if (!next) {
+        stopSpeaking();
+      }
+      toast({
+        title: next ? "Réponse vocale activée" : "Réponse vocale désactivée",
+        description: next
+          ? "Shiori IA lira ses réponses à voix haute."
+          : "Vous pouvez toujours cliquer sur Écouter sous chaque réponse.",
+        variant: "info",
+        durationMs: 3200,
+      });
+      return next;
+    });
+  }, [speechOutputSupported, stopSpeaking, toast]);
+
+  const cancelVoiceInput = useCallback(() => {
+    voiceCancelledRef.current = true;
+    try {
+      recognitionRef.current?.abort();
+    } catch {
+      // ignore already-stopped recognition
+    }
+    recognitionRef.current = null;
+    setIsListening(false);
+    setInterimTranscript("");
+    setInput(voiceDraftBaseRef.current);
+  }, []);
+
+  const stopVoiceInput = useCallback(() => {
+    if (!recognitionRef.current) {
+      setIsListening(false);
+      return;
+    }
+    if (!voiceFinalTextRef.current.trim()) {
+      cancelVoiceInput();
+      return;
+    }
+    try {
+      recognitionRef.current.stop();
+    } catch {
+      setIsListening(false);
+    }
+  }, [cancelVoiceInput]);
+
+  const startVoiceInput = useCallback(() => {
+    if (sending) return;
+    const RecognitionCtor = getSpeechRecognitionConstructor();
+    if (!RecognitionCtor) {
+      toast({
+        title: "Dictée vocale indisponible",
+        description:
+          "Utilisez Chrome, Edge ou Safari (en HTTPS ou localhost) pour parler à Shiori IA.",
+        variant: "info",
+        durationMs: 4500,
+      });
+      return;
+    }
+
+    stopSpeaking();
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
+
+    try {
+      const recognition = new RecognitionCtor();
+      recognition.lang = speechLocale;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      voiceDraftBaseRef.current = input;
+      voiceFinalTextRef.current = "";
+      voiceCancelledRef.current = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setInterimTranscript("");
+        setErrorMsg(null);
+      };
+
+      recognition.onresult = (event) => {
+        let finalSeg = "";
+        let interimSeg = "";
+        for (let i = 0; i < event.results.length; i++) {
+          const res = event.results[i];
+          const text = res?.[0]?.transcript ?? "";
+          if (res.isFinal) {
+            finalSeg += `${text} `;
+          } else {
+            interimSeg += `${text} `;
+          }
+        }
+        const combined = `${finalSeg} ${interimSeg}`.replace(/\s+/g, " ").trim();
+        voiceFinalTextRef.current = combined;
+        setInterimTranscript(interimSeg.trim());
+        setInput(mergeTranscriptWithDraft(voiceDraftBaseRef.current, combined));
+      };
+
+      recognition.onerror = (event) => {
+        const msg = mapSpeechErrorToFrench(event.error);
+        if (event.error !== "aborted") {
+          voiceCancelledRef.current = true;
+        }
+        if (msg) {
+          toast({
+            title: "Micro / Dictée vocale",
+            description: msg,
+            variant: "warning",
+            durationMs: 4200,
+          });
+        }
+      };
+
+      recognition.onend = () => {
+        recognitionRef.current = null;
+        setIsListening(false);
+        setInterimTranscript("");
+
+        if (!voiceCancelledRef.current) {
+          const finalPrompt = mergeTranscriptWithDraft(
+            voiceDraftBaseRef.current,
+            voiceFinalTextRef.current
+          );
+          if (finalPrompt.trim().length > 0) {
+            void sendMessageRef.current(finalPrompt);
+          }
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setIsListening(false);
+      recognitionRef.current = null;
+      toast({
+        title: "Impossible de démarrer le micro",
+        description: "Vérifiez les permissions du microphone dans votre navigateur.",
+        variant: "warning",
+      });
+    }
+  }, [input, sending, speechLocale, stopSpeaking, toast]);
+
+  const toggleVoiceInput = useCallback(() => {
+    if (isListening) {
+      stopVoiceInput();
+    } else {
+      startVoiceInput();
+    }
+  }, [isListening, startVoiceInput, stopVoiceInput]);
+
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        // ignore
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // ignore
+        }
+      }
     };
   }, []);
 
@@ -312,6 +591,7 @@ export function ShioriAiChatPanel({
 
       const controller = new AbortController();
       abortRef.current = controller;
+      let accumulatedReplyText = "";
 
       try {
         const res = await fetch("/api/recommend-chat", {
@@ -355,6 +635,7 @@ export function ShioriAiChatPanel({
             if (eventName === "meta") {
               setMeta(payload as ChatMetaInfo);
             } else if (eventName === "delta" && typeof payload?.text === "string") {
+              accumulatedReplyText += payload.text;
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantMsgId
@@ -402,6 +683,15 @@ export function ShioriAiChatPanel({
             m.id === assistantMsgId ? { ...m, streaming: false } : m
           )
         );
+
+        if (
+          voiceAutoSpeakRef.current &&
+          accumulatedReplyText.trim() &&
+          lastSpokenAutoMsgIdRef.current !== assistantMsgId
+        ) {
+          lastSpokenAutoMsgIdRef.current = assistantMsgId;
+          speakMessage(assistantMsgId, accumulatedReplyText);
+        }
       } catch (err) {
         if ((err as { name?: string })?.name === "AbortError") return;
         const msg =
@@ -427,8 +717,12 @@ export function ShioriAiChatPanel({
         abortRef.current = null;
       }
     },
-    [messages, sending, clientLibraryPayload]
+    [messages, sending, clientLibraryPayload, speakMessage]
   );
+
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  }, [sendMessage]);
 
   const isCurrentChatSaved = useMemo(
     () => Boolean(activeSavedId && savedChats.some((c) => c.id === activeSavedId)),
@@ -462,6 +756,8 @@ export function ShioriAiChatPanel({
 
   const handleLoadSavedChat = (chat: SavedAiChat) => {
     abortRef.current?.abort();
+    stopSpeaking();
+    if (isListening) cancelVoiceInput();
     setSending(false);
     setErrorMsg(null);
     setMessages(chat.messages);
@@ -503,6 +799,8 @@ export function ShioriAiChatPanel({
 
   const handleNewChat = () => {
     abortRef.current?.abort();
+    stopSpeaking();
+    if (isListening) cancelVoiceInput();
     const prevMessages = messages;
     const prevSavedId = activeSavedId;
     setMessages([]);
@@ -539,7 +837,7 @@ export function ShioriAiChatPanel({
       )}
     >
       {/* Header */}
-      <div className="px-4 py-3.5 border-b border-white/[0.08] bg-gradient-to-r from-[#141724] via-[#11131E] to-[#191118] flex items-center justify-between gap-3 shrink-0">
+      <div className="px-3 sm:px-4 py-3.5 border-b border-white/[0.08] bg-gradient-to-r from-[#141724] via-[#11131E] to-[#191118] flex items-center justify-between gap-2 sm:gap-3 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent-deep border border-white/20 flex items-center justify-center shadow-[0_0_20px_rgba(229,72,77,0.45)] shrink-0">
             <Sparkles className="w-4 h-4 text-white" />
@@ -562,6 +860,35 @@ export function ShioriAiChatPanel({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {/* Auto Read-Aloud Toggle (Réponse vocale) */}
+          <button
+            type="button"
+            onClick={toggleVoiceAutoSpeak}
+            title={
+              voiceAutoSpeak
+                ? "Réponse vocale automatique activée (cliquer pour couper)"
+                : "Activer la lecture vocale automatique des réponses"
+            }
+            aria-label={
+              voiceAutoSpeak
+                ? "Désactiver la réponse vocale automatique"
+                : "Activer la réponse vocale automatique"
+            }
+            aria-pressed={voiceAutoSpeak}
+            className={cn(
+              "w-8 h-8 rounded-xl border flex items-center justify-center transition-colors cursor-pointer shrink-0",
+              voiceAutoSpeak
+                ? "bg-kinpaku/16 border-kinpaku/45 text-kinpaku"
+                : "bg-white/[0.05] hover:bg-white/[0.12] border-white/[0.08] text-[#A5A9BB] hover:text-white"
+            )}
+          >
+            {voiceAutoSpeak ? (
+              <Volume2 className="w-3.5 h-3.5" />
+            ) : (
+              <VolumeX className="w-3.5 h-3.5" />
+            )}
+          </button>
+
           {/* Save Current Chat Button */}
           {messages.length > 0 && !sending && (
             <button
@@ -843,11 +1170,11 @@ export function ShioriAiChatPanel({
                       )}
                     </div>
 
-                    {/* 1-Click Copy Button on every completed message (plus free text selection / Ctrl+C) */}
+                    {/* 1-Click Copy & Listen Actions on every completed message */}
                     {msg.content && !msg.streaming && (
                       <div
                         className={cn(
-                          "flex items-center",
+                          "flex items-center gap-1.5 flex-wrap",
                           isUser ? "justify-end" : "justify-start"
                         )}
                       >
@@ -869,6 +1196,37 @@ export function ShioriAiChatPanel({
                             </>
                           )}
                         </button>
+
+                        {!isUser && speechOutputSupported && (
+                          <button
+                            type="button"
+                            onClick={() => speakMessage(msg.id, msg.content)}
+                            aria-label={
+                              speakingMsgId === msg.id
+                                ? "Arrêter la lecture vocale"
+                                : "Écouter cette réponse à voix haute"
+                            }
+                            aria-pressed={speakingMsgId === msg.id}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10.5px] font-medium transition-colors cursor-pointer",
+                              speakingMsgId === msg.id
+                                ? "bg-kinpaku/15 text-kinpaku border border-kinpaku/35"
+                                : "text-[#8A8FA4] hover:text-kinpaku hover:bg-white/[0.07]"
+                            )}
+                          >
+                            {speakingMsgId === msg.id ? (
+                              <>
+                                <Square className="w-2.5 h-2.5 fill-current animate-pulse" />
+                                <span>Arrêter</span>
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="w-3 h-3" />
+                                <span>Écouter</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -1002,18 +1360,87 @@ export function ShioriAiChatPanel({
         )}
       </div>
 
-      {/* Refined Floating Glass Input Composer ("Écrire à Shiori IA") */}
+      {/* Refined Floating Glass Input Composer (Text + Voice Dictation) */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (isListening) {
+            voiceCancelledRef.current = true;
+            try {
+              recognitionRef.current?.abort();
+            } catch {
+              // ignore
+            }
+            recognitionRef.current = null;
+            setIsListening(false);
+            setInterimTranscript("");
+          }
           void sendMessage(input);
         }}
-        className="p-2.5 sm:p-3.5 border-t border-white/[0.07] bg-gradient-to-t from-[#090B12] via-[#0D101B] to-[#0F121E]/95 shrink-0"
+        className="p-2.5 sm:p-3.5 border-t border-white/[0.07] bg-gradient-to-t from-[#090B12] via-[#0D101B] to-[#0F121E]/95 shrink-0 space-y-2"
       >
-        <div className="group flex items-center gap-2 rounded-2xl bg-[#07080C]/95 border border-white/[0.12] hover:border-white/[0.2] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20 px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_28px_rgba(0,0,0,0.45)] transition-all">
+        <AnimatePresence initial={false}>
+          {isListening && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.16 }}
+              className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-accent/14 border border-accent/40 text-xs"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex items-end gap-0.5 h-3.5 shrink-0" aria-hidden="true">
+                  <span className="w-0.5 h-2 rounded-full bg-accent animate-pulse" />
+                  <span
+                    className="w-0.5 h-3.5 rounded-full bg-kinpaku animate-pulse"
+                    style={{ animationDelay: "120ms" }}
+                  />
+                  <span
+                    className="w-0.5 h-2.5 rounded-full bg-accent animate-pulse"
+                    style={{ animationDelay: "240ms" }}
+                  />
+                </span>
+                <span className="text-[#F4F3EE] font-medium truncate">
+                  {interimTranscript
+                    ? `« ${interimTranscript} »`
+                    : "Écoute en cours… parle à Shiori IA"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {input.trim() && (
+                  <button
+                    type="button"
+                    onClick={stopVoiceInput}
+                    className="px-2 py-0.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-[11px] font-semibold transition-colors cursor-pointer"
+                  >
+                    Envoyer
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={cancelVoiceInput}
+                  aria-label="Annuler la dictée vocale"
+                  className="px-2 py-0.5 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-[#D4D7E4] hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
+                >
+                  Annuler
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div
+          className={cn(
+            "group flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#07080C]/95 border px-2 sm:px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_28px_rgba(0,0,0,0.45)] transition-all",
+            isListening
+              ? "border-accent/80 ring-2 ring-accent/25"
+              : "border-white/[0.12] hover:border-white/[0.2] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20"
+          )}
+        >
           <span
             aria-hidden="true"
-            className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent/18 to-kinpaku/12 border border-white/[0.08] flex items-center justify-center shrink-0 transition-transform group-focus-within:scale-105"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-accent/18 to-kinpaku/12 border border-white/[0.08] flex items-center justify-center shrink-0 transition-transform group-focus-within:scale-105"
           >
             <Sparkles className="w-3.5 h-3.5 text-kinpaku" />
           </span>
@@ -1024,15 +1451,75 @@ export function ShioriAiChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
+              if (e.key === "Escape" && isListening) {
+                e.preventDefault();
+                cancelVoiceInput();
+                return;
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
+                if (isListening) {
+                  voiceCancelledRef.current = true;
+                  try {
+                    recognitionRef.current?.abort();
+                  } catch {
+                    // ignore
+                  }
+                  recognitionRef.current = null;
+                  setIsListening(false);
+                  setInterimTranscript("");
+                }
                 void sendMessage(input);
               }
             }}
-            placeholder="Écris ton envie à Shiori IA..."
-            aria-label="Écrire un message à Shiori IA"
-            className="flex-1 resize-none bg-transparent py-2 px-1 max-h-[120px] overflow-y-auto text-[13px] sm:text-sm text-[#F4F3EE] placeholder:text-[#7E849C] focus:outline-none leading-snug select-text"
+            placeholder={
+              isListening
+                ? "Écoute en cours… parle librement"
+                : "Écris ou parle à Shiori IA..."
+            }
+            aria-label="Écrire ou dicter un message à Shiori IA"
+            className="flex-1 min-w-0 resize-none bg-transparent py-2 px-1 max-h-[120px] overflow-y-auto text-[13px] sm:text-sm text-[#F4F3EE] placeholder:text-[#7E849C] focus:outline-none leading-snug select-text"
           />
+
+          {/* Voice Dictation Microphone Button */}
+          <button
+            type="button"
+            onClick={toggleVoiceInput}
+            disabled={sending}
+            title={
+              isListening
+                ? "Arrêter la dictée vocale"
+                : voiceInputSupported
+                  ? "Parler à Shiori IA (dictée vocale)"
+                  : "Dictée vocale (Chrome, Edge ou Safari requis)"
+            }
+            aria-label={
+              isListening
+                ? "Arrêter la dictée vocale"
+                : "Parler à Shiori IA avec le micro"
+            }
+            aria-pressed={isListening}
+            className={cn(
+              "relative w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 disabled:opacity-35",
+              isListening
+                ? "bg-accent border-accent text-white shadow-[0_0_20px_rgba(229,72,77,0.65)]"
+                : voiceInputSupported
+                  ? "bg-white/[0.05] hover:bg-accent/18 border-white/[0.1] hover:border-accent/45 text-[#CFD3E2] hover:text-white"
+                  : "bg-white/[0.03] border-white/[0.07] text-[#6E7389] hover:text-[#B8BCCB]"
+            )}
+          >
+            {isListening && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-0 rounded-xl border border-accent animate-ping opacity-55 pointer-events-none"
+              />
+            )}
+            {isListening ? (
+              <Square className="w-3.5 h-3.5 fill-current relative z-10" />
+            ) : (
+              <Mic className="w-4 h-4 relative z-10" />
+            )}
+          </button>
 
           <button
             type="submit"
