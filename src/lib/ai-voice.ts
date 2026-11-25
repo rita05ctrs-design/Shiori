@@ -1,73 +1,79 @@
 /**
- * Web Speech API helpers (voice dictation + speech synthesis) for Shiori IA.
- * Zero external dependencies — works natively on modern desktop & mobile browsers
- * with graceful French fallbacks when unsupported or denied.
+ * Universal voice recording (MediaRecorder + Gemini /api/transcribe) &
+ * speech synthesis helpers for Shiori IA.
+ * Works reliably across Opera GX, Brave, Chrome, Edge, Safari, and Firefox
+ * without depending on Google's proprietary browser webkitSpeechRecognition endpoint.
  */
 
-export interface BrowserSpeechRecognitionAlternative {
-  readonly transcript: string;
-  readonly confidence: number;
-}
-
-export interface BrowserSpeechRecognitionResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  [index: number]: BrowserSpeechRecognitionAlternative;
-}
-
-export interface BrowserSpeechRecognitionResultList {
-  readonly length: number;
-  [index: number]: BrowserSpeechRecognitionResult;
-}
-
-export interface BrowserSpeechRecognitionEvent extends Event {
-  readonly resultIndex: number;
-  readonly results: BrowserSpeechRecognitionResultList;
-}
-
-export interface BrowserSpeechRecognitionErrorEvent extends Event {
-  readonly error: string;
-  readonly message?: string;
-}
-
-export interface BrowserSpeechRecognition extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  onstart: ((this: BrowserSpeechRecognition, ev: Event) => void) | null;
-  onend: ((this: BrowserSpeechRecognition, ev: Event) => void) | null;
-  onerror:
-    | ((this: BrowserSpeechRecognition, ev: BrowserSpeechRecognitionErrorEvent) => void)
-    | null;
-  onresult:
-    | ((this: BrowserSpeechRecognition, ev: BrowserSpeechRecognitionEvent) => void)
-    | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-
-export type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-
-export type VoiceInputStatus = "idle" | "requesting" | "listening" | "error";
+export type VoiceInputStatus =
+  | "idle"
+  | "requesting"
+  | "recording"
+  | "transcribing"
+  | "error";
 
 const VOICE_AUTOSPEAK_STORAGE_KEY = "shiori_ai_voice_autospeak_v1";
 
+const PREFERRED_AUDIO_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+] as const;
+
+export function isMediaRecorderSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof MediaRecorder !== "undefined" &&
+    typeof navigator !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia)
+  );
+}
+
 /**
- * Returns the native SpeechRecognition constructor if available in this browser.
+ * Picks the best MediaRecorder audio MIME type supported by the current browser
+ * (audio/webm on Chromium/Opera GX/Brave/Firefox, audio/mp4 on Safari/iOS).
  */
-export function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | null {
-  if (typeof window === "undefined") return null;
-  const win = window as unknown as {
-    SpeechRecognition?: BrowserSpeechRecognitionConstructor;
-    webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
-  };
-  return win.SpeechRecognition ?? win.webkitSpeechRecognition ?? null;
+export function pickSupportedAudioMimeType(): string {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
+  for (const mime of PREFERRED_AUDIO_MIME_TYPES) {
+    try {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        return mime;
+      }
+    } catch {
+      // ignore unsupported query
+    }
+  }
+  return "";
+}
+
+export function getAudioFileExtension(mimeType: string): string {
+  const lower = (mimeType ?? "").toLowerCase();
+  if (lower.includes("mp4") || lower.includes("m4a")) return "mp4";
+  if (lower.includes("ogg")) return "ogg";
+  if (lower.includes("wav")) return "wav";
+  if (lower.includes("mpeg") || lower.includes("mp3")) return "mp3";
+  return "webm";
+}
+
+export function formatRecordingDuration(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 export function isSpeechSynthesisSupported(): boolean {
-  return typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
+  return (
+    typeof window !== "undefined" &&
+    "speechSynthesis" in window &&
+    typeof SpeechSynthesisUtterance !== "undefined"
+  );
 }
 
 /**
@@ -82,7 +88,7 @@ export function resolveSpeechLocale(lang?: string | null): string {
 }
 
 /**
- * Cleanly combines any pre-existing composer draft with newly spoken text.
+ * Cleanly combines any pre-existing composer draft with newly transcribed text.
  */
 export function mergeTranscriptWithDraft(existingDraft: string, spoken: string): string {
   const base = existingDraft.trim();
@@ -99,27 +105,19 @@ export function mergeTranscriptWithDraft(existingDraft: string, spoken: string):
 export function sanitizeTextForSpeech(rawText: string): string {
   if (!rawText) return "";
   return rawText
-    // Strip any internal recommendation block residue
     .replace(/<{1,4}\s*SHIORI_RECS[\s\S]*$/i, "")
-    // Convert markdown links [Label](https://...) to just Label
     .replace(/\[([^\]]+)\]\((?:https?:\/\/|\/)[^)]+\)/g, "$1")
-    // Strip bare URLs
     .replace(/https?:\/\/\S+/g, "")
-    // Strip markdown code fences & inline formatting markers
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
     .replace(/^#{1,6}\s+/gm, "")
-    // Turn markdown bullets into gentle pauses
     .replace(/^\s*[-•*]\s+/gm, "")
-    // Remove common UI symbols/emojis that read awkwardly aloud
     .replace(/[⚠️💡✨🎬⭐🔥📌]/g, "")
-    // Convert line breaks to sentence pauses
     .replace(/\n{2,}/g, ". ")
     .replace(/\n/g, ", ")
-    // Clean duplicate punctuation & extra whitespace
     .replace(/\.\s*\./g, ".")
     .replace(/,\s*,/g, ",")
     .replace(/\s{2,}/g, " ")
@@ -175,29 +173,6 @@ export function mapMediaDeviceErrorToFrench(err: unknown): string {
 }
 
 /**
- * Translates Web Speech API error codes into clear French messages for the UI.
- */
-export function mapSpeechErrorToFrench(errorCode: string): string {
-  switch (errorCode) {
-    case "not-allowed":
-    case "service-not-allowed":
-      return "Accès au microphone refusé ou bloqué. Autorisez le micro dans la barre d'adresse de votre navigateur puis réessayez.";
-    case "no-speech":
-      return "Aucune voix détectée. Parlez plus près du micro et réessayez.";
-    case "audio-capture":
-      return "Aucun microphone détecté sur cet appareil.";
-    case "network":
-      return "La reconnaissance vocale nécessite une connexion internet active.";
-    case "language-not-supported":
-      return "Langue vocale non prise en charge par ce navigateur.";
-    case "aborted":
-      return "";
-    default:
-      return "Impossible d'utiliser la dictée vocale pour le moment.";
-  }
-}
-
-/**
  * Selects the clearest available speech synthesis voice matching the desired locale.
  */
 export function pickPreferredSpeechVoice(
@@ -216,7 +191,6 @@ export function pickPreferredSpeechVoice(
   );
   if (matching.length === 0) return null;
 
-  // Prefer natural / neural / Google / Apple / Microsoft online voices over basic robotic ones
   const preferred = matching.find((v) =>
     /(natural|neural|google|thomas|amelie|amélie|audrey|denise|henri|hortense|samantha)/i.test(
       v.name

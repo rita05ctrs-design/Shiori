@@ -460,7 +460,7 @@ export function AniListActivityFeed() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3.5 items-start">
           {activities.map((item) => {
             const repliesOpen = Boolean(openReplies[item.id]);
             const replies = repliesMap[item.id] ?? [];

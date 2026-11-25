@@ -64,8 +64,9 @@ import {
   upsertSavedAiChat,
 } from "../src/lib/ai-chat-storage.ts";
 import {
+  formatRecordingDuration,
+  getAudioFileExtension,
   mapMediaDeviceErrorToFrench,
-  mapSpeechErrorToFrench,
   mergeTranscriptWithDraft,
   resolveSpeechLocale,
   sanitizeTextForSpeech,
@@ -1119,9 +1120,11 @@ test("ai-voice: resolves locales, merges voice transcripts, cleans markdown for 
   assert.ok(!cleaned.includes("**"));
   assert.ok(!cleaned.includes("SHIORI_RECS"));
 
-  assert.ok(mapSpeechErrorToFrench("not-allowed").includes("microphone"));
-  assert.ok(mapSpeechErrorToFrench("no-speech").includes("Aucune voix"));
-  assert.equal(mapSpeechErrorToFrench("aborted"), "");
+  assert.equal(getAudioFileExtension("audio/webm;codecs=opus"), "webm");
+  assert.equal(getAudioFileExtension("audio/mp4"), "mp4");
+  assert.equal(getAudioFileExtension("audio/ogg;codecs=opus"), "ogg");
+  assert.equal(formatRecordingDuration(5), "0:05");
+  assert.equal(formatRecordingDuration(72), "1:12");
 
   assert.ok(
     mapMediaDeviceErrorToFrench({ name: "NotAllowedError" }).includes("refusé ou bloqué")

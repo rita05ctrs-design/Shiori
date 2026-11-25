@@ -239,7 +239,7 @@ export function CommunityClient() {
   const visibleProfiles = profiles.filter((p) => !isUserBlocked(p.id));
 
   return (
-    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <div className="w-full pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
       {/* Clean Header — 1 clear goal: follow activity, add friends & browse members */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="min-w-0">
@@ -375,61 +375,215 @@ export function CommunityClient() {
         )}
       </div>
 
-      {/* TAB 1: CLEAN CENTERED ACTIVITY FEED (zero dead sidebar space!) */}
+      {/* TAB 1: FULL-WIDTH ACTIVITY FEED + LIVE COMMUNITY SIDEBAR ON WIDE SCREENS */}
       {tab === "feed" ? (
         feedSource === "anilist" ? (
           <AniListActivityFeed />
         ) : (
-          <div className="space-y-4">
-            {/* Compact Frosted Category Filter Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
-              {ACTIVITY_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setKindFilter(f.id)}
-                  className={cn(
-                    "px-3.5 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 transition-all cursor-pointer",
-                    kindFilter === f.id
-                      ? "bg-accent/20 border-accent/55 text-white font-semibold shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.25)]"
-                      : "bg-obsidian/70 border-white/[0.08] text-[#9A9EAE] hover:text-white hover:border-white/[0.18]"
-                  )}
-                >
-                  {f.label}
-                </button>
-              ))}
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            <div className="xl:col-span-8 space-y-4 min-w-0">
+              {/* Compact Frosted Category Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                {ACTIVITY_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setKindFilter(f.id)}
+                    className={cn(
+                      "px-3.5 py-1.5 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 transition-all cursor-pointer",
+                      kindFilter === f.id
+                        ? "bg-accent/20 border-accent/55 text-white font-semibold shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.25)]"
+                        : "bg-obsidian/70 border-white/[0.08] text-[#9A9EAE] hover:text-white hover:border-white/[0.18]"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {loadingFeed && visibleActivities.length === 0 ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="h-40 rounded-2xl card-surface animate-pulse" />
+                  ))}
+                </div>
+              ) : visibleActivities.length === 0 ? (
+                <div className="rounded-2xl card-surface p-10 text-center space-y-2">
+                  <p className="text-sm font-semibold text-white">
+                    Aucune activité dans cette catégorie pour le moment.
+                  </p>
+                  <p className="text-xs text-[#858A9E]">
+                    Ajoutez un favori ou notez un titre pour partager votre activité avec la communauté.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {visibleActivities.map((item) => (
+                    <ActivityCard
+                      key={item.id}
+                      item={item}
+                      onUpdate={(updated) =>
+                        setActivities((prev) =>
+                          prev.map((a) => (a.id === updated.id ? updated : a))
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
-            {loadingFeed && visibleActivities.length === 0 ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-40 rounded-2xl card-surface animate-pulse" />
-                ))}
+            {/* Right Sticky Community Overview Panel (fills wide fullscreen cleanly) */}
+            <aside className="xl:col-span-4 xl:sticky xl:top-24 space-y-4 min-w-0">
+              {/* Quick Social Hub Summary */}
+              <div className="rounded-2xl card-surface border border-white/[0.09] p-5 space-y-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Link href={`/profile/${encodeURIComponent(profile.username)}`} className="shrink-0">
+                    <UserAvatar
+                      avatarUrl={profile.avatarUrl}
+                      initials={profile.avatarInitials}
+                      accentColor={profile.accentColor}
+                      alt={profile.displayName}
+                      size="md"
+                    />
+                  </Link>
+                  <div className="min-w-0">
+                    <Link
+                      href={`/profile/${encodeURIComponent(profile.username)}`}
+                      className="text-sm font-bold text-white hover:text-accent-hover transition-colors truncate block"
+                    >
+                      {profile.displayName}
+                    </Link>
+                    <p className="text-xs font-mono text-[#7D8296] truncate">
+                      @{profile.username}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTab("friends")}
+                    className="rounded-xl bg-obsidian/75 hover:bg-white/[0.06] border border-white/[0.07] p-2.5 text-center transition-colors cursor-pointer"
+                  >
+                    <p className="font-mono text-base font-bold text-emerald-400">
+                      {friends.length}
+                    </p>
+                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">Amis</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab("members")}
+                    className="rounded-xl bg-obsidian/75 hover:bg-white/[0.06] border border-white/[0.07] p-2.5 text-center transition-colors cursor-pointer"
+                  >
+                    <p className="font-mono text-base font-bold text-kinpaku">
+                      {totalMembersCount || profiles.length}
+                    </p>
+                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">Membres</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab("friends")}
+                    className="rounded-xl bg-obsidian/75 hover:bg-white/[0.06] border border-white/[0.07] p-2.5 text-center transition-colors cursor-pointer"
+                  >
+                    <p className="font-mono text-base font-bold text-accent">
+                      {incomingFriendRequests.length}
+                    </p>
+                    <p className="text-[10.5px] text-[#8E93A6] mt-0.5">Demandes</p>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTab("friends")}
+                    className="h-9 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-semibold text-white inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Gérer amis</span>
+                  </button>
+                  <Link
+                    href="/messages"
+                    className="h-9 px-3 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Messages</span>
+                  </Link>
+                </div>
               </div>
-            ) : visibleActivities.length === 0 ? (
-              <div className="rounded-2xl card-surface p-10 text-center space-y-2">
-                <p className="text-sm font-semibold text-white">
-                  Aucune activité dans cette catégorie pour le moment.
-                </p>
-                <p className="text-xs text-[#858A9E]">
-                  Ajoutez un favori ou notez un titre pour partager votre activité avec la communauté.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3.5">
-                {visibleActivities.map((item) => (
-                  <ActivityCard
-                    key={item.id}
-                    item={item}
-                    onUpdate={(updated) =>
-                      setActivities((prev) =>
-                        prev.map((a) => (a.id === updated.id ? updated : a))
+
+              {/* Active Community Members Directory Preview */}
+              <div className="rounded-2xl card-surface border border-white/[0.09] p-5 space-y-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-xs font-mono uppercase tracking-[0.16em] text-kinpaku flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Membres actifs</span>
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setTab("members")}
+                    className="text-[11px] font-semibold text-accent-soft hover:text-white transition-colors cursor-pointer"
+                  >
+                    Voir tout
+                  </button>
+                </div>
+
+                {loadingMembers && visibleProfiles.length === 0 ? (
+                  <div className="space-y-2.5">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="h-12 rounded-xl bg-white/[0.04] animate-pulse" />
+                    ))}
+                  </div>
+                ) : visibleProfiles.length === 0 ? (
+                  <p className="text-xs text-[#8A8FA4]">
+                    Aucun membre public disponible pour le moment.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {visibleProfiles
+                      .filter(
+                        (m) => m.username.toLowerCase() !== profile.username.toLowerCase()
                       )
-                    }
-                  />
-                ))}
+                      .slice(0, 5)
+                      .map((m) => (
+                        <div
+                          key={m.id}
+                          className="p-2.5 rounded-xl bg-obsidian/70 border border-white/[0.06] hover:border-white/[0.14] transition-colors flex items-center justify-between gap-2.5"
+                        >
+                          <Link
+                            href={`/profile/${encodeURIComponent(m.username)}`}
+                            className="flex items-center gap-2.5 min-w-0 flex-1"
+                          >
+                            <UserAvatar
+                              avatarUrl={m.avatarUrl}
+                              initials={m.avatarInitials}
+                              accentColor={m.accentColor}
+                              alt={m.displayName}
+                              size="sm"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-white truncate">
+                                {m.displayName}
+                              </p>
+                              <p className="text-[10.5px] font-mono text-[#7D8296] truncate">
+                                @{m.username} · {m.stats.totalEntries} titres
+                              </p>
+                            </div>
+                          </Link>
+                          <FriendActionButton
+                            target={{
+                              id: m.id,
+                              username: m.username,
+                              displayName: m.displayName,
+                              avatarUrl: m.avatarUrl,
+                            }}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
-            )}
+            </aside>
           </div>
         )
       ) : tab === "friends" ? (
@@ -642,7 +796,7 @@ export function CommunityClient() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {friends.map((f) => (
                   <div
                     key={f.id}
@@ -713,8 +867,8 @@ export function CommunityClient() {
                 <h3 className="text-base font-semibold text-white">
                   Membres à découvrir
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {suggestions.slice(0, 6).map((m) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {suggestions.slice(0, 8).map((m) => (
                     <div
                       key={m.id}
                       className="rounded-2xl card-surface border border-white/[0.08] p-4 flex flex-col justify-between gap-3"
@@ -778,7 +932,7 @@ export function CommunityClient() {
               Aucun membre trouvé pour « {memberQuery} ».
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {visibleProfiles.map((m) => {
                 const isMe = m.username.toLowerCase() === profile.username.toLowerCase();
                 return (

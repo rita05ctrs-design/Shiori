@@ -46,17 +46,18 @@ import {
   type SavedAiChat,
 } from "@/lib/ai-chat-storage";
 import {
-  getSpeechRecognitionConstructor,
+  formatRecordingDuration,
+  getAudioFileExtension,
+  isMediaRecorderSupported,
   isSpeechSynthesisSupported,
   mapMediaDeviceErrorToFrench,
-  mapSpeechErrorToFrench,
   mergeTranscriptWithDraft,
   pickPreferredSpeechVoice,
+  pickSupportedAudioMimeType,
   readVoiceAutoSpeakPref,
   resolveSpeechLocale,
   sanitizeTextForSpeech,
   writeVoiceAutoSpeakPref,
-  type BrowserSpeechRecognition,
   type VoiceInputStatus,
 } from "@/lib/ai-voice";
 import type { AiResolvedRecommendation } from "@/lib/ai-recommend";
@@ -190,26 +191,29 @@ export function ShioriAiChatPanel({
   const [meta, setMeta] = useState<ChatMetaInfo | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Voice dictation (getUserMedia + SpeechRecognition) & Read-aloud (speechSynthesis) state
+  // Universal voice recording (MediaRecorder + Gemini /api/transcribe) & Read-aloud state
   const [voiceInputSupported, setVoiceInputSupported] = useState(false);
   const [speechOutputSupported, setSpeechOutputSupported] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceInputStatus>("idle");
   const [voiceErrorMsg, setVoiceErrorMsg] = useState<string | null>(null);
-  const [interimTranscript, setInterimTranscript] = useState("");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [voiceAutoSpeak, setVoiceAutoSpeak] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
 
-  const isListening = voiceStatus === "listening";
+  const isRecording = voiceStatus === "recording";
   const isRequestingMic = voiceStatus === "requesting";
+  const isTranscribing = voiceStatus === "transcribing";
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transcribeAbortRef = useRef<AbortController | null>(null);
   const voiceDraftBaseRef = useRef<string>("");
-  const voiceFinalTextRef = useRef<string>("");
   const voiceCancelledRef = useRef<boolean>(false);
-  const voiceHadErrorRef = useRef<boolean>(false);
   const voiceAutoSpeakRef = useRef<boolean>(false);
   const lastSpokenAutoMsgIdRef = useRef<string | null>(null);
   const sendMessageRef = useRef<(rawPrompt: string) => Promise<void>>(async () => {});
@@ -225,7 +229,7 @@ export function ShioriAiChatPanel({
 
   // Hydrate saved chats, active conversation & browser voice capabilities on mount
   useEffect(() => {
-    setVoiceInputSupported(Boolean(getSpeechRecognitionConstructor()));
+    setVoiceInputSupported(isMediaRecorderSupported());
     setSpeechOutputSupported(isSpeechSynthesisSupported());
     setVoiceAutoSpeak(readVoiceAutoSpeakPref());
 
@@ -416,80 +420,68 @@ export function ShioriAiChatPanel({
     });
   }, [speechOutputSupported, stopSpeaking, toast]);
 
-  const cancelVoiceInput = useCallback(() => {
-    voiceCancelledRef.current = true;
-    voiceHadErrorRef.current = false;
-    try {
-      recognitionRef.current?.abort();
-    } catch {
-      // ignore already-stopped recognition
+  const releaseAudioResources = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
     }
-    recognitionRef.current = null;
-    setVoiceStatus("idle");
-    setVoiceErrorMsg(null);
-    setInterimTranscript("");
-    setInput(voiceDraftBaseRef.current);
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+    setRecordingSeconds(0);
   }, []);
 
+  const cancelVoiceInput = useCallback(() => {
+    voiceCancelledRef.current = true;
+    transcribeAbortRef.current?.abort();
+    transcribeAbortRef.current = null;
+
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      try {
+        recorder.stop();
+      } catch {
+        // ignore already-stopped recorder
+      }
+    }
+    audioChunksRef.current = [];
+    releaseAudioResources();
+    setVoiceStatus("idle");
+    setVoiceErrorMsg(null);
+  }, [releaseAudioResources]);
+
   const stopVoiceInput = useCallback(() => {
-    if (!recognitionRef.current) {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      releaseAudioResources();
       setVoiceStatus("idle");
       return;
     }
-    if (!voiceFinalTextRef.current.trim()) {
-      cancelVoiceInput();
-      return;
-    }
+    voiceCancelledRef.current = false;
     try {
-      recognitionRef.current.stop();
+      recorder.stop();
     } catch {
+      releaseAudioResources();
       setVoiceStatus("idle");
     }
-  }, [cancelVoiceInput]);
+  }, [releaseAudioResources]);
 
   const startVoiceInput = useCallback(async () => {
-    if (sending || voiceStatus === "requesting") return;
+    if (sending || voiceStatus === "requesting" || voiceStatus === "transcribing") return;
 
-    // 1. Check SpeechRecognition compatibility first so unsupported browsers get an instant clear message
-    const RecognitionCtor = getSpeechRecognitionConstructor();
-    if (!RecognitionCtor) {
-      const msg =
-        "Votre navigateur ne prend pas en charge la dictée vocale (SpeechRecognition). Utilisez Chrome, Edge ou Safari.";
-      setVoiceStatus("error");
-      setVoiceErrorMsg(msg);
-      toast({
-        title: "Dictée vocale non prise en charge",
-        description: msg,
-        variant: "warning",
-        durationMs: 4500,
-      });
-      return;
-    }
-
-    stopSpeaking();
-    setVoiceErrorMsg(null);
-    setErrorMsg(null);
-    voiceDraftBaseRef.current = input;
-    voiceFinalTextRef.current = "";
-    voiceCancelledRef.current = false;
-    voiceHadErrorRef.current = false;
-
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.abort();
-      } catch {
-        // ignore
-      }
-      recognitionRef.current = null;
-    }
-
-    // 2. Explicitly call navigator.mediaDevices.getUserMedia({ audio: true }) inside the click
-    //    handler so the browser ALWAYS prompts the user for microphone permission before SpeechRecognition.
-    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    // 1. Verify universal MediaRecorder + getUserMedia support (works on Opera GX, Brave, Chrome, Safari, Edge, Firefox)
+    if (
+      typeof window === "undefined" ||
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
       const msg =
         typeof window !== "undefined" && !window.isSecureContext
           ? "L'accès au microphone nécessite une connexion sécurisée (HTTPS ou localhost)."
-          : "Votre navigateur ne permet pas l'accès au microphone (mediaDevices.getUserMedia indisponible).";
+          : "Votre navigateur ne prend pas en charge l'enregistrement vocal (MediaRecorder indisponible).";
       setVoiceStatus("error");
       setVoiceErrorMsg(msg);
       toast({
@@ -501,10 +493,19 @@ export function ShioriAiChatPanel({
       return;
     }
 
+    stopSpeaking();
+    setVoiceErrorMsg(null);
+    setErrorMsg(null);
+    voiceDraftBaseRef.current = input;
+    voiceCancelledRef.current = false;
+    audioChunksRef.current = [];
+
+    // 2. Explicitly call navigator.mediaDevices.getUserMedia({ audio: true }) inside onClick
+    //    so the browser always displays the microphone permission popup.
     setVoiceStatus("requesting");
-    let mediaStream: MediaStream | null = null;
+    let stream: MediaStream;
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
       const msg = mapMediaDeviceErrorToFrench(err);
       setVoiceStatus("error");
@@ -516,108 +517,167 @@ export function ShioriAiChatPanel({
         durationMs: 5000,
       });
       return;
-    } finally {
-      // Immediately release hardware audio tracks so SpeechRecognition can acquire the mic cleanly
-      if (mediaStream) {
-        mediaStream.getTracks().forEach((track) => track.stop());
-      }
     }
 
-    // If user clicked Annuler while the browser permission popup was open, abort cleanly
+    // If user clicked Annuler while the browser permission popup was open, release mic cleanly
     if (voiceCancelledRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
       setVoiceStatus("idle");
       return;
     }
 
-    // 3. Start Web Speech Recognition now that microphone access is explicitly granted
+    // 3. Start universal MediaRecorder (audio/webm or audio/mp4 depending on browser support)
     try {
-      const recognition = new RecognitionCtor();
-      recognition.lang = speechLocale;
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
+      const preferredMime = pickSupportedAudioMimeType();
+      const recorder = preferredMime
+        ? new MediaRecorder(stream, { mimeType: preferredMime })
+        : new MediaRecorder(stream);
 
-      recognition.onstart = () => {
-        setVoiceStatus("listening");
-        setVoiceErrorMsg(null);
-        setInterimTranscript("");
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
-      recognition.onresult = (event) => {
-        let finalSeg = "";
-        let interimSeg = "";
-        for (let i = 0; i < event.results.length; i++) {
-          const res = event.results[i];
-          const text = res?.[0]?.transcript ?? "";
-          if (res.isFinal) {
-            finalSeg += `${text} `;
-          } else {
-            interimSeg += `${text} `;
-          }
-        }
-        const combined = `${finalSeg} ${interimSeg}`.replace(/\s+/g, " ").trim();
-        voiceFinalTextRef.current = combined;
-        setInterimTranscript(interimSeg.trim());
-        setInput(mergeTranscriptWithDraft(voiceDraftBaseRef.current, combined));
+      recorder.onerror = () => {
+        audioChunksRef.current = [];
+        releaseAudioResources();
+        const msg = "Erreur pendant l'enregistrement audio. Réessayez.";
+        setVoiceStatus("error");
+        setVoiceErrorMsg(msg);
       };
 
-      recognition.onerror = (event) => {
-        const msg = mapSpeechErrorToFrench(event.error);
-        if (event.error !== "aborted") {
-          voiceCancelledRef.current = true;
+      recorder.onstop = async () => {
+        const chunks = audioChunksRef.current;
+        audioChunksRef.current = [];
+        const finalMime = recorder.mimeType || preferredMime || "audio/webm";
+        releaseAudioResources();
+
+        if (voiceCancelledRef.current) {
+          setVoiceStatus("idle");
+          return;
         }
-        if (msg) {
-          voiceHadErrorRef.current = true;
+
+        const audioBlob = new Blob(chunks, { type: finalMime });
+        if (audioBlob.size < 120) {
+          const msg =
+            "Enregistrement trop court. Parlez au moins une seconde puis cliquez pour envoyer.";
           setVoiceStatus("error");
           setVoiceErrorMsg(msg);
-          toast({
-            title: "Micro / Dictée vocale",
-            description: msg,
-            variant: "warning",
-            durationMs: 4500,
+          return;
+        }
+
+        // Send recorded Blob via FormData to universal Gemini /api/transcribe route
+        setVoiceStatus("transcribing");
+        const controller = new AbortController();
+        transcribeAbortRef.current = controller;
+
+        try {
+          const formData = new FormData();
+          const ext = getAudioFileExtension(finalMime);
+          formData.append("audio", audioBlob, `shiori-voice.${ext}`);
+          formData.append("lang", contentLanguage);
+
+          const res = await fetch("/api/transcribe", {
+            method: "POST",
+            body: formData,
+            signal: controller.signal,
           });
-        }
-      };
 
-      recognition.onend = () => {
-        recognitionRef.current = null;
-        setInterimTranscript("");
-        if (!voiceHadErrorRef.current) {
-          setVoiceStatus("idle");
-        }
+          const data = (await res.json().catch(() => ({}))) as {
+            text?: string;
+            error?: string;
+          };
 
-        if (!voiceCancelledRef.current) {
-          const finalPrompt = mergeTranscriptWithDraft(
-            voiceDraftBaseRef.current,
-            voiceFinalTextRef.current
-          );
-          if (finalPrompt.trim().length > 0) {
-            void sendMessageRef.current(finalPrompt);
+          if (voiceCancelledRef.current) {
+            setVoiceStatus("idle");
+            return;
           }
+
+          if (!res.ok) {
+            const msg = data?.error || `Erreur lors de la transcription (HTTP ${res.status}).`;
+            setVoiceStatus("error");
+            setVoiceErrorMsg(msg);
+            toast({
+              title: "Transcription impossible",
+              description: msg,
+              variant: "warning",
+              durationMs: 4500,
+            });
+            return;
+          }
+
+          const transcribed = typeof data?.text === "string" ? data.text.trim() : "";
+          if (!transcribed) {
+            const msg =
+              "Aucune parole détectée dans l'enregistrement. Réessayez en parlant près du micro.";
+            setVoiceStatus("error");
+            setVoiceErrorMsg(msg);
+            return;
+          }
+
+          const combinedPrompt = mergeTranscriptWithDraft(
+            voiceDraftBaseRef.current,
+            transcribed
+          );
+          setVoiceErrorMsg(null);
+          setErrorMsg(null);
+          setVoiceStatus("idle");
+          setInput(combinedPrompt);
+          void sendMessageRef.current(combinedPrompt);
+        } catch (err) {
+          if ((err as { name?: string })?.name === "AbortError") {
+            setVoiceStatus("idle");
+            return;
+          }
+          const msg = "Erreur réseau lors de l'envoi de l'audio pour transcription.";
+          setVoiceStatus("error");
+          setVoiceErrorMsg(msg);
+        } finally {
+          transcribeAbortRef.current = null;
         }
       };
 
-      recognitionRef.current = recognition;
-      recognition.start();
+      recorder.start(250);
+      setRecordingSeconds(0);
+      setVoiceStatus("recording");
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => {
+          const next = prev + 1;
+          // Auto-stop at 90s to avoid runaway recordings
+          if (next >= 90 && mediaRecorderRef.current?.state === "recording") {
+            try {
+              mediaRecorderRef.current.stop();
+            } catch {
+              // ignore
+            }
+          }
+          return next;
+        });
+      }, 1000);
     } catch (err) {
+      stream.getTracks().forEach((track) => track.stop());
+      releaseAudioResources();
       const msg = mapMediaDeviceErrorToFrench(err);
       setVoiceStatus("error");
       setVoiceErrorMsg(msg);
-      recognitionRef.current = null;
       toast({
-        title: "Impossible de démarrer le micro",
+        title: "Impossible de démarrer l'enregistrement",
         description: msg,
         variant: "warning",
       });
     }
-  }, [input, sending, speechLocale, stopSpeaking, toast, voiceStatus]);
+  }, [contentLanguage, input, releaseAudioResources, sending, stopSpeaking, toast, voiceStatus]);
 
   const toggleVoiceInput = useCallback(() => {
-    if (voiceStatus === "requesting") {
+    if (voiceStatus === "requesting" || voiceStatus === "transcribing") {
       cancelVoiceInput();
       return;
     }
-    if (voiceStatus === "listening") {
+    if (voiceStatus === "recording") {
       stopVoiceInput();
       return;
     }
@@ -627,10 +687,20 @@ export function ShioriAiChatPanel({
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
+      transcribeAbortRef.current?.abort();
+      voiceCancelledRef.current = true;
       try {
-        recognitionRef.current?.abort();
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
       } catch {
         // ignore
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         try {
@@ -833,7 +903,7 @@ export function ShioriAiChatPanel({
   const handleLoadSavedChat = (chat: SavedAiChat) => {
     abortRef.current?.abort();
     stopSpeaking();
-    if (isListening || isRequestingMic) {
+    if (isRecording || isRequestingMic || isTranscribing) {
       cancelVoiceInput();
     } else {
       setVoiceStatus("idle");
@@ -881,7 +951,7 @@ export function ShioriAiChatPanel({
   const handleNewChat = () => {
     abortRef.current?.abort();
     stopSpeaking();
-    if (isListening || isRequestingMic) {
+    if (isRecording || isRequestingMic || isTranscribing) {
       cancelVoiceInput();
     } else {
       setVoiceStatus("idle");
@@ -1446,20 +1516,16 @@ export function ShioriAiChatPanel({
         )}
       </div>
 
-      {/* Refined Floating Glass Input Composer (Text + Voice Dictation) */}
+      {/* Refined Floating Glass Input Composer (Text + Universal Voice Recording via Gemini) */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (isListening || isRequestingMic) {
-            voiceCancelledRef.current = true;
-            try {
-              recognitionRef.current?.abort();
-            } catch {
-              // ignore
-            }
-            recognitionRef.current = null;
-            setVoiceStatus("idle");
-            setInterimTranscript("");
+          if (isRecording) {
+            stopVoiceInput();
+            return;
+          }
+          if (isRequestingMic || isTranscribing) {
+            cancelVoiceInput();
           }
           setVoiceErrorMsg(null);
           void sendMessage(input);
@@ -1494,15 +1560,15 @@ export function ShioriAiChatPanel({
             </motion.div>
           )}
 
-          {isListening && (
+          {isRecording && (
             <motion.div
-              key="voice-listening"
+              key="voice-recording"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.16 }}
               role="status"
-              className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-accent/14 border border-accent/40 text-xs"
+              className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-accent/14 border border-accent/45 text-xs"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span className="flex items-end gap-0.5 h-3.5 shrink-0" aria-hidden="true">
@@ -1517,31 +1583,57 @@ export function ShioriAiChatPanel({
                   />
                 </span>
                 <span className="text-[#F4F3EE] font-medium truncate">
-                  {interimTranscript
-                    ? `« ${interimTranscript} »`
-                    : "Écoute en cours… parle à Shiori IA"}
+                  Écoute en cours… Cliquez pour envoyer
+                </span>
+                <span className="font-mono text-[11px] text-kinpaku font-semibold shrink-0">
+                  {formatRecordingDuration(recordingSeconds)}
                 </span>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {input.trim() && (
-                  <button
-                    type="button"
-                    onClick={stopVoiceInput}
-                    className="px-2 py-0.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-[11px] font-semibold transition-colors cursor-pointer"
-                  >
-                    Envoyer
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={stopVoiceInput}
+                  className="px-2.5 py-0.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-[11px] font-semibold transition-colors cursor-pointer"
+                >
+                  Envoyer
+                </button>
                 <button
                   type="button"
                   onClick={cancelVoiceInput}
-                  aria-label="Annuler la dictée vocale"
+                  aria-label="Annuler l'enregistrement vocal"
                   className="px-2 py-0.5 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-[#D4D7E4] hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
                 >
                   Annuler
                 </button>
               </div>
+            </motion.div>
+          )}
+
+          {isTranscribing && (
+            <motion.div
+              key="voice-transcribing"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.16 }}
+              role="status"
+              className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-kinpaku/14 border border-kinpaku/45 text-xs"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-kinpaku shrink-0" />
+                <span className="text-[#F4F3EE] font-medium truncate">
+                  Transcription Gemini en cours…
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={cancelVoiceInput}
+                aria-label="Annuler la transcription"
+                className="px-2 py-0.5 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-[#D4D7E4] hover:text-white text-[11px] font-medium transition-colors cursor-pointer shrink-0"
+              >
+                Annuler
+              </button>
             </motion.div>
           )}
 
@@ -1577,9 +1669,9 @@ export function ShioriAiChatPanel({
         <div
           className={cn(
             "group flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#07080C]/95 border px-2 sm:px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_28px_rgba(0,0,0,0.45)] transition-all",
-            isListening
+            isRecording
               ? "border-accent/80 ring-2 ring-accent/25"
-              : isRequestingMic
+              : isRequestingMic || isTranscribing
                 ? "border-kinpaku/75 ring-2 ring-kinpaku/25"
                 : voiceStatus === "error"
                   ? "border-rose-500/55 ring-1 ring-rose-500/20"
@@ -1605,23 +1697,19 @@ export function ShioriAiChatPanel({
               }
             }}
             onKeyDown={(e) => {
-              if (e.key === "Escape" && (isListening || isRequestingMic)) {
+              if (e.key === "Escape" && (isRecording || isRequestingMic || isTranscribing)) {
                 e.preventDefault();
                 cancelVoiceInput();
                 return;
               }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if (isListening || isRequestingMic) {
-                  voiceCancelledRef.current = true;
-                  try {
-                    recognitionRef.current?.abort();
-                  } catch {
-                    // ignore
-                  }
-                  recognitionRef.current = null;
-                  setVoiceStatus("idle");
-                  setInterimTranscript("");
+                if (isRecording) {
+                  stopVoiceInput();
+                  return;
+                }
+                if (isRequestingMic || isTranscribing) {
+                  cancelVoiceInput();
                 }
                 setVoiceErrorMsg(null);
                 void sendMessage(input);
@@ -1630,15 +1718,17 @@ export function ShioriAiChatPanel({
             placeholder={
               isRequestingMic
                 ? "Autorisation du microphone en cours..."
-                : isListening
-                  ? "Écoute en cours… parle librement"
-                  : "Écris ou parle à Shiori IA..."
+                : isRecording
+                  ? "Écoute en cours… cliquez sur le micro pour envoyer"
+                  : isTranscribing
+                    ? "Transcription de votre voix en cours..."
+                    : "Écris ou parle à Shiori IA..."
             }
             aria-label="Écrire ou dicter un message à Shiori IA"
             className="flex-1 min-w-0 resize-none bg-transparent py-2 px-1 max-h-[120px] overflow-y-auto text-[13px] sm:text-sm text-[#F4F3EE] placeholder:text-[#7E849C] focus:outline-none leading-snug select-text"
           />
 
-          {/* Voice Dictation Microphone Button */}
+          {/* Universal Voice Recording Microphone Button (MediaRecorder -> Gemini /api/transcribe) */}
           <button
             type="button"
             onClick={toggleVoiceInput}
@@ -1647,27 +1737,31 @@ export function ShioriAiChatPanel({
             title={
               isRequestingMic
                 ? "Demande d'autorisation du microphone en cours…"
-                : isListening
-                  ? "Arrêter la dictée vocale"
-                  : voiceStatus === "error"
-                    ? "Réessayer la dictée vocale"
-                    : voiceInputSupported
-                      ? "Parler à Shiori IA (dictée vocale)"
-                      : "Dictée vocale (Chrome, Edge ou Safari requis)"
+                : isRecording
+                  ? "Arrêter l'enregistrement et envoyer à Shiori IA"
+                  : isTranscribing
+                    ? "Transcription Gemini en cours…"
+                    : voiceStatus === "error"
+                      ? "Réessayer l'enregistrement vocal"
+                      : voiceInputSupported
+                        ? "Parler à Shiori IA (enregistrement vocal universel)"
+                        : "Enregistrement vocal (microphone requis)"
             }
             aria-label={
               isRequestingMic
                 ? "Annuler la demande d'autorisation du microphone"
-                : isListening
-                  ? "Arrêter la dictée vocale"
-                  : "Parler à Shiori IA avec le micro"
+                : isRecording
+                  ? "Arrêter et envoyer le message vocal"
+                  : isTranscribing
+                    ? "Annuler la transcription vocale"
+                    : "Parler à Shiori IA avec le micro"
             }
-            aria-pressed={isListening}
+            aria-pressed={isRecording}
             className={cn(
               "relative w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 disabled:opacity-35",
-              isListening
+              isRecording
                 ? "bg-accent border-accent text-white shadow-[0_0_20px_rgba(229,72,77,0.65)]"
-                : isRequestingMic
+                : isRequestingMic || isTranscribing
                   ? "bg-kinpaku/20 border-kinpaku/65 text-kinpaku shadow-[0_0_16px_rgba(240,185,91,0.35)]"
                   : voiceStatus === "error"
                     ? "bg-rose-500/18 hover:bg-rose-500/28 border-rose-500/55 text-rose-200 hover:text-white"
@@ -1676,15 +1770,15 @@ export function ShioriAiChatPanel({
                       : "bg-white/[0.03] border-white/[0.07] text-[#6E7389] hover:text-[#B8BCCB]"
             )}
           >
-            {isListening && (
+            {isRecording && (
               <span
                 aria-hidden="true"
                 className="absolute inset-0 rounded-xl border border-accent animate-ping opacity-55 pointer-events-none"
               />
             )}
-            {isRequestingMic ? (
+            {isRequestingMic || isTranscribing ? (
               <Loader2 className="w-4 h-4 animate-spin relative z-10" />
-            ) : isListening ? (
+            ) : isRecording ? (
               <Square className="w-3.5 h-3.5 fill-current relative z-10" />
             ) : voiceStatus === "error" ? (
               <MicOff className="w-4 h-4 relative z-10" />
