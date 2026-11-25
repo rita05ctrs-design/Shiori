@@ -28,15 +28,15 @@ export function RevealSection({
   children,
   className,
   delay = 0,
-  yOffset = 18,
+  yOffset = 10,
   ...rest
 }: RevealSectionProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: yOffset }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: "some", margin: "120px 0px 120px 0px" }}
-      transition={{ duration: 0.42, delay, ease: CINEMA_EASE }}
+      viewport={{ once: true, amount: "some", margin: "180px 0px 180px 0px" }}
+      transition={{ duration: 0.26, delay, ease: CINEMA_EASE }}
       className={className}
       {...rest}
     >
@@ -51,8 +51,8 @@ export function RevealSection({
 export function StaggerContainer({
   children,
   className,
-  stagger = 0.035,
-  delay = 0.03,
+  stagger = 0.024,
+  delay = 0.015,
 }: {
   children: React.ReactNode;
   className?: string;
@@ -63,7 +63,7 @@ export function StaggerContainer({
     <motion.div
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, amount: "some" }}
+      viewport={{ once: true, amount: "some", margin: "120px 0px 120px 0px" }}
       variants={{
         hidden: {},
         visible: {
@@ -90,11 +90,11 @@ export function StaggerItem({
   return (
     <motion.div
       variants={{
-        hidden: { opacity: 0, y: 14 },
+        hidden: { opacity: 0, y: 10 },
         visible: {
           opacity: 1,
           y: 0,
-          transition: { duration: 0.36, ease: CINEMA_EASE },
+          transition: { duration: 0.24, ease: CINEMA_EASE },
         },
       }}
       className={className}

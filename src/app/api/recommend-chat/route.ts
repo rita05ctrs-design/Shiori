@@ -29,7 +29,159 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ANILIST_ENDPOINT = "https://graphql.anilist.co";
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"] as const;
+const DEFAULT_GEMINI_MODELS = [
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-flash-latest",
+  "gemini-3.8-flash",
+] as const;
+
+function getGeminiModelCandidates(): string[] {
+  const custom = process.env.GEMINI_MODEL?.trim();
+  const ordered = custom
+    ? [custom, ...DEFAULT_GEMINI_MODELS]
+    : [...DEFAULT_GEMINI_MODELS];
+  return Array.from(new Set(ordered));
+}
+
+function sanitizeApiKey(raw: string | undefined): string {
+  return (raw ?? "")
+    .trim()
+    .replace(/^["']+|["']+$/g, "")
+    .trim();
+}
+
+function redactSecret(text: string, secret: string): string {
+  if (!secret || !text) return text;
+  return text.split(secret).join("[REDACTED]");
+}
+
+/**
+ * Ensures multi-turn conversation history strictly satisfies Gemini's role rules:
+ * - Never starts with a "model" turn
+ * - Strictly alternates "user" / "model" (merging consecutive same-role messages)
+ */
+function buildNormalizedGeminiContents(
+  messages: ChatHistoryMessage[]
+): { role: "user" | "model"; parts: { text: string }[] }[] {
+  const contents: { role: "user" | "model"; parts: { text: string }[] }[] = [];
+  for (const m of messages) {
+    const role: "user" | "model" = m.role === "assistant" ? "model" : "user";
+    if (contents.length === 0 && role === "model") {
+      continue;
+    }
+    const prev = contents[contents.length - 1];
+    if (prev && prev.role === role) {
+      prev.parts[0].text = `${prev.parts[0].text}\n\n${m.content}`;
+    } else {
+      contents.push({ role, parts: [{ text: m.content }] });
+    }
+  }
+  return contents;
+}
+
+type GeminiDiagnostic = {
+  status: number | null;
+  shortReason: string;
+  rawMessage: string;
+  isFatalKeyError: boolean;
+  priority: number;
+};
+
+function classifyGeminiError(
+  err: unknown,
+  apiKey: string,
+  attemptedModels: string[]
+): GeminiDiagnostic {
+  const status =
+    typeof (err as { status?: unknown })?.status === "number"
+      ? ((err as { status: number }).status)
+      : null;
+  const raw = redactSecret(
+    err instanceof Error ? err.message : String(err ?? "Erreur inconnue"),
+    apiKey
+  );
+  const lower = raw.toLowerCase();
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    /api_key_invalid|api key not valid|permission_denied|unauthenticated/i.test(lower)
+  ) {
+    return {
+      status,
+      shortReason: "Clé API Gemini invalide ou refusée (vérifiez `GEMINI_API_KEY` dans `.env.local` / Vercel)",
+      rawMessage: raw,
+      isFatalKeyError: true,
+      priority: 100,
+    };
+  }
+
+  if (status === 429 || /resource_exhausted|quota|rate limit/i.test(lower)) {
+    return {
+      status,
+      shortReason: "Quota Gemini dépassé (limite de requêtes atteinte sur cette clé API)",
+      rawMessage: raw,
+      isFatalKeyError: false,
+      priority: 80,
+    };
+  }
+
+  if (status === 503 || /high demand|overloaded|service unavailable/i.test(lower)) {
+    return {
+      status,
+      shortReason: "Serveurs Google Gemini momentanément surchargés (503)",
+      rawMessage: raw,
+      isFatalKeyError: false,
+      priority: 70,
+    };
+  }
+
+  if (status === 400 || /failed_precondition|location is not supported|invalid_argument/i.test(lower)) {
+    const snippet = raw.replace(/^\[GoogleGenerativeAI Error\]:\s*/i, "").slice(0, 140);
+    return {
+      status,
+      shortReason: `Requête refusée par Gemini (${snippet})`,
+      rawMessage: raw,
+      isFatalKeyError: false,
+      priority: 60,
+    };
+  }
+
+  if (/fetch failed|enotfound|econnrefused|etimedout|aborted|network/i.test(lower)) {
+    return {
+      status,
+      shortReason: "Erreur réseau lors de la connexion à Google Gemini",
+      rawMessage: raw,
+      isFatalKeyError: false,
+      priority: 50,
+    };
+  }
+
+  if (status === 404 || /not_found|is not found|no longer available/i.test(lower)) {
+    return {
+      status,
+      shortReason: `Modèle Gemini indisponible (${attemptedModels.join(", ")})`,
+      rawMessage: raw,
+      isFatalKeyError: false,
+      priority: 20,
+    };
+  }
+
+  const concise = raw.replace(/^\[GoogleGenerativeAI Error\]:\s*/i, "").slice(0, 140);
+  return {
+    status,
+    shortReason: status ? `Erreur Gemini HTTP ${status} (${concise})` : `Erreur Gemini (${concise})`,
+    rawMessage: raw,
+    isFatalKeyError: false,
+    priority: 40,
+  };
+}
+
+function selectPrimaryDiagnostic(diagnostics: GeminiDiagnostic[]): GeminiDiagnostic {
+  return [...diagnostics].sort((a, b) => b.priority - a.priority)[0];
+}
 
 const CHAT_MEDIA_FIELDS = `
   id
@@ -558,7 +710,8 @@ export async function POST(request: NextRequest) {
   const { entries, displayName, source } = await fetchServerUserLibraryContext(clientLibrary);
   const tasteSummary = buildUserTasteSummary(entries);
   const systemPrompt = buildShioriSystemPrompt(tasteSummary, displayName);
-  const geminiKey = process.env.GEMINI_API_KEY?.trim() || "";
+  const geminiKey = sanitizeApiKey(process.env.GEMINI_API_KEY);
+  const candidateModels = getGeminiModelCandidates();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -577,6 +730,19 @@ export async function POST(request: NextRequest) {
         topGenres: tasteSummary.topGenres.slice(0, 4),
         geminiConfigured: Boolean(geminiKey),
       });
+
+      const streamTextSmoothly = async (text: string) => {
+        const words = text.split(/(\s+)/);
+        let acc = "";
+        for (let i = 0; i < words.length; i++) {
+          acc += words[i];
+          if (i % 6 === 5 || i === words.length - 1) {
+            send("delta", { text: acc });
+            acc = "";
+            await new Promise((r) => setTimeout(r, 12));
+          }
+        }
+      };
 
       const runFallbackReply = async (notice?: string) => {
         const { genresUsed, items } = await fetchFallbackUnseenRecommendations(
@@ -606,17 +772,7 @@ export async function POST(request: NextRequest) {
           "Cliquez sur une affiche ci-dessous pour ouvrir sa fiche complète ou l'ajouter en 1 clic à votre liste.",
         ].join("\n");
 
-        // Stream smoothly in natural chunks so UI feels alive and responsive
-        const words = fallbackText.split(/(\s+)/);
-        let acc = "";
-        for (let i = 0; i < words.length; i++) {
-          acc += words[i];
-          if (i % 6 === 5 || i === words.length - 1) {
-            send("delta", { text: acc });
-            acc = "";
-            await new Promise((r) => setTimeout(r, 14));
-          }
-        }
+        await streamTextSmoothly(fallbackText);
 
         if (items.length > 0) {
           send("recommendations", { items });
@@ -634,82 +790,113 @@ export async function POST(request: NextRequest) {
 
       try {
         const genAI = new GoogleGenerativeAI(geminiKey);
-        const contents = messages.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        }));
+        const contents = buildNormalizedGeminiContents(messages);
 
         let fullRawText = "";
-        let emittedDisplayLength = 0;
-        let streamedOk = false;
-        let lastErr: unknown = null;
+        let usedModel: string | null = null;
+        const attemptedModels: string[] = [];
+        const diagnostics: GeminiDiagnostic[] = [];
 
-        for (const modelName of GEMINI_MODELS) {
+        const tryModel = async (modelName: string): Promise<boolean> => {
+          attemptedModels.push(modelName);
           try {
             const model = genAI.getGenerativeModel({
               model: modelName,
               systemInstruction: systemPrompt,
               generationConfig: {
                 temperature: 0.78,
-                maxOutputTokens: 1100,
+                maxOutputTokens: 2048,
               },
             });
 
-            const result = await model.generateContentStream({ contents });
-            for await (const chunk of result.stream) {
-              const piece = chunk.text();
-              if (!piece) continue;
-              fullRawText += piece;
-              const safeDisplay = stripRecommendationsMarkerForDisplay(fullRawText);
-              if (safeDisplay.length > emittedDisplayLength) {
-                const delta = safeDisplay.slice(emittedDisplayLength);
-                emittedDisplayLength = safeDisplay.length;
-                send("delta", { text: delta });
-              }
+            const result = await model.generateContent({ contents });
+            const text = result.response.text();
+            if (text && text.trim().length > 0) {
+              fullRawText = text;
+              usedModel = modelName;
+              return true;
             }
-            streamedOk = true;
-            break;
+            throw new Error(`Réponse vide renvoyée par ${modelName}`);
           } catch (err) {
-            lastErr = err;
-            if (emittedDisplayLength > 0) {
-              // Partial output already streamed; stop retrying another model
-              streamedOk = true;
-              break;
-            }
+            const diag = classifyGeminiError(err, geminiKey, attemptedModels);
+            diagnostics.push(diag);
+            console.error("[/api/recommend-chat] Échec appel Gemini :", {
+              model: modelName,
+              status: diag.status,
+              reason: diag.shortReason,
+              detail: diag.rawMessage,
+            });
+            return false;
+          }
+        };
+
+        // Use generateContent() (complete UTF-8 JSON) to avoid @google/generative-ai@0.24.1's
+        // SSE multi-byte chunk parser crashes on French text, then stream cleanly to the client.
+        for (const modelName of candidateModels) {
+          const ok = await tryModel(modelName);
+          if (ok) break;
+          if (diagnostics[diagnostics.length - 1]?.isFatalKeyError) {
+            // No point trying other models if the API key itself is rejected
+            break;
           }
         }
 
-        if (!streamedOk) {
-          const errHint =
-            lastErr instanceof Error && /API_KEY|401|403|quota|429/i.test(lastErr.message)
-              ? "⚠️ *Gemini est temporairement indisponible ou la clé `GEMINI_API_KEY` est invalide.* Voici des suggestions basées sur votre profil AniList :\n"
-              : "⚠️ *Connexion Gemini momentanément indisponible.* Voici des suggestions adaptées à votre profil :\n";
-          await runFallbackReply(errHint);
+        // Single brief retry on the primary model if failures were transient 503 spikes
+        if (
+          !fullRawText &&
+          candidateModels.length > 0 &&
+          diagnostics.some((d) => d.status === 503) &&
+          !diagnostics.some((d) => d.isFatalKeyError)
+        ) {
+          await new Promise((r) => setTimeout(r, 600));
+          await tryModel(candidateModels[0]);
+        }
+
+        if (!fullRawText) {
+          const primaryDiag =
+            diagnostics.length > 0
+              ? selectPrimaryDiagnostic(diagnostics)
+              : classifyGeminiError(new Error("Aucune réponse Gemini"), geminiKey, attemptedModels);
+          await runFallbackReply(
+            `⚠️ *Gemini indisponible — ${primaryDiag.shortReason}.* Voici tout de même des suggestions basées sur votre profil AniList :\n`
+          );
           controller.close();
           return;
         }
 
         const { cleanText, recommendations } = extractAiRecommendationsBlock(fullRawText);
-        if (cleanText.length > emittedDisplayLength) {
-          send("delta", { text: cleanText.slice(emittedDisplayLength) });
+        const safeText = stripRecommendationsMarkerForDisplay(cleanText || fullRawText);
+
+        // Resolve AniList clickable posters in parallel while streaming prose smoothly to the UI
+        const resolvePromise =
+          recommendations.length > 0
+            ? resolveTitlesOnAniList(
+                recommendations,
+                tasteSummary.seenIds,
+                tasteSummary.seenNormalizedTitles
+              )
+            : Promise.resolve([]);
+
+        const [, resolved] = await Promise.all([
+          streamTextSmoothly(safeText),
+          resolvePromise,
+        ]);
+
+        if (resolved.length > 0) {
+          send("recommendations", { items: resolved });
         }
 
-        if (recommendations.length > 0) {
-          const resolved = await resolveTitlesOnAniList(
-            recommendations,
-            tasteSummary.seenIds,
-            tasteSummary.seenNormalizedTitles
-          );
-          if (resolved.length > 0) {
-            send("recommendations", { items: resolved });
-          }
-        }
-
-        send("done", { fallback: false });
+        send("done", { fallback: false, model: usedModel });
         controller.close();
-      } catch {
+      } catch (err) {
+        const diag = classifyGeminiError(err, geminiKey, candidateModels);
+        console.error("[/api/recommend-chat] Erreur inattendue Gemini :", {
+          status: diag.status,
+          reason: diag.shortReason,
+          detail: diag.rawMessage,
+        });
         await runFallbackReply(
-          "⚠️ *L'assistant Gemini n'a pas pu répondre pour le moment.* Voici tout de même des recommandations non vues basées sur vos goûts :\n"
+          `⚠️ *Gemini indisponible — ${diag.shortReason}.* Voici tout de même des recommandations non vues basées sur vos goûts :\n`
         );
         controller.close();
       }

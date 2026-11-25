@@ -284,19 +284,21 @@ export function AmbientCanvas() {
 
     const effect = ambiance.effect;
     const speedMult = SPEED_MULT[ambiance.speed];
+    const isMobileViewport = window.innerWidth < 768;
+    const mobileScale = isMobileViewport ? 0.55 : 1;
     const targetCount = Math.max(
-      8,
-      Math.round(BASE_COUNTS[effect] * DENSITY_MULT[ambiance.density])
+      6,
+      Math.round(BASE_COUNTS[effect] * DENSITY_MULT[ambiance.density] * mobileScale)
     );
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    let dpr = Math.min(window.devicePixelRatio || 1, isMobileViewport ? 1.25 : 1.5);
 
     const resize = () => {
       width = window.innerWidth;
       height = window.innerHeight;
-      dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      dpr = Math.min(window.devicePixelRatio || 1, width < 768 ? 1.25 : 1.5);
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       canvas.style.width = `${width}px`;

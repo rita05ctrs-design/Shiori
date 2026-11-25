@@ -702,6 +702,17 @@ test("ai-recommend: builds taste summary, strips streaming JSON cleanly, and exc
   assert.equal(parsed.recommendations.length, 2);
   assert.equal(parsed.recommendations[0].title, "Mushishi");
 
+  // Malformed marker emitted by Gemini (single `>` instead of `>>>`) must still parse & strip cleanly
+  const malformedOutput = `Voici trois thrillers intenses !\n<<<SHIORI_RECS>[{"title":"ID:Invaded","reason":"Enquête mentale captivante","matchTag":"Thriller"},{"title":"Erased","reason":"Suspense haletant en 12 épisodes","matchTag":"Mystery"}]<<<END_SHIORI_RECS>>>`;
+  const parsedMalformed = extractAiRecommendationsBlock(malformedOutput);
+  assert.equal(parsedMalformed.cleanText, "Voici trois thrillers intenses !");
+  assert.equal(parsedMalformed.recommendations.length, 2);
+  assert.equal(parsedMalformed.recommendations[0].title, "ID:Invaded");
+  assert.equal(
+    stripRecommendationsMarkerForDisplay(malformedOutput),
+    "Voici trois thrillers intenses !"
+  );
+
   const makeMedia = (id: number, romaji: string): MediaItem => ({
     id,
     type: "ANIME",

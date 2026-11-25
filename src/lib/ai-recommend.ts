@@ -3,6 +3,9 @@ import type { LibraryStatus, MediaItem, MediaType } from "@/types/media";
 export const AI_RECS_START = "<<<SHIORI_RECS>>>";
 export const AI_RECS_END = "<<<END_SHIORI_RECS>>>";
 
+const AI_RECS_START_RE = /<{1,4}\s*SHIORI_RECS\s*>{0,4}/i;
+const AI_RECS_END_RE = /<{1,4}\s*\/?\s*END_SHIORI_RECS\s*>{0,4}|<\/\s*SHIORI_RECS\s*>/i;
+
 export interface TasteLibraryEntry {
   mediaId: number;
   type: MediaType;
@@ -182,13 +185,16 @@ export function buildShioriSystemPrompt(
 }
 
 /**
- * Strips any complete or in-progress <<<SHIORI_RECS>>> block so streaming text
+ * Strips any complete, malformed, or in-progress <<<SHIORI_RECS>>> block so text
  * displayed to the user stays 100% clean natural language with zero JSON leakage.
  */
 export function stripRecommendationsMarkerForDisplay(rawText: string): string {
-  const fullIdx = rawText.indexOf(AI_RECS_START);
-  if (fullIdx !== -1) {
-    return rawText.slice(0, fullIdx).trimEnd();
+  const startMatch = AI_RECS_START_RE.exec(rawText);
+  if (startMatch) {
+    return rawText
+      .slice(0, startMatch.index)
+      .replace(/(?:```(?:json)?\s*)$/i, "")
+      .trimEnd();
   }
 
   // Guard against partial marker arriving at the tail of a stream chunk (e.g. "<<<SHIOR")
@@ -203,24 +209,33 @@ export function stripRecommendationsMarkerForDisplay(rawText: string): string {
 
 /**
  * Extracts natural-language reply text and parsed structured recommendations from
- * the completed model output.
+ * the completed model output (tolerant to minor delimiter typos like `<<<SHIORI_RECS>`).
  */
 export function extractAiRecommendationsBlock(fullText: string): {
   cleanText: string;
   recommendations: AiRawRecommendation[];
 } {
-  const startIdx = fullText.indexOf(AI_RECS_START);
-  if (startIdx === -1) {
+  const startMatch = AI_RECS_START_RE.exec(fullText);
+  if (!startMatch) {
     return { cleanText: fullText.trim(), recommendations: [] };
   }
 
-  const cleanText = fullText.slice(0, startIdx).trim();
-  const afterStart = fullText.slice(startIdx + AI_RECS_START.length);
-  const endIdx = afterStart.indexOf(AI_RECS_END);
-  const jsonSlice = (endIdx === -1 ? afterStart : afterStart.slice(0, endIdx))
+  const cleanText = fullText
+    .slice(0, startMatch.index)
+    .replace(/(?:```(?:json)?\s*)$/i, "")
+    .trim();
+  const afterStart = fullText.slice(startMatch.index + startMatch[0].length);
+  const endMatch = AI_RECS_END_RE.exec(afterStart);
+  let jsonSlice = (endMatch ? afterStart.slice(0, endMatch.index) : afterStart)
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "")
     .trim();
+
+  const firstBracket = jsonSlice.indexOf("[");
+  const lastBracket = jsonSlice.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    jsonSlice = jsonSlice.slice(firstBracket, lastBracket + 1);
+  }
 
   if (!jsonSlice) {
     return { cleanText, recommendations: [] };

@@ -79,6 +79,20 @@ html {
   color: #f4f3ee;
   overflow-x: hidden;
   max-width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+a,
+button,
+[role="button"],
+input[type="range"] {
+  touch-action: manipulation;
 }
 
 body {

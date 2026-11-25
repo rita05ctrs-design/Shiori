@@ -10,6 +10,7 @@ import { ToastContainer } from "@/components/layout/ToastContainer";
 import { BadgeUnlockToast } from "@/components/badges/BadgeUnlockToast";
 import { PwaRegistrar } from "@/components/pwa/PwaRegistrar";
 import { ShioriAiFloatingWidget } from "@/components/ai/ShioriAiFloatingWidget";
+import { ScrollToTopButton } from "@/components/layout/ScrollToTopButton";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -152,6 +153,7 @@ export default function RootLayout({
             <main className="flex-1 min-w-0">{children}</main>
             <Footer />
             <GlobalModals />
+            <ScrollToTopButton />
             <ShioriAiFloatingWidget />
             <ToastContainer />
             <BadgeUnlockToast />

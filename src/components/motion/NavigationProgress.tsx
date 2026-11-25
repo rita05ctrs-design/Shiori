@@ -106,7 +106,7 @@ export function NavigationProgress() {
       <motion.div
         aria-hidden="true"
         style={{ scaleX: smoothScroll, transformOrigin: "left center" }}
-        className="fixed top-16 inset-x-0 z-[49] h-[1.5px] bg-gradient-to-r from-accent/80 via-accent-hover/90 to-kinpaku/80 pointer-events-none opacity-75"
+        className="fixed top-14 sm:top-16 inset-x-0 z-[49] h-[1.5px] bg-gradient-to-r from-accent/80 via-accent-hover/90 to-kinpaku/80 pointer-events-none opacity-75"
       />
     </>
   );
