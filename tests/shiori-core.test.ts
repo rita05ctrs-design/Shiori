@@ -27,6 +27,10 @@ import {
 } from "../src/lib/filter-persistence.ts";
 import { parseMalXml } from "../src/lib/mal-import.ts";
 import { BoundedClientCache } from "../src/lib/client-cache.ts";
+import {
+  buildRegionalSearchLinks,
+  normalizeStreamingLinks,
+} from "../src/lib/streaming.ts";
 import type {
   AiringScheduleItem,
   CustomCollection,
@@ -596,4 +600,28 @@ test("affinity: surfaces shared genres, agreements, and score debates", () => {
   assert.equal(aff.biggestAgreements[0]?.mediaId, 10);
   assert.equal(aff.biggestDebates[0]?.mediaId, 20);
   assert.equal(aff.biggestDebates[0]?.scoreDiff, 3);
+});
+
+test("streaming: prioritizes major platforms, upgrades https, filters unsafe/disabled links", () => {
+  const links = normalizeStreamingLinks(
+    [
+      { id: 1, site: "Bilibili TV", url: "https://www.bilibili.tv/en/media/1", type: "STREAMING", isDisabled: false },
+      { id: 2, site: "Netflix", url: "https://www.netflix.com/title/123", type: "STREAMING", isDisabled: false },
+      { id: 3, site: "Crunchyroll", url: "http://www.crunchyroll.com/frieren", type: "STREAMING", isDisabled: false },
+      { id: 4, site: "Twitter", url: "https://twitter.com/anime", type: "SOCIAL", isDisabled: false },
+      { id: 5, site: "Evil", url: "javascript:alert(1)", type: "STREAMING", isDisabled: false },
+      { id: 6, site: "Hulu", url: "https://www.hulu.com/disabled", type: "STREAMING", isDisabled: true },
+    ],
+    [{ site: "ADN", url: "https://animationdigitalnetwork.com/video/frieren" }]
+  );
+
+  assert.deepEqual(
+    links.map((l) => l.site),
+    ["Crunchyroll", "ADN", "Netflix", "Bilibili TV"]
+  );
+  assert.equal(links[0].url, "https://www.crunchyroll.com/frieren");
+
+  const frLinks = buildRegionalSearchLinks("Frieren", "ANIME");
+  assert.equal(frLinks.length, 3);
+  assert.ok(frLinks[0].url.includes("justwatch.com/fr"));
 });

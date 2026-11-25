@@ -1,4 +1,5 @@
 import seedRaw from "@/data/anilist-seed.json";
+import { normalizeStreamingLinks } from "@/lib/streaming";
 import type {
   AiringScheduleItem,
   CharacterEdge,
@@ -98,6 +99,7 @@ export function normalizeMedia(raw: any): MediaItem {
           episode: raw.nextAiringEpisode.episode,
         }
       : null,
+    streamingLinks: normalizeStreamingLinks(raw?.externalLinks, raw?.streamingEpisodes),
   };
 }
 
@@ -269,6 +271,7 @@ const MEDIA_FRAGMENT = `
   staff(perPage: 1) { edges { role node { name { full } } } }
   trailer { id site }
   nextAiringEpisode { airingAt timeUntilAiring episode }
+  externalLinks { id url site type icon color language notes isDisabled }
 `;
 
 export function getSeedData() {
@@ -326,7 +329,8 @@ export async function fetchHomeData(): Promise<HomeData> {
   const seed = getSeedData();
   try {
     const now = Math.floor(Date.now() / 1000);
-    const query = `
+    // Split into 2 compact parallel GraphQL queries so complexity stays well below AniList's 500 cap
+    const coreQuery = `
       query ($dayStart: Int, $dayEnd: Int) {
         trending: Page(page: 1, perPage: 12) {
           media(sort: TRENDING_DESC, type: ANIME, isAdult: false) { ${MEDIA_FRAGMENT} }
@@ -340,6 +344,17 @@ export async function fetchHomeData(): Promise<HomeData> {
         manga: Page(page: 1, perPage: 12) {
           media(sort: SCORE_DESC, type: MANGA, isAdult: false) { ${MEDIA_FRAGMENT} }
         }
+        airing: Page(page: 1, perPage: 16) {
+          airingSchedules(airingAt_greater: $dayStart, airingAt_lesser: $dayEnd, sort: TIME) {
+            id airingAt episode timeUntilAiring
+            media { ${MEDIA_FRAGMENT} isAdult }
+          }
+        }
+      }
+    `;
+
+    const curatedQuery = `
+      query {
         movies: Page(page: 1, perPage: 12) {
           media(sort: SCORE_DESC, type: ANIME, format: MOVIE, popularity_greater: 45000, isAdult: false) { ${MEDIA_FRAGMENT} }
         }
@@ -352,20 +367,19 @@ export async function fetchHomeData(): Promise<HomeData> {
         shortBinge: Page(page: 1, perPage: 12) {
           media(sort: POPULARITY_DESC, type: ANIME, format: TV, episodes_lesser: 14, episodes_greater: 5, averageScore_greater: 80, isAdult: false) { ${MEDIA_FRAGMENT} }
         }
-        airing: Page(page: 1, perPage: 16) {
-          airingSchedules(airingAt_greater: $dayStart, airingAt_lesser: $dayEnd, sort: TIME) {
-            id airingAt episode timeUntilAiring
-            media { ${MEDIA_FRAGMENT} isAdult }
-          }
-        }
       }
     `;
 
-    const data = await queryAniList(
-      query,
-      { dayStart: now - 3600 * 6, dayEnd: now + 3600 * 48 },
-      300
-    );
+    const [coreData, curatedRes] = await Promise.all([
+      queryAniList(
+        coreQuery,
+        { dayStart: now - 3600 * 6, dayEnd: now + 3600 * 48 },
+        300
+      ),
+      queryAniList(curatedQuery, {}, 300).catch(() => ({})),
+    ]);
+
+    const data = { ...coreData, ...curatedRes };
 
     const trending: MediaItem[] = (data.trending?.media ?? []).map(normalizeMedia);
     const popular: MediaItem[] = (data.popular?.media ?? []).map(normalizeMedia);

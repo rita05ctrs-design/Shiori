@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
+import { StreamingIconsStrip } from "@/components/media/WhereToWatchSection";
 import {
   buildMonthCalendarGrid,
   formatDateKeyInTimezone,
@@ -468,6 +469,12 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               <>
                 <span className="text-white/20">·</span>
                 <span className="truncate">{slot.media.studio}</span>
+              </>
+            )}
+            {slot.media.streamingLinks && slot.media.streamingLinks.length > 0 && (
+              <>
+                <span className="text-white/20">·</span>
+                <StreamingIconsStrip links={slot.media.streamingLinks} max={3} />
               </>
             )}
           </div>

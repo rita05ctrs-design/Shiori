@@ -25,6 +25,16 @@ export interface NextAiringEpisode {
   episode: number;
 }
 
+export interface StreamingLink {
+  id: number;
+  site: string;
+  url: string;
+  icon: string | null;
+  color: string | null;
+  language: string | null;
+  notes: string | null;
+}
+
 export interface MediaItem {
   id: number;
   type: MediaType;
@@ -57,6 +67,7 @@ export interface MediaItem {
     site: string;
   } | null;
   nextAiringEpisode: NextAiringEpisode | null;
+  streamingLinks?: StreamingLink[];
 }
 
 export interface CharacterEdge {

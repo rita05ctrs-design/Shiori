@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
+import { StreamingPillsInline } from "@/components/media/WhereToWatchSection";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import {
   cn,
@@ -284,6 +285,22 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                     </Link>
                   ))}
                 </motion.div>
+
+                {/* Official Streaming Platforms on Hero */}
+                {active.streamingLinks && active.streamingLinks.length > 0 && (
+                  <motion.div
+                    variants={{
+                      hidden: { opacity: 0, y: 14 },
+                      visible: { opacity: 1, y: 0, transition: { duration: 0.46, ease: CINEMA_EASE } },
+                    }}
+                    className="mt-3 flex flex-wrap items-center gap-2"
+                  >
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE]">
+                      Regarder sur :
+                    </span>
+                    <StreamingPillsInline links={active.streamingLinks} max={3} />
+                  </motion.div>
+                )}
 
                 {/* Synopsis (auto-translated in chosen content language) */}
                 <motion.div

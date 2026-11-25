@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { Star, Plus, Check, Edit3 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { StreamingIconsStrip } from "@/components/media/WhereToWatchSection";
 import {
   cn,
   formatFormat,
@@ -127,11 +128,14 @@ export const MediaCard = React.memo(function MediaCard({
         <h3 className="text-[13.5px] font-semibold text-[#F2F1EC] group-hover:text-accent-hover transition-colors line-clamp-1 leading-snug">
           {title}
         </h3>
-        <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-[#7E8397] truncate">
-          {media.seasonYear && <span className="font-mono">{media.seasonYear}</span>}
-          {media.seasonYear && media.genres[0] && <span>·</span>}
+        <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-[#7E8397] min-w-0">
+          {media.seasonYear && <span className="font-mono shrink-0">{media.seasonYear}</span>}
+          {media.seasonYear && media.genres[0] && <span className="shrink-0">·</span>}
           {media.genres[0] && <span className="truncate">{media.genres[0]}</span>}
-          {entry && <Check className="w-3 h-3 text-emerald-400 ml-auto shrink-0" />}
+          <div className="ml-auto flex items-center gap-1 shrink-0">
+            <StreamingIconsStrip links={media.streamingLinks} max={2} />
+            {entry && <Check className="w-3 h-3 text-emerald-400 shrink-0" />}
+          </div>
         </div>
       </Link>
     </div>

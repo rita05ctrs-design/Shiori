@@ -20,6 +20,10 @@ import { MediaCard } from "@/components/media/MediaCard";
 import { LibraryTrackerCard } from "@/components/media/LibraryTrackerCard";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import {
+  StreamingPillsInline,
+  WhereToWatchSection,
+} from "@/components/media/WhereToWatchSection";
+import {
   CINEMA_EASE,
   ParallaxBanner,
   RevealSection,
@@ -300,6 +304,16 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                   </Link>
                 ))}
               </div>
+
+              {/* Above-the-fold Official Streaming Quick Pills */}
+              {media.streamingLinks && media.streamingLinks.length > 0 && (
+                <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-[#8E93A6]">
+                    {media.type === "MANGA" ? "Lire sur :" : "Regarder sur :"}
+                  </span>
+                  <StreamingPillsInline links={media.streamingLinks} max={4} />
+                </div>
+              )}
             </div>
 
             {/* Synopsis (with On-the-Fly Auto Translation & 1-Click Original Toggle) */}
@@ -324,6 +338,13 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 </div>
               )}
             </section>
+
+            {/* Where to Watch / Official Streaming Platforms */}
+            <WhereToWatchSection
+              title={title}
+              type={media.type}
+              links={media.streamingLinks}
+            />
 
             {/* Interactive Episode / Chapter Progress Tracker */}
             <section className="rounded-2xl card-surface p-6">
