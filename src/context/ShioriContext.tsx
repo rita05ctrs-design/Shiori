@@ -103,7 +103,7 @@ const STORAGE_KEYS = {
   ambiance: "shiori_ambiance_v1",
   theme: THEME_STORAGE_KEY,
   displayPrefs: "shiori_display_prefs_v1",
-  homeSections: "shiori_home_sections_v1",
+  homeSections: "shiori_home_sections_v2",
   collections: "shiori_collections_v1",
   contentLanguage: "shiori_content_lang_v1",
   anilistAutoSync: "shiori_anilist_autosync_v1",
@@ -122,12 +122,12 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPreferences = {
 
 export const DEFAULT_HOME_SECTIONS: HomeSectionPreference[] = [
   { id: "hero", visible: true },
-  { id: "continue_watching", visible: true },
-  { id: "stats_strip", visible: true },
-  { id: "favorites_shelf", visible: true },
+  { id: "trending_season", visible: true },
   { id: "weekly_episodes", visible: true },
+  { id: "recommendations", visible: true },
   { id: "catalog_rails", visible: true },
-  { id: "recommendations", visible: false },
+  { id: "favorites_shelf", visible: false },
+  { id: "stats_strip", visible: false },
   { id: "mood_roulette", visible: false },
   { id: "recent_activity", visible: false },
   { id: "community_pulse", visible: false },
@@ -151,6 +151,10 @@ function normalizeHomeSections(raw: unknown): HomeSectionPreference[] {
         out.push({ id, visible: Boolean((item as { visible?: boolean }).visible ?? true) });
       }
     }
+  }
+  // Automatically migrate legacy v1 home layouts (prior to the immersive 2:3 carousels)
+  if (!seen.has("trending_season")) {
+    return DEFAULT_HOME_SECTIONS;
   }
   for (const def of DEFAULT_HOME_SECTIONS) {
     if (!seen.has(def.id)) out.push(def);
@@ -450,10 +454,11 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   // Toast helper
   const toast = useCallback((t: Omit<ToastMessage, "id">) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setToasts((prev) => [...prev.slice(-3), { ...t, id }]);
+    const durationMs = t.durationMs ?? (t.action ? 5500 : 3400);
+    setToasts((prev) => [...prev.slice(-3), { ...t, id, durationMs }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((item) => item.id !== id));
-    }, 3400);
+    }, durationMs);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -2798,14 +2803,46 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
+      const prevSnapshot: LibraryEntry = { ...existing };
+
       toast({
-        title: reachedEnd ? "Série terminée !" : `+${delta} ${unit.toLowerCase()}`,
+        title: reachedEnd
+          ? "Série terminée !"
+          : delta > 0
+            ? `+${delta} ${unit.toLowerCase()} vu`
+            : `${delta} ${unit.toLowerCase()}`,
         description: `${existing.title} · ${unit} ${nextProg}${existing.totalUnits ? `/${existing.totalUnits}` : ""}`,
         variant: reachedEnd ? "success" : "info",
         coverImage: existing.coverImage,
         status: updated.status,
         mediaId: existing.mediaId,
         celebrate: reachedEnd,
+        durationMs: delta > 0 ? 5500 : 3400,
+        action:
+          delta > 0
+            ? {
+                label: "Annuler",
+                onClick: () => {
+                  const reverted: LibraryEntry = {
+                    ...prevSnapshot,
+                    updatedAt: new Date().toISOString(),
+                  };
+                  setLibrary((prev) =>
+                    prev.map((e) => (e.mediaId === mediaId ? reverted : e))
+                  );
+                  if (profile.mode === "supabase") {
+                    void syncEntryToCloud(profile.id, reverted);
+                  }
+                  void pushMutationToAniList({ action: "save", entry: reverted });
+                  toast({
+                    title: "Action annulée",
+                    description: `${prevSnapshot.title} · ${unit} ${prevSnapshot.progress}${prevSnapshot.totalUnits ? `/${prevSnapshot.totalUnits}` : ""}`,
+                    variant: "default",
+                    durationMs: 2600,
+                  });
+                },
+              }
+            : undefined,
       });
     },
     [

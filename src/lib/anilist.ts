@@ -1,5 +1,16 @@
 import seedRaw from "@/data/anilist-seed.json";
 import { normalizeStreamingLinks } from "@/lib/streaming";
+import { resolveSearchAlias } from "@/lib/searchAliases";
+import { buildTypoFallbackQueries, rankMediaByFuzzySearch } from "@/lib/fuzzy-search";
+import {
+  computeGenreIntensities,
+  mediaMatchesGenreMinRanks,
+  normalizeGenreMinRanks,
+} from "@/lib/genre-intensity";
+import {
+  buildSeasonChronology,
+  type RawRelationMediaNode,
+} from "@/lib/season-timeline";
 import type {
   AiringScheduleItem,
   CharacterEdge,
@@ -53,6 +64,9 @@ export function normalizeMedia(raw: any): MediaItem {
       english: raw?.title?.english ?? null,
       native: raw?.title?.native ?? null,
     },
+    synonyms: Array.isArray(raw?.synonyms)
+      ? raw.synonyms.filter((s: unknown): s is string => typeof s === "string" && s.trim().length > 0)
+      : [],
     coverImage: {
       extraLarge:
         raw?.coverImage?.extraLarge ||
@@ -87,6 +101,17 @@ export function normalizeMedia(raw: any): MediaItem {
     popularity: raw?.popularity ?? null,
     favourites: raw?.favourites ?? null,
     genres: Array.isArray(raw?.genres) ? raw.genres : [],
+    tags: Array.isArray(raw?.tags)
+      ? raw.tags
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .filter((t: any) => t && !t.isMediaSpoiler && !t.isAdult && typeof t.name === "string")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((t: any) => ({
+            name: String(t.name),
+            rank: typeof t.rank === "number" ? t.rank : 50,
+            category: typeof t.category === "string" ? t.category : undefined,
+          }))
+      : undefined,
     studio: studioNode || staffAuthor || null,
     trailer:
       raw?.trailer?.id && raw?.trailer?.site === "youtube"
@@ -164,6 +189,18 @@ export function normalizeMediaDetail(raw: any): MediaDetail {
     .map((s: any) => s?.name)
     .filter(Boolean);
 
+  const allCleanTags = (raw?.tags ?? [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((t: any) => t && !t.isMediaSpoiler && !t.isAdult && typeof t.name === "string")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((t: any) => ({
+      name: String(t.name),
+      rank: typeof t.rank === "number" ? t.rank : 50,
+      category: typeof t.category === "string" ? t.category : undefined,
+    }));
+
+  const genreIntensities = computeGenreIntensities(base.genres, allCleanTags);
+
   return {
     ...base,
     source: raw?.source ?? null,
@@ -171,12 +208,8 @@ export function normalizeMediaDetail(raw: any): MediaDetail {
     hashtag: raw?.hashtag ?? null,
     siteUrl: raw?.siteUrl ?? null,
     studios,
-    tags: (raw?.tags ?? [])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((t: any) => !t.isMediaSpoiler && !t.isAdult)
-      .slice(0, 10)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((t: any) => ({ name: t.name, rank: t.rank ?? 50 })),
+    tags: allCleanTags.slice(0, 12),
+    genreIntensities,
     characters,
     relations,
     recommendations,
@@ -250,6 +283,7 @@ const MEDIA_FRAGMENT = `
   id
   type
   title { romaji english native }
+  synonyms
   coverImage { extraLarge large color }
   bannerImage
   description(asHtml: false)
@@ -344,7 +378,7 @@ export async function fetchHomeData(): Promise<HomeData> {
         manga: Page(page: 1, perPage: 12) {
           media(sort: SCORE_DESC, type: MANGA, isAdult: false) { ${MEDIA_FRAGMENT} }
         }
-        airing: Page(page: 1, perPage: 16) {
+        airing: Page(page: 1, perPage: 24) {
           airingSchedules(airingAt_greater: $dayStart, airingAt_lesser: $dayEnd, sort: TIME) {
             id airingAt episode timeUntilAiring
             media { ${MEDIA_FRAGMENT} isAdult }
@@ -373,7 +407,7 @@ export async function fetchHomeData(): Promise<HomeData> {
     const [coreData, curatedRes] = await Promise.all([
       queryAniList(
         coreQuery,
-        { dayStart: now - 3600 * 6, dayEnd: now + 3600 * 48 },
+        { dayStart: now - 86400 * 3, dayEnd: now + 86400 * 4 },
         300
       ),
       queryAniList(curatedQuery, {}, 300).catch(() => ({})),
@@ -456,6 +490,8 @@ export interface DiscoverParams {
   type?: MediaType;
   genre?: string;
   genres?: string[];
+  minGenreRank?: number;
+  genreMinRanks?: Record<string, number>;
   tags?: string[];
   minScore?: number;
   maxScore?: number;
@@ -478,6 +514,9 @@ export interface DiscoverResult {
   total: number;
   page: number;
   fromCache?: boolean;
+  resolvedSearch?: string;
+  matchedAlias?: string;
+  canonicalLabel?: string;
 }
 
 export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverResult> {
@@ -486,6 +525,8 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     type = "ANIME",
     genre,
     genres,
+    minGenreRank,
+    genreMinRanks,
     tags,
     minScore,
     maxScore,
@@ -509,8 +550,30 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     ])
   );
   const tagList = Array.from(new Set((tags ?? []).filter((t) => t && t !== "ALL")));
+  const legacyRank =
+    typeof minGenreRank === "number" && Number.isFinite(minGenreRank) && minGenreRank > 0
+      ? Math.min(100, Math.max(0, Math.round(minGenreRank)))
+      : 0;
+  const effectiveGenreRanks = normalizeGenreMinRanks(
+    genreMinRanks ??
+      (legacyRank > 0
+        ? Object.fromEntries(genreList.map((g) => [g, legacyRank]))
+        : undefined),
+    genreList
+  );
+  const needsGenreIntensityFilter =
+    genreList.length > 0 && genreList.some((g) => (effectiveGenreRanks[g] ?? 0) > 0);
+
+  // Enrich search via multilingual alias dictionary (snk, jjk, L'Attaque des Titans, etc.)
+  const aliasInfo = search?.trim() ? resolveSearchAlias(search) : null;
+  const effectiveSearch = aliasInfo?.resolvedQuery || search?.trim() || "";
+  const rawSearch = search?.trim() || "";
 
   try {
+    const extraTagsSelection = needsGenreIntensityFilter
+      ? "tags { name rank category isMediaSpoiler isAdult }"
+      : "";
+
     const query = `
       query (
         $page: Int,
@@ -552,18 +615,26 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
             isAdult: false
           ) {
             ${MEDIA_FRAGMENT}
+            ${extraTagsSelection}
           }
         }
       }
     `;
 
+    // Fetch slightly wider window when filtering by genre intensity or fuzzy re-ranking
+    const fetchPerPage = needsGenreIntensityFilter
+      ? Math.min(48, Math.max(perPage, 40))
+      : effectiveSearch
+        ? Math.min(36, Math.max(perPage, 16))
+        : perPage;
+
     const variables: Record<string, unknown> = {
       page,
-      perPage,
+      perPage: fetchPerPage,
       type,
-      sort: [search && sort === "TRENDING_DESC" ? "SEARCH_MATCH" : sort],
+      sort: [effectiveSearch && sort === "TRENDING_DESC" ? "SEARCH_MATCH" : sort],
     };
-    if (search?.trim()) variables.search = search.trim();
+    if (effectiveSearch) variables.search = effectiveSearch;
     if (genreList.length > 0) variables.genres = genreList;
     if (tagList.length > 0) variables.tags = tagList;
     // AniList *_greater and *_lesser are strict (> and <), so shift by 1 to make bounds inclusive
@@ -598,26 +669,64 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     if (status && status !== "ALL") variables.status = status;
 
     const data = await queryAniList(query, variables, 180);
-    const items = (data.Page?.media ?? []).map(normalizeMedia);
+    let items: MediaItem[] = (data.Page?.media ?? []).map(normalizeMedia);
+
+    // Typo-tolerance fallback: if AniList returned 0 hits for a typo'd query (e.g. "frierne"),
+    // retry with trimmed prefix / strong token candidates and fuzzy-rank against the user's input.
+    if (effectiveSearch && items.length === 0 && page === 1) {
+      const fallbacks = buildTypoFallbackQueries(effectiveSearch);
+      const seenIds = new Set<number>();
+      const recovered: MediaItem[] = [];
+      for (const fbQuery of fallbacks) {
+        try {
+          const fbData = await queryAniList(
+            query,
+            { ...variables, search: fbQuery, perPage: 20 },
+            180
+          );
+          for (const raw of fbData?.Page?.media ?? []) {
+            const norm = normalizeMedia(raw);
+            if (!seenIds.has(norm.id)) {
+              seenIds.add(norm.id);
+              recovered.push(norm);
+            }
+          }
+          if (recovered.length >= 6) break;
+        } catch {
+          // continue trying next candidate
+        }
+      }
+      if (recovered.length > 0) {
+        items = rankMediaByFuzzySearch(recovered, rawSearch, effectiveSearch, 0.42);
+      }
+    } else if (effectiveSearch && items.length > 1) {
+      items = rankMediaByFuzzySearch(items, rawSearch, effectiveSearch);
+    }
+
+    if (needsGenreIntensityFilter) {
+      items = items.filter((m) =>
+        mediaMatchesGenreMinRanks(m, genreList, effectiveGenreRanks)
+      );
+    }
+
+    const slicedItems = items.slice(0, perPage);
     return {
-      items,
+      items: slicedItems,
       hasNextPage: Boolean(data.Page?.pageInfo?.hasNextPage),
-      total: Number(data.Page?.pageInfo?.total ?? items.length),
+      total: needsGenreIntensityFilter
+        ? items.length
+        : Number(data.Page?.pageInfo?.total ?? slicedItems.length),
       page: Number(data.Page?.pageInfo?.currentPage ?? page),
+      resolvedSearch: aliasInfo?.didExpand ? aliasInfo.resolvedQuery : undefined,
+      matchedAlias: aliasInfo?.didExpand ? aliasInfo.matchedAlias ?? undefined : undefined,
+      canonicalLabel: aliasInfo?.didExpand ? aliasInfo.canonicalLabel ?? undefined : undefined,
     };
   } catch {
-    // Graceful local filtering over seed catalog
+    // Graceful local filtering over seed catalog with multilingual fuzzy search
     const seed = getSeedData();
     let filtered = seed.all.filter((m) => m.type === type);
-    if (search?.trim()) {
-      const q = search.trim().toLowerCase();
-      filtered = filtered.filter(
-        (m) =>
-          m.title.romaji.toLowerCase().includes(q) ||
-          (m.title.english ?? "").toLowerCase().includes(q) ||
-          (m.studio ?? "").toLowerCase().includes(q) ||
-          m.genres.some((g) => g.toLowerCase().includes(q))
-      );
+    if (rawSearch) {
+      filtered = rankMediaByFuzzySearch(filtered, rawSearch, effectiveSearch, 0.45);
     }
     if (genreList.length > 0) {
       filtered = filtered.filter((m) =>
@@ -660,19 +769,176 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     if (year) {
       filtered = filtered.filter((m) => m.seasonYear === year || m.startYear === year);
     }
-    if (sort === "SCORE_DESC") {
-      filtered.sort((a, b) => (b.averageScore ?? 0) - (a.averageScore ?? 0));
-    } else if (sort === "POPULARITY_DESC") {
-      filtered.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+    if (!rawSearch) {
+      if (sort === "SCORE_DESC") {
+        filtered.sort((a, b) => (b.averageScore ?? 0) - (a.averageScore ?? 0));
+      } else if (sort === "POPULARITY_DESC") {
+        filtered.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+      }
     }
     return {
-      items: filtered,
+      items: filtered.slice(0, perPage),
       hasNextPage: false,
       total: filtered.length,
       page: 1,
       fromCache: true,
+      resolvedSearch: aliasInfo?.didExpand ? aliasInfo.resolvedQuery : undefined,
+      matchedAlias: aliasInfo?.didExpand ? aliasInfo.matchedAlias ?? undefined : undefined,
+      canonicalLabel: aliasInfo?.didExpand ? aliasInfo.canonicalLabel ?? undefined : undefined,
     };
   }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rawMediaToTimelineNode(raw: any): RawRelationMediaNode {
+  return {
+    id: Number(raw.id),
+    type: (raw.type === "MANGA" ? "MANGA" : "ANIME") as MediaType,
+    title: {
+      romaji: raw?.title?.romaji || raw?.title?.english || "Sans titre",
+      english: raw?.title?.english ?? null,
+    },
+    coverImage:
+      raw?.coverImage?.large ||
+      raw?.coverImage?.medium ||
+      "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/default.jpg",
+    format: raw?.format ?? null,
+    episodes: raw?.episodes ?? null,
+    chapters: raw?.chapters ?? null,
+    seasonYear: raw?.seasonYear ?? raw?.startDate?.year ?? null,
+    startDate: raw?.startDate
+      ? {
+          year: raw.startDate.year ?? null,
+          month: raw.startDate.month ?? null,
+          day: raw.startDate.day ?? null,
+        }
+      : null,
+    averageScore: raw?.averageScore ?? null,
+    relations: (raw?.relations?.edges ?? [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((e: any) => e?.node && !e.node.isAdult)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((e: any) => ({
+        relationType: String(e.relationType ?? "OTHER"),
+        node: {
+          id: Number(e.node.id),
+          type: (e.node.type === "MANGA" ? "MANGA" : "ANIME") as MediaType,
+          isAdult: Boolean(e.node.isAdult),
+          title: {
+            romaji: e.node.title?.romaji || e.node.title?.english || "Sans titre",
+            english: e.node.title?.english ?? null,
+          },
+          coverImage:
+            e.node.coverImage?.large ||
+            e.node.coverImage?.medium ||
+            "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/default.jpg",
+          format: e.node.format ?? null,
+          episodes: e.node.episodes ?? null,
+          chapters: e.node.chapters ?? null,
+          seasonYear: e.node.seasonYear ?? e.node.startDate?.year ?? null,
+          startDate: e.node.startDate
+            ? {
+                year: e.node.startDate.year ?? null,
+                month: e.node.startDate.month ?? null,
+                day: e.node.startDate.day ?? null,
+              }
+            : null,
+          averageScore: e.node.averageScore ?? null,
+        },
+      })),
+  };
+}
+
+/**
+ * Traverses PREQUEL & SEQUEL edges up to 3 compact batched GraphQL hops so any
+ * season (e.g. Attack on Titan S3) reconstructs the full chronological franchise timeline.
+ */
+async function expandSeasonTimelineGraph(
+  rootNode: RawRelationMediaNode
+): Promise<Map<number, RawRelationMediaNode>> {
+  const nodesById = new Map<number, RawRelationMediaNode>();
+  nodesById.set(rootNode.id, rootNode);
+
+  const chainQuery = `
+    query ($ids: [Int]) {
+      Page(page: 1, perPage: 20) {
+        media(id_in: $ids, isAdult: false) {
+          id
+          type
+          title { romaji english }
+          coverImage { large medium }
+          format
+          episodes
+          chapters
+          seasonYear
+          startDate { year month day }
+          averageScore
+          relations {
+            edges {
+              relationType
+              node {
+                id
+                type
+                isAdult
+                title { romaji english }
+                coverImage { large medium }
+                format
+                episodes
+                chapters
+                seasonYear
+                startDate { year month day }
+                averageScore
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  let frontier = new Set<number>();
+  for (const edge of rootNode.relations) {
+    if (
+      edge.node &&
+      !edge.node.isAdult &&
+      edge.node.type === rootNode.type &&
+      (edge.relationType === "PREQUEL" || edge.relationType === "SEQUEL") &&
+      !nodesById.has(edge.node.id)
+    ) {
+      frontier.add(edge.node.id);
+    }
+  }
+
+  // Up to 3 compact batched hops (handles franchises up to 7+ seasons cleanly)
+  for (let hop = 0; hop < 3 && frontier.size > 0 && nodesById.size < 16; hop++) {
+    const batchIds = Array.from(frontier).slice(0, 10);
+    frontier = new Set<number>();
+
+    try {
+      const hopData = await queryAniList(chainQuery, { ids: batchIds }, 600);
+      const mediaArr = hopData?.Page?.media ?? [];
+      for (const raw of mediaArr) {
+        if (!raw?.id) continue;
+        const parsed = rawMediaToTimelineNode(raw);
+        nodesById.set(parsed.id, parsed);
+        for (const edge of parsed.relations) {
+          if (
+            edge.node &&
+            !edge.node.isAdult &&
+            edge.node.type === rootNode.type &&
+            (edge.relationType === "PREQUEL" || edge.relationType === "SEQUEL") &&
+            !nodesById.has(edge.node.id)
+          ) {
+            frontier.add(edge.node.id);
+          }
+        }
+      }
+    } catch {
+      break;
+    }
+  }
+
+  return nodesById;
 }
 
 export async function fetchMediaDetail(id: number): Promise<MediaDetail | null> {
@@ -686,7 +952,7 @@ export async function fetchMediaDetail(id: number): Promise<MediaDetail | null> 
           hashtag
           siteUrl
           allStudios: studios { nodes { name } }
-          tags { name rank isMediaSpoiler isAdult }
+          tags { name rank category isMediaSpoiler isAdult }
           characters(sort: [ROLE, RELEVANCE], perPage: 10) {
             edges {
               role
@@ -706,6 +972,8 @@ export async function fetchMediaDetail(id: number): Promise<MediaDetail | null> 
                 title { romaji english }
                 coverImage { large medium }
                 format averageScore
+                episodes chapters seasonYear
+                startDate { year month day }
               }
             }
           }
@@ -727,7 +995,23 @@ export async function fetchMediaDetail(id: number): Promise<MediaDetail | null> 
 
     const data = await queryAniList(query, { id }, 300);
     if (!data?.Media) return null;
-    return normalizeMediaDetail(data.Media);
+    const detail = normalizeMediaDetail(data.Media);
+
+    // Reconstruct full chronological seasons & sequels chain (Saison 1 -> Saison N + canon movies)
+    try {
+      const rootNode = rawMediaToTimelineNode(data.Media);
+      const graph = await expandSeasonTimelineGraph(rootNode);
+      const chronology = buildSeasonChronology(detail.id, graph);
+      detail.seasonTimeline = chronology.timeline;
+      detail.prevSeason = chronology.prevSeason;
+      detail.nextSeason = chronology.nextSeason;
+    } catch {
+      detail.seasonTimeline = [];
+      detail.prevSeason = null;
+      detail.nextSeason = null;
+    }
+
+    return detail;
   } catch {
     const seed = getSeedData();
     const match = seed.all.find((m) => m.id === id);

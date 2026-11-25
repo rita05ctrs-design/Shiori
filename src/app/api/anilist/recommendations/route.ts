@@ -235,10 +235,10 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Fill remaining slots (up to 6) with Genre/Tag matches
+      // Fill remaining slots (up to 10) with Genre/Tag matches
       const genreCandidates = Array.isArray(data?.byGenre?.media) ? data.byGenre.media : [];
       for (const m of genreCandidates) {
-        if (recommendations.length >= 6) break;
+        if (recommendations.length >= 10) break;
         if (!m || seen.has(m.id)) continue;
         seen.add(m.id);
         const normalized = normalizeRecMedia(m);
@@ -257,12 +257,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fallback to verified local seed catalog if AniList returned < 6 or was offline
-    if (recommendations.length < 6) {
+    // Fallback to verified local seed catalog if AniList returned < 10 or was offline
+    if (recommendations.length < 10) {
       const seed = getSeedData();
       const pool = [...seed.topAnime, ...seed.trending, ...seed.manga];
       for (const m of pool) {
-        if (recommendations.length >= 6) break;
+        if (recommendations.length >= 10) break;
         if (seen.has(m.id)) continue;
         seen.add(m.id);
         const shared = m.genres.filter((g) => fallbackGenres.includes(g));
@@ -277,7 +277,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      recommendations: recommendations.slice(0, 6),
+      recommendations: recommendations.slice(0, 10),
       analyzedGenres: fallbackGenres,
       analyzedSeeds: pickedSeeds.map((s) => s.title),
     });

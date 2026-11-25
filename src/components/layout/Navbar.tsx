@@ -30,6 +30,7 @@ import { CONTENT_LANGUAGES } from "@/lib/i18n";
 import { NotificationsPopover } from "@/components/notifications/NotificationsPopover";
 import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
 import { LanguageQuickPopover } from "@/components/layout/LanguageQuickPopover";
+import { QuickEpisodesPopover } from "@/components/episodes/QuickEpisodesPopover";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +46,8 @@ const NAV_ITEMS = [
     href: "/discover",
     label: "Découvrir",
     icon: Compass,
-    match: (p: string) => p.startsWith("/discover") || p.startsWith("/media"),
+    match: (p: string) =>
+      p.startsWith("/discover") || p.startsWith("/media") || p.startsWith("/anime"),
   },
   {
     href: "/calendar",
@@ -68,10 +70,15 @@ const NAV_ITEMS = [
 ];
 
 const MOBILE_BOTTOM_NAV = [
-  { href: "/", label: "Accueil", icon: Home, match: (p: string) => p === "/" },
+  {
+    href: "/episodes",
+    label: "Semaine",
+    icon: ListChecks,
+    match: (p: string) => p.startsWith("/episodes") || p.startsWith("/calendar"),
+  },
   {
     href: "/library",
-    label: "Bibliothèque",
+    label: "Ma Liste",
     icon: Library,
     match: (p: string) => p.startsWith("/library"),
   },
@@ -79,19 +86,20 @@ const MOBILE_BOTTOM_NAV = [
     href: "/discover",
     label: "Découvrir",
     icon: Compass,
-    match: (p: string) => p.startsWith("/discover") || p.startsWith("/media"),
+    match: (p: string) =>
+      p.startsWith("/discover") || p.startsWith("/media") || p.startsWith("/anime"),
   },
   {
-    href: "/stats",
-    label: "Stats",
-    icon: BarChart3,
-    match: (p: string) => p.startsWith("/stats"),
-  },
-  {
-    href: "/community",
-    label: "Communauté",
-    icon: Users,
-    match: (p: string) => p.startsWith("/community") || p.startsWith("/profile"),
+    href: "/assistant",
+    label: "Profil/IA",
+    icon: Sparkles,
+    match: (p: string) =>
+      p.startsWith("/assistant") ||
+      p.startsWith("/profile") ||
+      p.startsWith("/stats") ||
+      p.startsWith("/community") ||
+      p.startsWith("/settings") ||
+      p.startsWith("/messages"),
   },
 ];
 
@@ -158,7 +166,17 @@ export function Navbar() {
       >
         <div className="max-w-[1400px] mx-auto px-3 sm:px-5 lg:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 lg:gap-3">
           {/* Brand Logo: Shiori 栞 */}
-          <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group shrink-0 min-w-0">
+          <Link
+            href="/"
+            onClick={() => {
+              try {
+                sessionStorage.setItem("shiori_mobile_default_week_v1", "1");
+              } catch {
+                // ignore
+              }
+            }}
+            className="flex items-center gap-2 sm:gap-2.5 group shrink-0 min-w-0"
+          >
             <motion.div
               whileHover={{ rotate: -4, scale: 1.07 }}
               whileTap={{ scale: 0.94 }}
@@ -212,16 +230,16 @@ export function Navbar() {
               <span className="text-[15px] sm:text-[17px] font-semibold tracking-[0.14em] text-[#F4F3EE] uppercase">
                 Shiori
               </span>
-              <span className="hidden lg:block text-[9.5px] tracking-[0.2em] text-[#8E93A4] uppercase mt-0.5">
+              <span className="hidden 2xl:block text-[9.5px] tracking-[0.2em] text-[#8E93A4] uppercase mt-0.5">
                 Anime · Manga
               </span>
             </div>
           </Link>
 
-          {/* Primary Navigation (Desktop — 6 clear, balanced pillars) */}
+          {/* Primary Navigation (Desktop — adapts cleanly across narrow/windowed and wide screens) */}
           <nav
             aria-label="Navigation principale"
-            className="hidden md:flex items-center gap-0.5 p-1 rounded-full bg-white/[0.03] border border-white/[0.06] min-w-0"
+            className="hidden md:flex items-center gap-0.5 p-1 rounded-full bg-white/[0.03] border border-white/[0.06] min-w-0 max-w-full overflow-x-auto no-scrollbar"
           >
             {NAV_ITEMS.map((item) => {
               const isActive = item.match(pathname);
@@ -230,8 +248,10 @@ export function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  title={item.label}
+                  aria-label={item.label}
                   className={cn(
-                    "relative px-2 lg:px-3 py-1.5 rounded-full text-[12px] lg:text-[12.5px] font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap",
+                    "relative px-2.5 lg:px-2 xl:px-3 py-1.5 rounded-full text-[11.5px] xl:text-[12.5px] font-medium transition-colors flex items-center gap-1 xl:gap-1.5 whitespace-nowrap shrink-0",
                     isActive
                       ? "text-white"
                       : "text-[#9A9EAE] hover:text-[#F4F3EE]"
@@ -245,9 +265,9 @@ export function Navbar() {
                     />
                   )}
                   <Icon className="w-3.5 h-3.5 relative z-10 opacity-85 shrink-0" />
-                  <span className="relative z-10">{item.label}</span>
+                  <span className="hidden lg:inline relative z-10">{item.label}</span>
                   {item.href === "/library" && watchingCount > 0 && (
-                    <span className="relative z-10 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-accent/22 text-accent-soft border border-accent/35">
+                    <span className="hidden xl:inline-flex relative z-10 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-accent/22 text-accent-soft border border-accent/35">
                       {watchingCount}
                     </span>
                   )}
@@ -256,17 +276,21 @@ export function Navbar() {
             })}
           </nav>
 
-          {/* Right Utility Controls (4 clean actions: Search, Theme, Notifications, Profile/Menu) */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Right Utility Controls */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* PC Quick Access: Épisodes de la semaine / À voir (+1 Vu direct sans modale) */}
+            <QuickEpisodesPopover />
+
             {/* Global Search & Quick-Add Trigger */}
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
               aria-label="Rechercher ou ajouter un anime ou manga"
-              className="group flex items-center justify-center gap-1.5 w-8.5 h-8.5 sm:w-auto sm:h-9 sm:px-3 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] hover:border-white/[0.18] transition-all text-xs text-[#B8BCCB] hover:text-white cursor-pointer"
+              title="Rechercher (⌘K)"
+              className="group flex items-center justify-center gap-1.5 w-8.5 h-8.5 sm:w-9 sm:h-9 xl:w-auto xl:px-3 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] hover:border-white/[0.18] transition-all text-xs text-[#B8BCCB] hover:text-white cursor-pointer"
             >
               <Search className="w-3.5 h-3.5 text-accent-soft group-hover:text-white transition-colors" />
-              <span className="hidden lg:inline">Rechercher</span>
+              <span className="hidden 2xl:inline">Rechercher</span>
               <kbd className="hidden xl:inline-flex items-center px-1.5 py-0.5 rounded bg-white/[0.07] text-[10px] font-mono text-[#9EA3B5] border border-white/[0.08]">
                 ⌘K
               </kbd>
@@ -320,7 +344,7 @@ export function Navbar() {
                   size="sm"
                   className="w-6.5 h-6.5"
                 />
-                <span className="hidden xl:inline text-[13px] font-medium text-[#ECEBE6] max-w-[78px] truncate">
+                <span className="hidden 2xl:inline text-[13px] font-medium text-[#ECEBE6] max-w-[78px] truncate">
                   {profile.displayName}
                 </span>
               </button>
@@ -406,6 +430,14 @@ export function Navbar() {
                       >
                         <ListChecks className="w-4 h-4 text-[#9A9EAE]" />
                         <span>Épisodes de la semaine</span>
+                      </Link>
+                      <Link
+                        href="/assistant"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
+                      >
+                        <Sparkles className="w-4 h-4 text-kinpaku" />
+                        <span>Assistant Shiori IA</span>
                       </Link>
                       <Link
                         href="/messages"
@@ -527,12 +559,12 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation — 5 clear, consistent tabs matching Desktop */}
+      {/* Mobile Bottom Navigation — 4 clear mobile-first tabs: Semaine, Ma Liste, Découvrir, Profil/IA */}
       <nav
         aria-label="Navigation mobile"
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-obsidian/95 backdrop-blur-xl border-t border-white/[0.08] px-1 pt-1.5 pb-[calc(0.4rem+env(safe-area-inset-bottom))]"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-obsidian/95 backdrop-blur-xl border-t border-white/[0.08] px-1.5 pt-1.5 pb-[calc(0.45rem+env(safe-area-inset-bottom))]"
       >
-        <div className="grid grid-cols-5 items-center">
+        <div className="grid grid-cols-4 items-center gap-1">
           {MOBILE_BOTTOM_NAV.map((item) => {
             const isActive = item.match(pathname);
             const Icon = item.icon;
@@ -541,12 +573,21 @@ export function Navbar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 min-h-[44px] py-1 rounded-xl transition-colors min-w-0",
-                  isActive ? "text-accent-hover bg-accent/10" : "text-[#8A8FA3]"
+                  "relative flex flex-col items-center justify-center gap-0.5 min-h-[46px] py-1 rounded-xl transition-colors min-w-0",
+                  isActive
+                    ? "text-accent-hover bg-accent/12 border border-accent/25"
+                    : "text-[#8A8FA3] border border-transparent"
                 )}
               >
-                <Icon className="w-4.5 h-4.5 shrink-0" />
-                <span className="text-[10px] font-medium truncate max-w-full px-0.5">
+                <div className="relative">
+                  <Icon className="w-4.5 h-4.5 shrink-0" />
+                  {item.href === "/library" && watchingCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full bg-accent text-[9px] font-mono font-bold text-accent-fg flex items-center justify-center">
+                      {watchingCount > 9 ? "9+" : watchingCount}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10.5px] font-semibold truncate max-w-full px-0.5">
                   {item.label}
                 </span>
               </Link>

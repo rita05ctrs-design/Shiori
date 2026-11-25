@@ -33,6 +33,8 @@ import {
   Tag,
   EyeOff,
   Eye,
+  Wand2,
+  Gauge,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { MediaCard } from "@/components/media/MediaCard";
@@ -61,6 +63,11 @@ import {
   type PersistedDiscoverState,
 } from "@/lib/filter-persistence";
 import { discoverQueryCache } from "@/lib/client-cache";
+import { resolveSearchAlias } from "@/lib/searchAliases";
+import {
+  normalizeGenreMinRanks,
+  serializeGenreMinRanks,
+} from "@/lib/genre-intensity";
 import { cn } from "@/lib/utils";
 import type { MediaItem, MediaType } from "@/types/media";
 
@@ -184,8 +191,14 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const [search, setSearch] = useState(init.search);
   const [debouncedSearch, setDebouncedSearch] = useState(init.search);
 
-  // Multi-select Genres & Tags (Situations, Universes, Themes, Demographics)
+  // Multi-select Genres & Independent Per-Genre Min Intensity (Record<string, number>)
   const [selectedGenres, setSelectedGenres] = useState<string[]>(init.selectedGenres);
+  const [genreMinRanks, setGenreMinRanks] = useState<Record<string, number>>(
+    init.genreMinRanks
+  );
+  const [debouncedGenreMinRanks, setDebouncedGenreMinRanks] = useState<
+    Record<string, number>
+  >(init.genreMinRanks);
   const [selectedTags, setSelectedTags] = useState<string[]>(init.selectedTags);
   const [activeMoodId, setActiveMoodId] = useState<string | null>(init.activeMoodId);
   const [activeCategory, setActiveCategory] = useState<TagCategory["id"]>(init.activeCategory);
@@ -223,6 +236,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     setSearch(next.search);
     setDebouncedSearch(next.search);
     setSelectedGenres(next.selectedGenres);
+    setGenreMinRanks(next.genreMinRanks);
+    setDebouncedGenreMinRanks(next.genreMinRanks);
     setSelectedTags(next.selectedTags);
     setActiveMoodId(next.activeMoodId);
     setActiveCategory(next.activeCategory);
@@ -291,6 +306,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       type,
       search: debouncedSearch,
       selectedGenres,
+      genreMinRanks: normalizeGenreMinRanks(debouncedGenreMinRanks, selectedGenres),
       selectedTags,
       activeMoodId,
       activeCategory,
@@ -321,6 +337,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     type,
     debouncedSearch,
     selectedGenres,
+    debouncedGenreMinRanks,
     selectedTags,
     activeMoodId,
     activeCategory,
@@ -339,11 +356,23 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     showMoods,
   ]);
 
-  // Debounce search text & episode/chapter custom inputs
+  // Debounce search text, genre intensity slider & episode/chapter custom inputs
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => setDebouncedSearch(search), 260);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedGenreMinRanks(genreMinRanks), 180);
+    return () => clearTimeout(t);
+  }, [genreMinRanks]);
+
+  const encodedDebouncedGenreRanks = useMemo(
+    () => serializeGenreMinRanks(debouncedGenreMinRanks, selectedGenres),
+    [debouncedGenreMinRanks, selectedGenres]
+  );
+
+  const searchAliasPreview = useMemo(() => resolveSearchAlias(search), [search]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -368,7 +397,12 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
           perPage: "24",
         });
         if (debouncedSearch.trim()) qs.set("search", debouncedSearch.trim());
-        if (selectedGenres.length > 0) qs.set("genres", selectedGenres.join(","));
+        if (selectedGenres.length > 0) {
+          qs.set("genres", selectedGenres.join(","));
+          if (encodedDebouncedGenreRanks) {
+            qs.set("genreRanks", encodedDebouncedGenreRanks);
+          }
+        }
         if (selectedTags.length > 0) qs.set("tags", selectedTags.join(","));
         if (minScore !== "ALL") qs.set("minScore", minScore);
         if (maxScore !== "ALL") qs.set("maxScore", maxScore);
@@ -438,6 +472,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       type,
       debouncedSearch,
       selectedGenres,
+      encodedDebouncedGenreRanks,
       selectedTags,
       minScore,
       maxScore,
@@ -466,9 +501,37 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
   const toggleGenre = (id: string) => {
     setActiveMoodId(null);
-    setSelectedGenres((prev) =>
-      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
-    );
+    setSelectedGenres((prev) => {
+      const exists = prev.includes(id);
+      const next = exists ? prev.filter((g) => g !== id) : [...prev, id];
+      setGenreMinRanks((curr) => {
+        if (exists) {
+          const rest = { ...curr };
+          delete rest[id];
+          return rest;
+        }
+        return { ...curr, [id]: curr[id] ?? 0 };
+      });
+      if (exists) {
+        setDebouncedGenreMinRanks((curr) => {
+          const rest = { ...curr };
+          delete rest[id];
+          return rest;
+        });
+      }
+      return next;
+    });
+  };
+
+  const updateGenreMinRank = (genreId: string, value: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(value / 5) * 5));
+    setGenreMinRanks((prev) => ({ ...prev, [genreId]: clamped }));
+  };
+
+  const resetAllGenreMinRanks = () => {
+    const zeroed = Object.fromEntries(selectedGenres.map((g) => [g, 0]));
+    setGenreMinRanks(zeroed);
+    setDebouncedGenreMinRanks(zeroed);
   };
 
   const toggleTag = (id: string) => {
@@ -482,6 +545,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     if (!mood) {
       setActiveMoodId(null);
       setSelectedGenres([]);
+      setGenreMinRanks({});
+      setDebouncedGenreMinRanks({});
       setSelectedTags([]);
       setMinScore("ALL");
       setSort("TRENDING_DESC");
@@ -489,6 +554,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     }
     setActiveMoodId(mood.id);
     setSelectedGenres(mood.genres);
+    const moodZeroRanks = Object.fromEntries(mood.genres.map((g) => [g, 0]));
+    setGenreMinRanks(moodZeroRanks);
+    setDebouncedGenreMinRanks(moodZeroRanks);
     setSelectedTags(mood.tags);
     setMinScore(mood.minScore ?? "ALL");
     if (mood.sort) setSort(mood.sort);
@@ -499,6 +567,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     setDebouncedSearch("");
     setActiveMoodId(null);
     setSelectedGenres([]);
+    setGenreMinRanks({});
+    setDebouncedGenreMinRanks({});
     setSelectedTags([]);
     setTagSearch("");
     setYear("ALL");
@@ -539,8 +609,16 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     return "";
   };
 
+  const activeGenreRankCount = selectedGenres.filter(
+    (g) => (debouncedGenreMinRanks[g] ?? 0) > 0
+  ).length;
+  const hasAnyLiveGenreRank = selectedGenres.some(
+    (g) => (genreMinRanks[g] ?? 0) > 0
+  );
+
   const activeFilterCount =
     selectedGenres.length +
+    activeGenreRankCount +
     selectedTags.length +
     (year !== "ALL" ? 1 : 0) +
     (season !== "ALL" ? 1 : 0) +
@@ -742,11 +820,23 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         </div>
 
         {/* 1-Click Quick Genres Row (90% of discovery in 1 tap) */}
+        {searchAliasPreview.didExpand && searchAliasPreview.canonicalLabel && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-kinpaku/10 border border-kinpaku/25 text-xs text-[#F5D68E]">
+            <Wand2 className="w-3.5 h-3.5 text-kinpaku shrink-0" />
+            <span className="truncate">
+              Alias détecté :{" "}
+              <strong className="text-white">{searchAliasPreview.canonicalLabel}</strong>
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
           <button
             type="button"
             onClick={() => {
               setSelectedGenres([]);
+              setGenreMinRanks({});
+              setDebouncedGenreMinRanks({});
               setSelectedTags([]);
               setActiveMoodId(null);
             }}
@@ -788,6 +878,101 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
             </button>
           )}
         </div>
+
+        {/* Independent Per-Genre Intensity Sliders — one compact row per selected genre */}
+        <AnimatePresence initial={false}>
+          {selectedGenres.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: CINEMA_EASE }}
+              className="overflow-hidden"
+            >
+              <div className="rounded-xl bg-obsidian/80 border border-white/[0.08] p-3 sm:p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.14em] text-[#9A9EAE]">
+                    <Gauge className="w-3.5 h-3.5 text-kinpaku shrink-0" />
+                    <span>Intensité minimale par genre</span>
+                  </span>
+                  {hasAnyLiveGenreRank && (
+                    <button
+                      type="button"
+                      onClick={resetAllGenreMinRanks}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-soft hover:text-white transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Réinitialiser</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {selectedGenres.map((genreId) => {
+                    const label = getTaxonomyLabel(genreId);
+                    const value = genreMinRanks[genreId] ?? 0;
+                    const isActive = value > 0;
+
+                    return (
+                      <div
+                        key={`genre-slider-${genreId}`}
+                        className="rounded-lg bg-surface/65 border border-white/[0.06] px-3 py-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+                      >
+                        <div className="flex items-center justify-between sm:w-44 shrink-0 gap-2">
+                          <span className="text-xs font-semibold text-[#F4F3EE] truncate">
+                            {label}
+                          </span>
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded-full font-mono text-[10.5px] font-bold border whitespace-nowrap shrink-0",
+                              isActive
+                                ? "bg-kinpaku/15 border-kinpaku/40 text-kinpaku"
+                                : "bg-white/[0.04] border-white/[0.08] text-[#8E93A6]"
+                            )}
+                          >
+                            {isActive ? `min ${value}%` : "min 0%"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          <span className="font-mono text-[10px] text-[#7A7F94] shrink-0">
+                            0%
+                          </span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={value}
+                            onChange={(e) =>
+                              updateGenreMinRank(genreId, Number(e.target.value))
+                            }
+                            aria-label={`Intensité minimale pour ${label} (${value}%)`}
+                            className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-white/[0.12] accent-[#E5484D]"
+                          />
+                          <span className="font-mono text-[10px] text-kinpaku shrink-0">
+                            100%
+                          </span>
+                          {isActive && (
+                            <button
+                              type="button"
+                              onClick={() => updateGenreMinRank(genreId, 0)}
+                              title={`Réinitialiser ${label} à 0%`}
+                              aria-label={`Réinitialiser l'intensité de ${label}`}
+                              className="p-1 rounded-md bg-white/[0.05] hover:bg-white/[0.12] text-[#9A9EAE] hover:text-white transition-colors cursor-pointer shrink-0"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* On-Demand Moods Carousel (collapsed by default so posters appear immediately!) */}
         <AnimatePresence initial={false}>
@@ -1204,26 +1389,34 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 Filtres actifs :
               </span>
 
-              {selectedGenres.map((g) => (
-                <motion.span
-                  key={`active-g-${g}`}
-                  layout
-                  initial={{ scale: 0.85, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.85, opacity: 0 }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-white"
-                >
-                  <span>{getTaxonomyLabel(g)}</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleGenre(g)}
-                    aria-label={`Retirer ${getTaxonomyLabel(g)}`}
-                    className="text-accent-soft hover:text-white cursor-pointer"
+              {selectedGenres.map((g) => {
+                const rankVal = genreMinRanks[g] ?? 0;
+                return (
+                  <motion.span
+                    key={`active-g-${g}`}
+                    layout
+                    initial={{ scale: 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.85, opacity: 0 }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-white"
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </motion.span>
-              ))}
+                    <span>{getTaxonomyLabel(g)}</span>
+                    {rankVal > 0 && (
+                      <span className="font-mono text-[10.5px] font-bold text-kinpaku">
+                        ≥ {rankVal}%
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleGenre(g)}
+                      aria-label={`Retirer ${getTaxonomyLabel(g)}`}
+                      className="text-accent-soft hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </motion.span>
+                );
+              })}
 
               {selectedTags.map((t) => (
                 <motion.span

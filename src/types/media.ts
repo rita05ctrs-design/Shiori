@@ -39,6 +39,7 @@ export interface MediaItem {
   id: number;
   type: MediaType;
   title: MediaTitle;
+  synonyms?: string[];
   coverImage: MediaCoverImage;
   bannerImage: string | null;
   description: string | null;
@@ -61,6 +62,7 @@ export interface MediaItem {
   popularity: number | null;
   favourites: number | null;
   genres: string[];
+  tags?: { name: string; rank: number; category?: string }[];
   studio: string | null;
   trailer: {
     id: string;
@@ -99,15 +101,42 @@ export interface ScoreDistributionItem {
   amount: number;
 }
 
+export interface SeasonTimelineEntry {
+  id: number;
+  type: MediaType;
+  title: string;
+  shortLabel: string;
+  format: string | null;
+  episodes: number | null;
+  chapters: number | null;
+  seasonYear: number | null;
+  startDate: {
+    year: number | null;
+    month: number | null;
+    day: number | null;
+  } | null;
+  coverImage: string;
+  averageScore: number | null;
+  relationKind: "CURRENT" | "MAIN_CHAIN" | "MOVIE" | "SIDE_STORY";
+}
+
 export interface MediaDetail extends MediaItem {
   source: string | null;
   countryOfOrigin: string | null;
   hashtag: string | null;
   siteUrl: string | null;
   studios: string[];
-  tags: { name: string; rank: number }[];
+  tags: { name: string; rank: number; category?: string }[];
+  genreIntensities?: {
+    genre: string;
+    intensity: number | null;
+    source: "exact_tag" | "category_tag" | "none";
+  }[];
   characters: CharacterEdge[];
   relations: MediaRelation[];
+  seasonTimeline?: SeasonTimelineEntry[];
+  prevSeason?: SeasonTimelineEntry | null;
+  nextSeason?: SeasonTimelineEntry | null;
   recommendations: MediaItem[];
   scoreDistribution: ScoreDistributionItem[];
   streamingEpisodes: {
@@ -223,14 +252,14 @@ export interface DisplayPreferences {
 
 export type HomeSectionId =
   | "hero"
-  | "stats_strip"
-  | "continue_watching"
-  | "favorites_shelf"
+  | "trending_season"
   | "weekly_episodes"
   | "recommendations"
+  | "catalog_rails"
+  | "favorites_shelf"
+  | "stats_strip"
   | "mood_roulette"
   | "recent_activity"
-  | "catalog_rails"
   | "community_pulse";
 
 export interface HomeSectionPreference {
@@ -502,6 +531,11 @@ export interface ToastMessage {
   status?: LibraryStatus;
   mediaId?: number;
   celebrate?: boolean;
+  durationMs?: number;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 export interface AniListGenreStat {

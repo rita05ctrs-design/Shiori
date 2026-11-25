@@ -6,6 +6,11 @@ import type {
 } from "@/lib/library-utils";
 import type { SituationGroupId, TagCategory } from "@/lib/discover-taxonomy";
 import type { CommunityActivityKind, LibraryStatus, MediaType } from "@/types/media";
+import {
+  normalizeGenreMinRanks,
+  parseGenreMinRanks,
+  serializeGenreMinRanks,
+} from "./genre-intensity.ts";
 
 interface MoodPresetLike {
   id: string;
@@ -256,6 +261,7 @@ export interface PersistedDiscoverState {
   type: MediaType;
   search: string;
   selectedGenres: string[];
+  genreMinRanks: Record<string, number>;
   selectedTags: string[];
   activeMoodId: string | null;
   activeCategory: TagCategory["id"];
@@ -286,6 +292,7 @@ export const DEFAULT_DISCOVER_STATE: PersistedDiscoverState = {
   type: "ANIME",
   search: "",
   selectedGenres: [],
+  genreMinRanks: {},
   selectedTags: [],
   activeMoodId: null,
   activeCategory: "situations",
@@ -331,10 +338,28 @@ export function sanitizeDiscoverState(
       ? raw.activeMoodId
       : null;
 
+  const sanitizedGenres = uniqueStrings(raw?.selectedGenres);
+  // Gracefully migrate legacy single `minGenreRank` from older sessionStorage snapshots if present
+  const legacyRank =
+    raw &&
+    "minGenreRank" in raw &&
+    typeof (raw as { minGenreRank?: unknown }).minGenreRank === "number"
+      ? Number((raw as { minGenreRank?: number }).minGenreRank)
+      : 0;
+  let initialMap: Record<string, unknown> | undefined =
+    raw?.genreMinRanks && typeof raw.genreMinRanks === "object"
+      ? raw.genreMinRanks
+      : undefined;
+  if (!initialMap && legacyRank > 0 && sanitizedGenres.length > 0) {
+    initialMap = Object.fromEntries(sanitizedGenres.map((g) => [g, legacyRank]));
+  }
+  const genreMinRanks = normalizeGenreMinRanks(initialMap, sanitizedGenres);
+
   return {
     type,
     search: typeof raw?.search === "string" ? raw.search : "",
-    selectedGenres: uniqueStrings(raw?.selectedGenres),
+    selectedGenres: sanitizedGenres,
+    genreMinRanks,
     selectedTags: uniqueStrings(raw?.selectedTags),
     activeMoodId,
     activeCategory:
@@ -365,7 +390,13 @@ export function discoverStateToSearchParams(state: PersistedDiscoverState): URLS
   if (state.type !== "ANIME") params.set("type", state.type);
   if (state.search.trim()) params.set("search", state.search.trim());
   if (state.activeMoodId) params.set("mood", state.activeMoodId);
-  if (state.selectedGenres.length > 0) params.set("genres", state.selectedGenres.join(","));
+  if (state.selectedGenres.length > 0) {
+    params.set("genres", state.selectedGenres.join(","));
+    const encodedRanks = serializeGenreMinRanks(state.genreMinRanks, state.selectedGenres);
+    if (encodedRanks) {
+      params.set("genreRanks", encodedRanks);
+    }
+  }
   if (state.selectedTags.length > 0) params.set("tags", state.selectedTags.join(","));
   if (state.year !== "ALL") params.set("year", state.year);
   if (state.season !== "ALL" && state.type === "ANIME") params.set("season", state.season);
@@ -426,10 +457,22 @@ export function searchParamsToDiscoverState(
       parsedTags.length > 0
   );
 
+  const genreRanksParam = params.get("genreRanks");
+  const legacyMinRank = Number(params.get("minGenreRank") ?? 0) || 0;
+  const parsedGenreMinRanks = genreRanksParam
+    ? parseGenreMinRanks(genreRanksParam, parsedGenres)
+    : legacyMinRank > 0
+      ? normalizeGenreMinRanks(
+          Object.fromEntries(parsedGenres.map((g) => [g, legacyMinRank])),
+          parsedGenres
+        )
+      : normalizeGenreMinRanks(undefined, parsedGenres);
+
   return sanitizeDiscoverState({
     type: params.get("type") === "MANGA" ? "MANGA" : "ANIME",
     search: params.get("search") ?? "",
     selectedGenres: parsedGenres,
+    genreMinRanks: parsedGenreMinRanks,
     selectedTags: parsedTags,
     activeMoodId: moodPreset ? moodPreset.id : null,
     activeCategory: fallbackUi?.activeCategory ?? "situations",

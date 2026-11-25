@@ -5,6 +5,7 @@ import {
   fetchMediaDetail,
   fetchWeeklySchedule,
 } from "@/lib/anilist";
+import { parseGenreMinRanks } from "@/lib/genre-intensity";
 import type { MediaType } from "@/types/media";
 
 export async function GET(request: NextRequest) {
@@ -47,6 +48,8 @@ export async function GET(request: NextRequest) {
     const pageParam = searchParams.get("page");
     const perPageParam = searchParams.get("perPage");
     const genresParam = searchParams.get("genres");
+    const genreRanksParam = searchParams.get("genreRanks");
+    const minGenreRankParam = searchParams.get("minGenreRank");
     const tagsParam = searchParams.get("tags");
 
     const genres = genresParam
@@ -68,11 +71,17 @@ export async function GET(request: NextRequest) {
       return Number.isFinite(n) && n > 0 ? Math.trunc(n) : undefined;
     };
 
+    const genreMinRanks = genreRanksParam
+      ? parseGenreMinRanks(genreRanksParam, genres)
+      : undefined;
+
     const result = await fetchDiscover({
       search: searchParams.get("search") ?? undefined,
       type,
       genre: searchParams.get("genre") ?? undefined,
       genres,
+      minGenreRank: toPosInt(minGenreRankParam),
+      genreMinRanks,
       tags,
       minScore: toPosInt(minScoreParam),
       maxScore: toPosInt(maxScoreParam),

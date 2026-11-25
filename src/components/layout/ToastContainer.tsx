@@ -10,6 +10,7 @@ import {
   X,
   Sparkles,
   Bookmark,
+  RotateCcw,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { cn, STATUS_CONFIG } from "@/lib/utils";
@@ -27,7 +28,7 @@ export function ToastContainer() {
   const { toasts, dismissToast } = useShiori();
 
   return (
-    <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-6 right-3 sm:right-6 z-[95] flex flex-col gap-3 pointer-events-none max-w-[380px] w-[calc(100vw-1.5rem)]">
+    <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-20 right-3 sm:right-6 z-[95] flex flex-col gap-3 pointer-events-none max-w-[390px] w-[calc(100vw-1.5rem)]">
       <AnimatePresence mode="popLayout">
         {toasts.map((t) => {
           const statusCfg = t.status ? STATUS_CONFIG[t.status] : null;
@@ -153,15 +154,30 @@ export function ToastContainer() {
                       {t.description}
                     </p>
                   )}
-                  {isRichMedia && (
-                    <Link
-                      href="/library"
-                      onClick={() => dismissToast(t.id)}
-                      className="inline-block mt-1 text-[11px] font-medium text-[#FF8A8E] hover:text-white transition-colors"
-                    >
-                      Voir ma bibliothèque →
-                    </Link>
-                  )}
+                  <div className="mt-1.5 flex items-center gap-2.5 flex-wrap">
+                    {t.action && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          t.action?.onClick();
+                          dismissToast(t.id);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-accent/20 hover:bg-accent border border-accent/45 text-[11px] font-semibold text-white transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>{t.action.label}</span>
+                      </button>
+                    )}
+                    {isRichMedia && !t.action && (
+                      <Link
+                        href="/library"
+                        onClick={() => dismissToast(t.id)}
+                        className="inline-block text-[11px] font-medium text-[#FF8A8E] hover:text-white transition-colors"
+                      >
+                        Voir ma bibliothèque →
+                      </Link>
+                    )}
+                  </div>
                 </div>
 
                 <button
@@ -178,7 +194,7 @@ export function ToastContainer() {
               <motion.div
                 initial={{ scaleX: 1 }}
                 animate={{ scaleX: 0 }}
-                transition={{ duration: 3.4, ease: "linear" }}
+                transition={{ duration: (t.durationMs ?? 3400) / 1000, ease: "linear" }}
                 style={{ transformOrigin: "left center" }}
                 className={cn(
                   "h-[2px] w-full",

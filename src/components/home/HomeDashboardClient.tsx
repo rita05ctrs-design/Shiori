@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowDown,
@@ -19,10 +20,8 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { HeroShowcase } from "@/components/media/HeroShowcase";
-import { ContinueWatchingSection } from "@/components/media/ContinueWatchingSection";
 import { PersonalizedRecommendationsSection } from "@/components/media/PersonalizedRecommendationsSection";
 import { HomeMoodAndRouletteSection } from "@/components/home/HomeMoodAndRouletteSection";
-import { HomeWeeklyCheckStrip } from "@/components/episodes/HomeWeeklyCheckStrip";
 import { HomeCommunityPulseSection } from "@/components/home/HomeCommunityPulseSection";
 import { MediaRail } from "@/components/media/MediaRail";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
@@ -33,16 +32,45 @@ import type { HomeSectionId, MediaItem } from "@/types/media";
 
 const SECTION_LABELS: Record<HomeSectionId, { title: string; hint: string }> = {
   hero: { title: "À la une", hint: "Affiche principale en haut de l'accueil" },
-  continue_watching: { title: "Reprendre la lecture", hint: "Vos titres en cours avec bouton +1" },
-  stats_strip: { title: "Résumé rapide", hint: "En cours, favoris, terminés et note moyenne" },
-  favorites_shelf: { title: "Mes favoris", hint: "Accès direct à vos coups de cœur" },
-  weekly_episodes: { title: "Sorties de la semaine", hint: "Épisodes récents de vos séries" },
-  catalog_rails: { title: "Tendances & Mangas", hint: "Sélection du moment à découvrir" },
-  recommendations: { title: "Recommandations", hint: "Suggestions hors bibliothèque" },
-  mood_roulette: { title: "Envies & Roulette", hint: "Choisir selon votre humeur" },
-  recent_activity: { title: "Activité récente", hint: "Vos dernières mises à jour" },
-  community_pulse: { title: "Communauté", hint: "Activité récente des membres" },
+  trending_season: {
+    title: "Tendances de la saison",
+    hint: "Carrousel immersif des animés les plus suivis",
+  },
+  weekly_episodes: {
+    title: "Sorties de la semaine",
+    hint: "Carrousel 2:3 des animés diffusés cette semaine",
+  },
+  recommendations: {
+    title: "Recommandés pour toi",
+    hint: "Suggestions personnalisées hors bibliothèque",
+  },
+  catalog_rails: {
+    title: "Sélection Manga",
+    hint: "Les mangas incontournables du catalogue",
+  },
+  favorites_shelf: {
+    title: "Mes favoris",
+    hint: "Accès direct à vos coups de cœur",
+  },
+  stats_strip: {
+    title: "Résumé rapide",
+    hint: "En cours, favoris, terminés et note moyenne",
+  },
+  mood_roulette: {
+    title: "Envies & Roulette",
+    hint: "Choisir selon votre humeur",
+  },
+  recent_activity: {
+    title: "Activité récente",
+    hint: "Vos dernières mises à jour",
+  },
+  community_pulse: {
+    title: "Communauté",
+    hint: "Activité récente des membres",
+  },
 };
+
+const MOBILE_ENTRY_FLAG = "shiori_mobile_default_week_v1";
 
 interface HomeDashboardClientProps {
   data: HomeData;
@@ -50,6 +78,7 @@ interface HomeDashboardClientProps {
 }
 
 export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientProps) {
+  const router = useRouter();
   const {
     library,
     orderedFavorites,
@@ -61,10 +90,46 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
   } = useShiori();
   const [customizing, setCustomizing] = useState(false);
 
+  // Mobile-first default view (< 768px): land directly on "Semaine" (/episodes) on initial session open,
+  // while still letting mobile users intentionally view Home via /?home=1 or brand logo tap.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.innerWidth >= 768) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("home") === "1") {
+      try {
+        sessionStorage.setItem(MOBILE_ENTRY_FLAG, "1");
+      } catch {
+        // ignore storage restrictions
+      }
+      return;
+    }
+    try {
+      if (sessionStorage.getItem(MOBILE_ENTRY_FLAG)) return;
+      sessionStorage.setItem(MOBILE_ENTRY_FLAG, "1");
+      router.replace("/episodes");
+    } catch {
+      // ignore
+    }
+  }, [router]);
+
   const stats = useMemo(
     () => computeLibraryAnalytics(library, activity),
     [library, activity]
   );
+
+  // Deduplicated 2:3 vertical-poster MediaItems for "Sorties de la semaine" carousel
+  const weeklyReleaseItems = useMemo<MediaItem[]>(() => {
+    const seen = new Set<number>();
+    const out: MediaItem[] = [];
+    for (const slot of data.airingToday) {
+      if (!slot.media || seen.has(slot.media.id)) continue;
+      seen.add(slot.media.id);
+      out.push(slot.media);
+      if (out.length >= 16) break;
+    }
+    return out.length > 0 ? out : data.popular.slice(0, 12);
+  }, [data.airingToday, data.popular]);
 
   const heroVisible = homeSections.find((s) => s.id === "hero")?.visible ?? true;
   const nonHeroSections = homeSections.filter((s) => s.id !== "hero");
@@ -72,6 +137,45 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
 
   const renderSection = (id: HomeSectionId) => {
     switch (id) {
+      case "trending_season":
+        return (
+          <MediaRail
+            key="trending_season"
+            eyebrow="Saison en cours"
+            title="Tendances de la saison"
+            subtitle="Les animés les plus suivis et commentés du moment"
+            href="/discover?sort=TRENDING_DESC&type=ANIME"
+            items={data.trending}
+          />
+        );
+
+      case "weekly_episodes":
+        return (
+          <MediaRail
+            key="weekly_episodes"
+            eyebrow="Simulcast · 7 jours"
+            title="Sorties de la semaine"
+            subtitle="Les nouveaux épisodes diffusés cette semaine"
+            href="/episodes"
+            items={weeklyReleaseItems}
+          />
+        );
+
+      case "recommendations":
+        return <PersonalizedRecommendationsSection key="recommendations" />;
+
+      case "catalog_rails":
+        return (
+          <MediaRail
+            key="catalog_rails"
+            eyebrow="Lecture"
+            title="Sélection Manga"
+            subtitle="Les mangas incontournables du catalogue"
+            href="/discover?sort=SCORE_DESC&type=MANGA"
+            items={data.manga}
+          />
+        );
+
       case "stats_strip":
         return (
           <RevealSection key="stats_strip">
@@ -144,9 +248,6 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
           </RevealSection>
         );
 
-      case "continue_watching":
-        return <ContinueWatchingSection key="continue_watching" />;
-
       case "favorites_shelf":
         if (orderedFavorites.length === 0) return null;
         return (
@@ -201,12 +302,6 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
           </RevealSection>
         );
 
-      case "weekly_episodes":
-        return <HomeWeeklyCheckStrip key="weekly_episodes" airingSlots={data.airingToday} />;
-
-      case "recommendations":
-        return <PersonalizedRecommendationsSection key="recommendations" />;
-
       case "mood_roulette":
         return <HomeMoodAndRouletteSection key="mood_roulette" surprisePool={surprisePool} />;
 
@@ -258,26 +353,6 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
           </RevealSection>
         );
 
-      case "catalog_rails":
-        return (
-          <div key="catalog_rails" className="space-y-10">
-            <MediaRail
-              eyebrow="À découvrir"
-              title="Tendances du moment"
-              subtitle="Les animés les plus suivis cette semaine"
-              href="/discover?sort=TRENDING_DESC&type=ANIME"
-              items={data.trending}
-            />
-            <MediaRail
-              eyebrow="Lecture"
-              title="Sélection Manga"
-              subtitle="Les mangas incontournables du catalogue"
-              href="/discover?sort=SCORE_DESC&type=MANGA"
-              items={data.manga}
-            />
-          </div>
-        );
-
       case "community_pulse":
         return <HomeCommunityPulseSection key="community_pulse" />;
 
@@ -287,7 +362,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
   };
 
   return (
-    <div className="pb-10">
+    <div className="pb-24 md:pb-12">
       {/* Compact Cinematic Hero Showcase */}
       {heroVisible ? (
         <HeroShowcase items={data.hero} />
@@ -295,14 +370,13 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
         <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24" />
       )}
 
-      {/* Focused Main Content Container */}
+      {/* Immersive Horizontal 2:3 Poster Carousels directly beneath Hero */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-10 sm:space-y-12 mt-6">
-        {/* Render user's visible sections in order */}
         {nonHeroSections
           .filter((s) => s.visible)
           .map((s) => renderSection(s.id))}
 
-        {/* Discreet Home Customization Control at the bottom (never interrupts first impression) */}
+        {/* Discreet Home Customization Control at the bottom */}
         <div className="pt-2 flex flex-col items-end gap-4">
           <button
             type="button"
@@ -354,6 +428,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {homeSections.map((sec, idx) => {
                   const meta = SECTION_LABELS[sec.id];
+                  if (!meta) return null;
                   return (
                     <div
                       key={sec.id}

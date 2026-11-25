@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,8 +17,17 @@ import {
   Check,
   Heart,
   Palette,
+  Wand2,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import {
+  getInstantAliasSuggestions,
+  resolveSearchAlias,
+} from "@/lib/searchAliases";
+import {
+  rankMediaByFuzzySearch,
+  searchLibraryEntriesFuzzy,
+} from "@/lib/fuzzy-search";
 import { formatFormat, formatScore, getDisplayTitle, getStatusLabel } from "@/lib/utils";
 import type { MediaItem, MediaType } from "@/types/media";
 
@@ -28,7 +37,7 @@ const QUICK_ROUTES = [
   { href: "/library", label: "Ma Bibliothèque", sub: "En cours, Terminés et À voir", icon: Library },
   { href: "/library?favorites=1", label: "Mes Favoris", sub: "Vos coups de cœur classés", icon: Heart },
   { href: "/discover", label: "Découvrir", sub: "Explorer le catalogue animés & mangas", icon: Compass },
-  { href: "/calendar", label: "Sorties & Calendrier", sub: "Épisodes de la semaine", icon: CalendarDays },
+  { href: "/episodes", label: "Épisodes de la semaine", sub: "Suivi rapide +1 Vu", icon: CalendarDays },
   { href: "/stats", label: "Statistiques", sub: "Notes, genres et temps passé", icon: BarChart3 },
   { href: "/settings", label: "Paramètres & Apparence", sub: "Thèmes, profil et sauvegardes", icon: Palette },
 ];
@@ -48,6 +57,12 @@ export function CommandPalette() {
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const aliasResolution = useMemo(() => resolveSearchAlias(query), [query]);
+  const instantAliases = useMemo(
+    () => getInstantAliasSuggestions(query, 3),
+    [query]
+  );
 
   useEffect(() => {
     if (commandOpen) {
@@ -77,6 +92,7 @@ export function CommandPalette() {
       return;
     }
 
+    const effectiveQuery = aliasResolution.resolvedQuery || trimmed;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLoading(true);
@@ -84,11 +100,11 @@ export function CommandPalette() {
         if (scope === "ALL") {
           const [animeRes, mangaRes] = await Promise.all([
             fetch(
-              `/api/anilist?action=discover&type=ANIME&search=${encodeURIComponent(trimmed)}&perPage=4`,
+              `/api/anilist?action=discover&type=ANIME&search=${encodeURIComponent(effectiveQuery)}&perPage=6`,
               { signal: controller.signal }
             ),
             fetch(
-              `/api/anilist?action=discover&type=MANGA&search=${encodeURIComponent(trimmed)}&perPage=4`,
+              `/api/anilist?action=discover&type=MANGA&search=${encodeURIComponent(effectiveQuery)}&perPage=4`,
               { signal: controller.signal }
             ),
           ]);
@@ -96,24 +112,25 @@ export function CommandPalette() {
             animeRes.ok ? animeRes.json() : { items: [] },
             mangaRes.ok ? mangaRes.json() : { items: [] },
           ]);
-          // Interleave anime & manga results cleanly so both are immediately visible
-          const aItems: MediaItem[] = animeData.items ?? [];
-          const mItems: MediaItem[] = mangaData.items ?? [];
-          const merged: MediaItem[] = [];
-          const maxLen = Math.max(aItems.length, mItems.length);
-          for (let i = 0; i < maxLen; i++) {
-            if (aItems[i]) merged.push(aItems[i]);
-            if (mItems[i]) merged.push(mItems[i]);
-          }
-          setResults(merged.slice(0, 8));
+          const combined: MediaItem[] = [
+            ...(animeData.items ?? []),
+            ...(mangaData.items ?? []),
+          ];
+          const ranked = rankMediaByFuzzySearch(combined, trimmed, effectiveQuery);
+          setResults(ranked.slice(0, 8));
         } else {
           const res = await fetch(
-            `/api/anilist?action=discover&type=${scope}&search=${encodeURIComponent(trimmed)}&perPage=6`,
+            `/api/anilist?action=discover&type=${scope}&search=${encodeURIComponent(effectiveQuery)}&perPage=8`,
             { signal: controller.signal }
           );
           if (res.ok) {
             const data = await res.json();
-            setResults(data.items ?? []);
+            const ranked = rankMediaByFuzzySearch(
+              data.items ?? [],
+              trimmed,
+              effectiveQuery
+            );
+            setResults(ranked.slice(0, 8));
           }
         }
       } catch {
@@ -121,22 +138,21 @@ export function CommandPalette() {
       } finally {
         setLoading(false);
       }
-    }, 240);
+    }, 210);
 
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, scope, commandOpen]);
+  }, [query, aliasResolution.resolvedQuery, scope, commandOpen]);
 
-  const localMatches = query.trim()
-    ? library
-        .filter((e) => {
-          if (scope !== "ALL" && e.type !== scope) return false;
-          return e.title.toLowerCase().includes(query.trim().toLowerCase());
-        })
-        .slice(0, 3)
-    : [];
+  // Instant fuzzy multilingual library matches (zero network wait)
+  const localMatches = useMemo(() => {
+    if (query.trim().length < 2) return [];
+    const scoped =
+      scope === "ALL" ? library : library.filter((e) => e.type === scope);
+    return searchLibraryEntriesFuzzy(scoped, query, 3);
+  }, [library, query, scope]);
 
   const go = (href: string) => {
     setCommandOpen(false);
@@ -146,7 +162,7 @@ export function CommandPalette() {
   return (
     <AnimatePresence>
       {commandOpen && (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[calc(4.25rem+env(safe-area-inset-top))] sm:pt-[10vh] pb-[max(1rem,env(safe-area-inset-bottom))] px-3 sm:px-4">
+        <div className="fixed inset-0 z-[80] flex items-start justify-center pt-[calc(3.5rem+env(safe-area-inset-top))] sm:pt-[10vh] pb-[max(1rem,env(safe-area-inset-bottom))] px-2.5 sm:px-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -169,11 +185,21 @@ export function CommandPalette() {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher ou ajouter un anime / manga..."
+                placeholder="Titre FR, EN, JP, abréviation (snk, jjk)..."
                 className="min-w-0 flex-1 bg-transparent text-sm sm:text-[15px] text-white placeholder:text-[#6E7387] focus:outline-none"
               />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Effacer"
+                  className="p-1 rounded-md text-[#7D8296] hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
               {/* Scope toggle: Tous / Anime / Manga */}
-              <div className="flex items-center rounded-lg bg-white/[0.05] p-0.5 border border-white/[0.07] shrink-0">
+              <div className="hidden xs:flex sm:flex items-center rounded-lg bg-white/[0.05] p-0.5 border border-white/[0.07] shrink-0">
                 {(
                   [
                     { id: "ALL", label: "Tous" },
@@ -205,19 +231,68 @@ export function CommandPalette() {
               </button>
             </div>
 
-            {/* Body */}
-            <div className="max-h-[65vh] overflow-y-auto p-3 space-y-4">
-              {loading && (
-                <div className="py-8 flex items-center justify-center gap-2.5 text-sm text-[#9A9EAE]">
-                  <Loader2 className="w-4 h-4 animate-spin text-accent" />
-                  <span>Recherche en cours...</span>
+            {/* Mobile compact scope bar */}
+            <div className="flex sm:hidden items-center gap-1 px-3 py-2 border-b border-white/[0.06] bg-white/[0.015]">
+              {(
+                [
+                  { id: "ALL", label: "Tous" },
+                  { id: "ANIME", label: "Animes" },
+                  { id: "MANGA", label: "Mangas" },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setScope(t.id)}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                    scope === t.id
+                      ? "bg-accent text-accent-fg"
+                      : "bg-white/[0.04] text-[#9A9EAE]"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Smart Alias Enrichment Banner */}
+            {aliasResolution.didExpand && aliasResolution.canonicalLabel && (
+              <div className="px-3.5 py-2 border-b border-white/[0.06] bg-kinpaku/[0.07] flex items-center gap-2 text-xs text-[#F5D68E]">
+                <Wand2 className="w-3.5 h-3.5 text-kinpaku shrink-0" />
+                <span className="truncate">
+                  Alias reconnu :{" "}
+                  <strong className="text-white">{aliasResolution.canonicalLabel}</strong>
+                </span>
+              </div>
+            )}
+
+            {/* Instant Alias Suggestions while typing (before full match) */}
+            {!aliasResolution.didExpand &&
+              query.trim().length >= 2 &&
+              instantAliases.length > 0 && (
+                <div className="px-3 py-2 border-b border-white/[0.06] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                  <span className="text-[10.5px] font-mono uppercase text-[#7A7F94] shrink-0">
+                    Suggestions :
+                  </span>
+                  {instantAliases.map((a) => (
+                    <button
+                      key={a.canonical}
+                      type="button"
+                      onClick={() => setQuery(a.canonical)}
+                      className="px-2.5 py-1 rounded-full bg-white/[0.05] hover:bg-accent/20 border border-white/[0.09] hover:border-accent/40 text-[11px] text-[#DCE0EC] hover:text-white whitespace-nowrap shrink-0 transition-colors cursor-pointer"
+                    >
+                      {a.displayLabel}
+                    </button>
+                  ))}
                 </div>
               )}
 
-              {/* Library instant matches */}
-              {!loading && localMatches.length > 0 && (
+            {/* Body */}
+            <div className="max-h-[62vh] overflow-y-auto p-2.5 sm:p-3 space-y-4">
+              {/* Instant fuzzy matches from user's Library (never waits on API) */}
+              {localMatches.length > 0 && (
                 <div>
-                  <p className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296]">
+                  <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296]">
                     Dans votre bibliothèque
                   </p>
                   <div className="space-y-1">
@@ -240,8 +315,9 @@ export function CommandPalette() {
                             <p className="text-sm font-medium text-white truncate group-hover:text-accent-hover transition-colors">
                               {entry.title}
                             </p>
-                            <p className="text-xs text-[#8D92A4] font-mono">
-                              {entry.type === "MANGA" ? "Manga · Ch." : "Anime · Ép."} {entry.progress}
+                            <p className="text-xs text-[#8D92A4] font-mono truncate">
+                              {entry.type === "MANGA" ? "Manga · Ch." : "Anime · Ép."}{" "}
+                              {entry.progress}
                               {entry.totalUnits ? `/${entry.totalUnits}` : ""} ·{" "}
                               {getStatusLabel(entry.status, entry.type)}
                             </p>
@@ -263,10 +339,17 @@ export function CommandPalette() {
                 </div>
               )}
 
+              {loading && (
+                <div className="py-6 flex items-center justify-center gap-2.5 text-sm text-[#9A9EAE]">
+                  <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                  <span>Recherche multilingue en cours...</span>
+                </div>
+              )}
+
               {/* Live catalog results with inline 1-click "+ Ajouter" */}
               {!loading && results.length > 0 && (
                 <div>
-                  <p className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296] flex items-center gap-1.5">
+                  <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296] flex items-center gap-1.5">
                     <Sparkles className="w-3 h-3 text-accent" />
                     <span>
                       Catalogue{" "}
@@ -280,6 +363,12 @@ export function CommandPalette() {
                   <div className="space-y-1">
                     {results.map((item) => {
                       const existing = getEntry(item.id);
+                      const displayTitle = getDisplayTitle(item);
+                      const altTitle =
+                        item.title.romaji && item.title.romaji !== displayTitle
+                          ? item.title.romaji
+                          : item.title.native || null;
+
                       return (
                         <div
                           key={item.id}
@@ -292,13 +381,18 @@ export function CommandPalette() {
                           >
                             <img
                               src={item.coverImage.large}
-                              alt={getDisplayTitle(item)}
+                              alt={displayTitle}
                               className="w-10 h-14 rounded-lg object-cover shrink-0 border border-white/[0.08]"
                             />
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium text-[#F4F3EE] truncate group-hover:text-white">
-                                {getDisplayTitle(item)}
+                                {displayTitle}
                               </p>
+                              {altTitle && (
+                                <p className="text-[11px] text-[#7A7F94] truncate">
+                                  {altTitle}
+                                </p>
+                              )}
                               <p className="text-xs text-[#8E93A6] mt-0.5 truncate">
                                 <span
                                   className={
@@ -333,7 +427,7 @@ export function CommandPalette() {
                               type="button"
                               onClick={() => quickAdd(item, "WATCHING")}
                               title="Ajouter directement en cours"
-                              className="h-8 px-3 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                              className="h-8 px-2.5 sm:px-3 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
                             >
                               <Plus className="w-3.5 h-3.5" />
                               <span>Ajouter</span>
@@ -361,16 +455,19 @@ export function CommandPalette() {
               )}
 
               {/* Empty state when searching */}
-              {!loading && query.trim().length >= 2 && results.length === 0 && localMatches.length === 0 && (
-                <div className="py-10 text-center text-sm text-[#8D92A4]">
-                  Aucun résultat trouvé pour &laquo; {query} &raquo;.
-                </div>
-              )}
+              {!loading &&
+                query.trim().length >= 2 &&
+                results.length === 0 &&
+                localMatches.length === 0 && (
+                  <div className="py-10 text-center text-sm text-[#8D92A4]">
+                    Aucun résultat trouvé pour &laquo; {query} &raquo;.
+                  </div>
+                )}
 
               {/* Quick routes when query is empty */}
               {!loading && query.trim().length < 2 && (
                 <div>
-                  <p className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296]">
+                  <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296]">
                     Accès rapide
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -402,8 +499,10 @@ export function CommandPalette() {
 
             {/* Subtle Footer Hint */}
             <div className="px-4 py-2 border-t border-white/[0.06] bg-white/[0.02] flex items-center justify-between text-[11px] text-[#74798E]">
-              <span>Tapez un titre pour ajouter directement un anime ou un manga</span>
-              <span className="hidden sm:inline font-mono">Échap pour fermer</span>
+              <span className="truncate">
+                Tolérant aux fautes · Titres FR, EN, JP & alias (snk, jjk, mha...)
+              </span>
+              <span className="hidden sm:inline font-mono shrink-0 ml-2">Échap</span>
             </div>
           </motion.div>
         </div>

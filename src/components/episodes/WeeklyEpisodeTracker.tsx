@@ -5,7 +5,6 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Check,
-  X,
   Clock,
   Star,
   ListChecks,
@@ -18,6 +17,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  RotateCcw,
+  Tv,
+  Flame,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import {
@@ -26,11 +28,12 @@ import {
   formatScore,
   getDisplayTitle,
 } from "@/lib/utils";
+import { formatStreamingDisplayName } from "@/lib/streaming";
 import type { AiringScheduleItem, MediaItem } from "@/types/media";
 import type { WatchingAiringItem } from "@/app/api/anilist/watching-airing/route";
 
 type ScopeMode = "mylist" | "all";
-type FilterTab = "unwatched" | "watched" | "upcoming" | "all";
+type FilterTab = "unwatched" | "today" | "all" | "watched" | "upcoming";
 
 interface WeeklyEpisodeRow {
   mediaId: number;
@@ -39,52 +42,146 @@ interface WeeklyEpisodeRow {
   latestAiredAt: number | null;
   nextEpisode: { episode: number; airingAt: number } | null;
   inUserList: boolean;
+  isWatching: boolean;
   userProgress: number;
   isWatched: boolean;
   behindCount: number;
+  airedToday: boolean;
 }
 
-function formatRelativeDayLabel(unixSec: number | null): string {
-  if (!unixSec) return "Cette semaine";
-  const now = new Date();
+interface DayGroup {
+  id: string;
+  title: string;
+  subtitle: string;
+  priority?: boolean;
+  sortKey: number;
+  rows: WeeklyEpisodeRow[];
+}
+
+function getLocalDayStartMs(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function isSameLocalDay(unixSec: number | null, nowMs: number): boolean {
+  if (!unixSec) return false;
   const dt = new Date(unixSec * 1000);
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startTarget = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+  const now = new Date(nowMs);
+  return (
+    dt.getFullYear() === now.getFullYear() &&
+    dt.getMonth() === now.getMonth() &&
+    dt.getDate() === now.getDate()
+  );
+}
+
+function formatDayBucketInfo(
+  unixSec: number | null,
+  nowMs: number,
+  isUpcoming = false
+): { key: string; title: string; subtitle: string; sortKey: number } {
+  if (!unixSec) {
+    return {
+      key: isUpcoming ? "upcoming-tbd" : "this-week",
+      title: isUpcoming ? "Prochainement cette semaine" : "Cette semaine",
+      subtitle: "Diffusion récente",
+      sortKey: isUpcoming ? Number.MAX_SAFE_INTEGER : 0,
+    };
+  }
+
+  const now = new Date(nowMs);
+  const dt = new Date(unixSec * 1000);
+  const startToday = getLocalDayStartMs(now);
+  const startTarget = getLocalDayStartMs(dt);
   const diffDays = Math.round((startTarget - startToday) / 86400000);
-  const timeStr = dt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+  const fullDate = dt.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  const capDate = fullDate.charAt(0).toUpperCase() + fullDate.slice(1);
+
+  if (diffDays === 0) {
+    return {
+      key: "day-today",
+      title: "Aujourd'hui",
+      subtitle: capDate,
+      sortKey: startTarget,
+    };
+  }
+  if (diffDays === -1) {
+    return {
+      key: "day-yesterday",
+      title: "Hier",
+      subtitle: capDate,
+      sortKey: startTarget,
+    };
+  }
+  if (diffDays === 1) {
+    return {
+      key: "day-tomorrow",
+      title: "Demain",
+      subtitle: capDate,
+      sortKey: startTarget,
+    };
+  }
+
+  const weekdayTitle = dt.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+  const capTitle = weekdayTitle.charAt(0).toUpperCase() + weekdayTitle.slice(1);
+
+  return {
+    key: `day-${startTarget}`,
+    title: capTitle,
+    subtitle: isUpcoming ? "Diffusion à venir" : "Diffusé cette semaine",
+    sortKey: startTarget,
+  };
+}
+
+function formatRelativeTimeStamp(unixSec: number | null, nowMs: number): string {
+  if (!unixSec) return "Cette semaine";
+  const dt = new Date(unixSec * 1000);
+  const now = new Date(nowMs);
+  const diffDays = Math.round(
+    (getLocalDayStartMs(dt) - getLocalDayStartMs(now)) / 86400000
+  );
+  const timeStr = dt.toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   if (diffDays === 0) return `Aujourd'hui · ${timeStr}`;
   if (diffDays === -1) return `Hier · ${timeStr}`;
   if (diffDays === 1) return `Demain · ${timeStr}`;
-  const dayName = dt.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
-  return `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} · ${timeStr}`;
-}
-
-function getBucketGroup(row: WeeklyEpisodeRow, nowMs: number): "today" | "recent" | "upcoming" {
-  if (row.latestAiredEpisode <= 0) return "upcoming";
-  if (!row.latestAiredAt) return "recent";
-  const dt = new Date(row.latestAiredAt * 1000);
-  const now = new Date(nowMs);
-  const isSameDay =
-    dt.getFullYear() === now.getFullYear() &&
-    dt.getMonth() === now.getMonth() &&
-    dt.getDate() === now.getDate();
-  return isSameDay ? "today" : "recent";
+  const dayStr = dt.toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  return `${dayStr.charAt(0).toUpperCase() + dayStr.slice(1)} · ${timeStr}`;
 }
 
 interface WeeklyEpisodeTrackerProps {
   initialSchedule: AiringScheduleItem[];
+  renderedAtMs?: number;
 }
 
-export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerProps) {
+export function WeeklyEpisodeTracker({
+  initialSchedule,
+  renderedAtMs,
+}: WeeklyEpisodeTrackerProps) {
   const {
     library,
     hydrated,
     getEntry,
     upsertEntry,
+    removeEntry,
     incrementProgress,
     anilistConnection,
     anilistAutoSync,
+    toast,
   } = useShiori();
 
   const [watchingLive, setWatchingLive] = useState<WatchingAiringItem[]>([]);
@@ -94,8 +191,14 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
   const [filterTab, setFilterTab] = useState<FilterTab>("all");
   const [search, setSearch] = useState("");
   const [flashId, setFlashId] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const [nowMs, setNowMs] = useState<number>(() => renderedAtMs ?? 1764000000000);
 
-  const nowMs = Date.now();
+  useEffect(() => {
+    setMounted(true);
+    setNowMs(Date.now());
+  }, []);
+
   const nowSec = Math.floor(nowMs / 1000);
 
   // Collect user's active Watching / Plan to Watch / On Hold anime IDs
@@ -186,7 +289,6 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
         if (!existing.nextEpisode || slot.airingAt < existing.nextEpisode.airingAt) {
           existing.nextEpisode = { episode: slot.episode, airingAt: slot.airingAt };
         }
-        // If we know ep N is airing next and we don't have a past slot yet, ep N-1 already aired
         if (existing.latestAiredEpisode === 0 && slot.episode > 1) {
           existing.latestAiredEpisode = slot.episode - 1;
           existing.latestAiredAt =
@@ -235,13 +337,12 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
           ? item.latestAiredAt
           : existing?.latestAiredAt ?? item.latestAiredAt;
 
-      const nextEpisode =
-        item.nextAiringEpisode
-          ? {
-              episode: item.nextAiringEpisode.episode,
-              airingAt: item.nextAiringEpisode.airingAt,
-            }
-          : existing?.nextEpisode ?? null;
+      const nextEpisode = item.nextAiringEpisode
+        ? {
+            episode: item.nextAiringEpisode.episode,
+            airingAt: item.nextAiringEpisode.airingAt,
+          }
+        : existing?.nextEpisode ?? null;
 
       map.set(item.mediaId, {
         media: mediaObj,
@@ -255,6 +356,7 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
     const rows: WeeklyEpisodeRow[] = [];
     for (const [mediaId, info] of map.entries()) {
       const entry = getEntry(mediaId);
+      const isWatching = entry?.status === "WATCHING";
       const inUserList = Boolean(
         entry &&
           (entry.status === "WATCHING" ||
@@ -268,6 +370,9 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
         info.latestAiredEpisode > 0
           ? Math.max(0, info.latestAiredEpisode - userProgress)
           : 0;
+      const airedToday =
+        isSameLocalDay(info.latestAiredAt, nowMs) ||
+        isSameLocalDay(info.nextEpisode?.airingAt ?? null, nowMs);
 
       rows.push({
         mediaId,
@@ -276,48 +381,67 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
         latestAiredAt: info.latestAiredAt,
         nextEpisode: info.nextEpisode,
         inUserList,
+        isWatching,
         userProgress,
         isWatched,
         behindCount,
+        airedToday,
       });
     }
 
-    // Sort: unwatched newly-aired first (most recent release at top), then watched, then upcoming
+    // Priority sort: Watching + unwatched (today first) -> other unwatched -> watched -> upcoming
     rows.sort((a, b) => {
+      const aPriority = a.isWatching && a.latestAiredEpisode > 0 && !a.isWatched ? 1 : 0;
+      const bPriority = b.isWatching && b.latestAiredEpisode > 0 && !b.isWatched ? 1 : 0;
+      if (aPriority !== bPriority) return bPriority - aPriority;
+
+      if (a.airedToday !== b.airedToday && !a.isWatched && !b.isWatched) {
+        return a.airedToday ? -1 : 1;
+      }
+
       const aAired = a.latestAiredEpisode > 0;
       const bAired = b.latestAiredEpisode > 0;
       if (aAired !== bAired) return aAired ? -1 : 1;
       if (aAired && bAired && a.isWatched !== b.isWatched) {
         return a.isWatched ? 1 : -1;
       }
+
       const aTime = a.latestAiredAt ?? a.nextEpisode?.airingAt ?? 0;
       const bTime = b.latestAiredAt ?? b.nextEpisode?.airingAt ?? 0;
       return bTime - aTime;
     });
 
     return rows;
-  }, [initialSchedule, watchingLive, getEntry, nowSec]);
+  }, [initialSchedule, watchingLive, getEntry, nowSec, nowMs]);
 
   const myListRows = useMemo(() => allRows.filter((r) => r.inUserList), [allRows]);
 
-  // Smart default scope: show "Mes animés" if user has releasing shows, otherwise "Toutes les sorties"
+  // Priority Watching rows with new episodes aired today or still unwatched
+  const priorityWatchingRows = useMemo(
+    () =>
+      allRows.filter(
+        (r) =>
+          r.isWatching &&
+          ((r.latestAiredEpisode > 0 && !r.isWatched) || r.airedToday)
+      ),
+    [allRows]
+  );
+
+  // Smart default scope: "Mes animés" if user has tracked releasing shows, else "Toutes les sorties"
   useEffect(() => {
     if (!hydrated || loadingMyAiring || scopeInitialized) return;
-    if (myListRows.length === 0) {
-      setScope("all");
-    } else {
-      setScope("mylist");
-    }
+    setScope(myListRows.length > 0 ? "mylist" : "all");
     setScopeInitialized(true);
   }, [hydrated, loadingMyAiring, myListRows.length, scopeInitialized]);
 
   const scopedRows = scope === "mylist" ? myListRows : allRows;
 
-  // Weekly progress KPIs for current scope
+  // Weekly progress KPIs
   const stats = useMemo(() => {
     const aired = scopedRows.filter((r) => r.latestAiredEpisode > 0);
     const watched = aired.filter((r) => r.isWatched);
     const unwatched = aired.filter((r) => !r.isWatched);
+    const today = scopedRows.filter((r) => r.airedToday);
     const upcoming = scopedRows.filter(
       (r) => r.nextEpisode !== null && r.nextEpisode.airingAt > nowSec
     );
@@ -326,6 +450,7 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
       airedCount: aired.length,
       watchedCount: watched.length,
       unwatchedCount: unwatched.length,
+      todayCount: today.length,
       upcomingCount: upcoming.length,
       totalCount: scopedRows.length,
       pct,
@@ -343,6 +468,9 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
       if (filterTab === "unwatched") {
         return row.latestAiredEpisode > 0 && !row.isWatched;
       }
+      if (filterTab === "today") {
+        return row.airedToday;
+      }
       if (filterTab === "watched") {
         return row.latestAiredEpisode > 0 && row.isWatched;
       }
@@ -353,99 +481,137 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
     });
   }, [scopedRows, search, filterTab, nowSec]);
 
-  // 1-Click OUI (Mark episode watched)
-  const markEpisodeWatched = (row: WeeklyEpisodeRow, targetEpisode: number) => {
-    const total = row.media.episodes;
-    const isFinished = Boolean(total && targetEpisode >= total);
-    upsertEntry(row.media, {
-      status: isFinished ? "COMPLETED" : "WATCHING",
-      progress: targetEpisode,
-    });
+  /**
+   * Direct "+1 Vu" action — ZERO modal!
+   * Immediately updates Shiori + Supabase + AniList and displays an Undo toast ("Annuler").
+   */
+  const handlePlusOneWatched = (row: WeeklyEpisodeRow) => {
+    const existing = getEntry(row.mediaId);
     setFlashId(row.mediaId);
     setTimeout(() => setFlashId((prev) => (prev === row.mediaId ? null : prev)), 700);
-  };
 
-  // 1-Click NON (Unmark episode / Undo back to ep - 1)
-  const markEpisodeUnwatched = (row: WeeklyEpisodeRow) => {
-    const targetEp = Math.max(0, row.latestAiredEpisode - 1);
+    if (existing) {
+      incrementProgress(row.mediaId, 1);
+      return;
+    }
+
+    // Not yet in library -> add directly as WATCHING with progress = 1 (or latest aired if ep 1)
+    const targetEp = Math.max(1, Math.min(row.latestAiredEpisode || 1, 1));
+    const total = row.media.episodes;
+    const isFinished = Boolean(total && targetEp >= total);
     upsertEntry(row.media, {
-      status: "WATCHING",
+      status: isFinished ? "COMPLETED" : "WATCHING",
       progress: targetEp,
+    });
+
+    toast({
+      title: "+1 épisode vu",
+      description: `${getDisplayTitle(row.media)} · Ép. ${targetEp}${total ? `/${total}` : ""}`,
+      variant: "info",
+      coverImage: row.media.coverImage.large || row.media.coverImage.extraLarge,
+      status: isFinished ? "COMPLETED" : "WATCHING",
+      mediaId: row.mediaId,
+      durationMs: 5500,
+      action: {
+        label: "Annuler",
+        onClick: () => removeEntry(row.mediaId),
+      },
     });
   };
 
-  // Group rows visually into Aujourd'hui / Plus tôt cette semaine / À venir
-  const grouped = useMemo(() => {
-    if (filterTab === "upcoming") {
-      return [
-        {
-          id: "upcoming",
-          title: "Prochains épisodes cette semaine",
-          subtitle: "Triés par ordre de sortie",
-          rows: [...filteredRows].sort(
-            (a, b) =>
-              (a.nextEpisode?.airingAt ?? Infinity) -
-              (b.nextEpisode?.airingAt ?? Infinity)
-          ),
-        },
-      ];
+  // Direct "-1" quick undo directly on a caught-up card
+  const handleDecrementOne = (row: WeeklyEpisodeRow) => {
+    const existing = getEntry(row.mediaId);
+    if (!existing || existing.progress <= 0) return;
+    incrementProgress(row.mediaId, -1);
+  };
+
+  // Group rows strictly by broadcast day (with Watching priority section at top when relevant)
+  const grouped = useMemo<DayGroup[]>(() => {
+    const groups: DayGroup[] = [];
+    const showPriorityBanner =
+      !search.trim() &&
+      (filterTab === "all" || filterTab === "unwatched" || filterTab === "today") &&
+      priorityWatchingRows.length > 0;
+
+    const priorityIds = new Set<number>();
+    if (showPriorityBanner) {
+      const matchingPriority = priorityWatchingRows.filter((r) => {
+        if (filterTab === "today") return r.airedToday;
+        if (filterTab === "unwatched") return r.latestAiredEpisode > 0 && !r.isWatched;
+        return true;
+      });
+      if (matchingPriority.length > 0) {
+        matchingPriority.forEach((r) => priorityIds.add(r.mediaId));
+        groups.push({
+          id: "priority-watching",
+          title: "À regarder en priorité · Mes animés en cours",
+          subtitle: "Épisodes sortis aujourd'hui ou non encore vus",
+          priority: true,
+          sortKey: Number.MAX_SAFE_INTEGER,
+          rows: matchingPriority,
+        });
+      }
     }
 
-    const today: WeeklyEpisodeRow[] = [];
-    const recent: WeeklyEpisodeRow[] = [];
-    const upcomingOnly: WeeklyEpisodeRow[] = [];
+    const dayMap = new Map<string, DayGroup>();
+    const isUpcomingView = filterTab === "upcoming";
 
-    for (const r of filteredRows) {
-      const b = getBucketGroup(r, nowMs);
-      if (b === "today") today.push(r);
-      else if (b === "recent") recent.push(r);
-      else upcomingOnly.push(r);
+    for (const row of filteredRows) {
+      if (priorityIds.has(row.mediaId) && scope === "mylist") continue;
+
+      const ts = isUpcomingView
+        ? row.nextEpisode?.airingAt ?? null
+        : row.latestAiredAt ?? row.nextEpisode?.airingAt ?? null;
+      const bucket = formatDayBucketInfo(
+        ts,
+        nowMs,
+        isUpcomingView || row.latestAiredEpisode === 0
+      );
+
+      const existing = dayMap.get(bucket.key);
+      if (existing) {
+        existing.rows.push(row);
+      } else {
+        dayMap.set(bucket.key, {
+          id: bucket.key,
+          title: bucket.title,
+          subtitle: bucket.subtitle,
+          sortKey: bucket.sortKey,
+          rows: [row],
+        });
+      }
     }
 
-    const groups: { id: string; title: string; subtitle: string; rows: WeeklyEpisodeRow[] }[] = [];
-    if (today.length > 0) {
-      groups.push({
-        id: "today",
-        title: "Sortis aujourd'hui",
-        subtitle: "Cochez Oui ou Non en 1 clic",
-        rows: today,
-      });
-    }
-    if (recent.length > 0) {
-      groups.push({
-        id: "recent",
-        title: "Sortis cette semaine",
-        subtitle: "Derniers épisodes diffusés ces 7 derniers jours",
-        rows: recent,
-      });
-    }
-    if (upcomingOnly.length > 0) {
-      groups.push({
-        id: "upcoming",
-        title: "Premiers épisodes à venir cette semaine",
-        subtitle: "Diffusion imminente",
-        rows: upcomingOnly,
-      });
-    }
-    return groups;
-  }, [filteredRows, filterTab, nowMs]);
+    const sortedDays = Array.from(dayMap.values()).sort((a, b) =>
+      isUpcomingView ? a.sortKey - b.sortKey : b.sortKey - a.sortKey
+    );
+
+    return [...groups, ...sortedDays];
+  }, [filteredRows, filterTab, nowMs, priorityWatchingRows, search, scope]);
 
   return (
-    <div className="pt-24 pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="pt-[calc(4.75rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
       {/* Page Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1.5 flex items-center gap-1.5">
             <ListChecks className="w-3.5 h-3.5" />
-            <span>Pointage Hebdomadaire · 1 Clic</span>
+            <span>Semaine / Aujourd&apos;hui · Suivi Rapide</span>
           </p>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
             Épisodes de la Semaine
           </h1>
-          <p className="text-sm text-[#8A8FA4] mt-1.5 max-w-2xl">
-            Indiquez en un seul clic <strong className="text-white">Oui (Vu)</strong> ou{" "}
-            <strong className="text-white">Non (Pas vu)</strong> pour chaque épisode qui vient de
-            sortir — sans menus ni manipulations compliquées.
+          <p className="text-xs sm:text-sm text-[#8A8FA4] mt-1 max-w-2xl">
+            <span className="sm:hidden">
+              Appuyez sur <strong className="text-white">+1 Vu</strong> pour mettre à jour en 1 clic.
+            </span>
+            <span className="hidden sm:inline">
+              Vos animés en cours ayant un nouvel épisode sorti aujourd&apos;hui ou à rattraper
+              s&apos;affichent en priorité. Cliquez sur{" "}
+              <strong className="text-white">+1 Vu</strong> pour enregistrer directement sans
+              modale.
+            </span>
           </p>
         </div>
 
@@ -467,12 +633,14 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
       </div>
 
       {/* Live Weekly Progress Dashboard Card */}
-      <div className="rounded-2xl card-surface border-accent/25 p-5 sm:p-6 space-y-5">
+      <div className="rounded-2xl card-surface border border-accent/25 p-4 sm:p-6 space-y-4 sm:space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="text-sm sm:text-base font-semibold text-white">
-                {scope === "mylist" ? "Vos sorties cette semaine" : "Toutes les sorties de la semaine"}
+                {scope === "mylist"
+                  ? "Mes sorties cette semaine"
+                  : "Toutes les sorties de la semaine"}
               </span>
               {loadingMyAiring && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[#8E93A6]">
@@ -490,8 +658,12 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
             <p className="text-xs text-[#8E93A6] font-mono">
               <strong className="text-white">{stats.watchedCount}</strong> / {stats.airedCount}{" "}
               épisodes sortis vus ({stats.pct}%) ·{" "}
-              <span className={stats.unwatchedCount > 0 ? "text-kinpaku font-semibold" : "text-emerald-400"}>
-                {stats.unwatchedCount} à regarder
+              <span
+                className={
+                  stats.unwatchedCount > 0 ? "text-kinpaku font-semibold" : "text-emerald-400"
+                }
+              >
+                {stats.unwatchedCount} à voir
               </span>
             </p>
           </div>
@@ -539,11 +711,12 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
 
         {/* Filter Pills + Search */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
             {[
-              { id: "all" as const, label: "Tout", count: stats.totalCount },
-              { id: "unwatched" as const, label: "À voir (Non vus)", count: stats.unwatchedCount },
-              { id: "watched" as const, label: "Déjà vus ✓", count: stats.watchedCount },
+              { id: "all" as const, label: "Semaine", count: stats.totalCount },
+              { id: "today" as const, label: "Aujourd'hui", count: stats.todayCount },
+              { id: "unwatched" as const, label: "À voir", count: stats.unwatchedCount },
+              { id: "watched" as const, label: "Vus ✓", count: stats.watchedCount },
               { id: "upcoming" as const, label: "À venir", count: stats.upcomingCount },
             ].map((tab) => {
               const active = filterTab === tab.id;
@@ -553,7 +726,7 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                   type="button"
                   onClick={() => setFilterTab(tab.id)}
                   className={cn(
-                    "px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1.5",
+                    "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
                     active
                       ? "bg-white text-[#090A0F] border-white"
                       : "bg-obsidian/70 border-white/[0.08] text-[#A2A6B8] hover:text-white hover:border-white/[0.16]"
@@ -586,17 +759,17 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
         </div>
       </div>
 
-      {/* Episode Checklist Groups */}
-      {filteredRows.length === 0 ? (
-        <div className="rounded-2xl card-surface p-12 text-center space-y-3">
+      {/* Day-Grouped Episode Cards */}
+      {grouped.length === 0 ? (
+        <div className="rounded-2xl card-surface p-10 sm:p-12 text-center space-y-3">
           {scope === "mylist" && myListRows.length === 0 ? (
             <>
               <p className="text-base font-semibold text-white">
                 Aucun anime en cours de diffusion dans votre liste pour l&apos;instant.
               </p>
               <p className="text-xs text-[#858A9E] max-w-md mx-auto">
-                Passez sur « Toutes les sorties » pour cocher en 1 clic les animés de la saison que
-                vous regardez cette semaine : ils s&apos;ajouteront automatiquement à votre suivi !
+                Passez sur « Toutes les sorties » et cliquez sur +1 Vu pour ajouter
+                instantanément les animés de la saison que vous suivez !
               </p>
               <button
                 type="button"
@@ -614,7 +787,7 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                 Bravo, aucun épisode en retard !
               </p>
               <p className="text-xs text-[#858A9E]">
-                Tous les épisodes sortis cette semaine dans cette vue sont déjà cochés comme vus.
+                Tous les épisodes sortis cette semaine dans cette vue sont déjà à jour.
               </p>
             </>
           ) : (
@@ -640,8 +813,18 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    {group.priority && (
+                      <Flame className="w-4 h-4 text-accent shrink-0" />
+                    )}
                     <span>{group.title}</span>
-                    <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-[#B8BCCB]">
+                    <span
+                      className={cn(
+                        "font-mono text-xs px-2 py-0.5 rounded-full border",
+                        group.priority
+                          ? "bg-accent/18 border-accent/40 text-accent-soft"
+                          : "bg-white/[0.06] border-white/[0.08] text-[#B8BCCB]"
+                      )}
+                    >
                       {group.rows.length}
                     </span>
                   </h2>
@@ -654,21 +837,25 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                   const title = getDisplayTitle(row.media);
                   const isFlashing = flashId === row.mediaId;
                   const hasAired = row.latestAiredEpisode > 0;
+                  const nextStepEp = row.userProgress + 1;
+                  const canIncrement =
+                    !row.media.episodes || row.userProgress < row.media.episodes;
+                  const primaryStream = row.media.streamingLinks?.[0] ?? null;
 
                   return (
                     <div
-                      key={row.mediaId}
+                      key={`${group.id}-${row.mediaId}`}
                       className={cn(
-                        "group rounded-2xl p-3.5 card-surface border transition-all flex items-center gap-3.5",
+                        "group rounded-2xl p-3 sm:p-3.5 card-surface border transition-all flex items-center gap-3 sm:gap-4",
                         hasAired && row.isWatched
                           ? "border-emerald-500/35 bg-emerald-500/[0.04]"
-                          : hasAired && row.inUserList
-                            ? "border-accent/35 bg-accent/[0.03]"
-                            : "border-white/[0.08] hover:border-white/[0.16]",
-                        isFlashing && "ring-2 ring-emerald-400/70"
+                          : hasAired && row.isWatching
+                            ? "border-accent/40 bg-accent/[0.04]"
+                            : "border-white/[0.08] hover:border-white/[0.18]",
+                        isFlashing && "ring-2 ring-emerald-400/75"
                       )}
                     >
-                      {/* Poster */}
+                      {/* Thumbnail Poster */}
                       <Link href={`/media/${row.mediaId}`} className="relative shrink-0">
                         <img
                           src={row.media.coverImage.large || row.media.coverImage.extraLarge}
@@ -676,8 +863,8 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                           loading="lazy"
                           decoding="async"
                           className={cn(
-                            "w-14 h-20 rounded-xl object-cover border transition-transform duration-300 group-hover:scale-105",
-                            row.isWatched ? "border-emerald-400/50" : "border-white/12"
+                            "w-14 h-20 sm:w-16 sm:h-24 rounded-xl object-cover border transition-transform duration-300 group-hover:scale-105",
+                            row.isWatched ? "border-emerald-400/50" : "border-white/15"
                           )}
                         />
                         {hasAired && row.isWatched && (
@@ -688,7 +875,7 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                       </Link>
 
                       {/* Info */}
-                      <div className="min-w-0 flex-1 space-y-1">
+                      <div className="min-w-0 flex-1 space-y-1.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {hasAired ? (
                             <span
@@ -696,7 +883,7 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                                 "px-2 py-0.5 rounded-md font-mono text-[10.5px] font-bold border",
                                 row.isWatched
                                   ? "bg-emerald-500/18 border-emerald-400/40 text-emerald-300"
-                                  : "bg-accent/18 border-accent/40 text-accent-soft"
+                                  : "bg-accent/18 border-accent/45 text-accent-soft"
                               )}
                             >
                               Ép. {row.latestAiredEpisode} sorti
@@ -709,11 +896,10 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                             )
                           )}
 
-                          {/* Behind indicator just like AniList ("2 ép. de retard") */}
                           {hasAired && row.inUserList && row.behindCount >= 2 && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/18 border border-amber-400/40 font-mono text-[10px] font-semibold text-amber-300">
                               <AlertCircle className="w-3 h-3" />
-                              {row.behindCount} ép. de retard
+                              {row.behindCount} ép. à voir
                             </span>
                           )}
 
@@ -727,108 +913,89 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
 
                         <Link
                           href={`/media/${row.mediaId}`}
-                          className="block text-sm font-semibold text-[#F4F3EE] hover:text-accent-hover transition-colors line-clamp-1"
+                          className="block text-sm sm:text-[15px] font-semibold text-[#F4F3EE] hover:text-accent-hover transition-colors line-clamp-1"
                         >
                           {title}
                         </Link>
 
                         <div className="flex items-center gap-2 flex-wrap text-[11px] text-[#8A8FA4]">
                           {hasAired && row.latestAiredAt && (
-                            <span className="font-mono text-[#A6AAB8]">
-                              {formatRelativeDayLabel(row.latestAiredAt)}
+                            <span suppressHydrationWarning className="font-mono text-[#A6AAB8]">
+                              {mounted ? formatRelativeTimeStamp(row.latestAiredAt, nowMs) : "Cette semaine"}
                             </span>
                           )}
                           {row.inUserList && (
                             <>
                               <span className="text-white/20">·</span>
-                              <span className="font-mono text-white/80">
-                                Votre avancée : Ép. {row.userProgress}
+                              <span className="font-mono text-white/85">
+                                Vu : Ép. {row.userProgress}
                                 {row.media.episodes ? `/${row.media.episodes}` : ""}
                               </span>
                             </>
                           )}
-                          {row.nextEpisode && row.nextEpisode.airingAt > nowSec && (
+                          {primaryStream && (
                             <>
                               <span className="text-white/20">·</span>
-                              <span className="inline-flex items-center gap-1 font-mono text-kinpaku/90">
+                              <span className="inline-flex items-center gap-1 text-[#C5C9DA]">
+                                <Tv className="w-3 h-3 text-accent-soft" />
+                                {formatStreamingDisplayName(primaryStream.site)}
+                              </span>
+                            </>
+                          )}
+                          {mounted && row.nextEpisode && row.nextEpisode.airingAt > nowSec && (
+                            <>
+                              <span className="text-white/20">·</span>
+                              <span suppressHydrationWarning className="inline-flex items-center gap-1 font-mono text-kinpaku/90">
                                 <Clock className="w-3 h-3" />
-                                Ép. {row.nextEpisode.episode} · {formatCountdown(row.nextEpisode.airingAt)}
+                                Ép. {row.nextEpisode.episode} ·{" "}
+                                {formatCountdown(row.nextEpisode.airingAt)}
                               </span>
                             </>
                           )}
                         </div>
                       </div>
 
-                      {/* 1-CLICK OUI / NON TOGGLE */}
+                      {/* Prominent Direct "+1 Vu" Button (NO modal, instant Supabase/AniList sync + Undo toast) */}
                       <div className="shrink-0 flex flex-col items-end gap-1.5">
                         {hasAired ? (
-                          <>
-                            <div
-                              role="group"
-                              aria-label={`Avez-vous regardé ${title} épisode ${row.latestAiredEpisode} ?`}
-                              className="inline-flex items-center p-0.5 rounded-xl bg-obsidian/90 border border-white/[0.1]"
-                            >
-                              {/* NON (Pas vu) */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (row.isWatched) markEpisodeUnwatched(row);
-                                }}
-                                title={
-                                  row.isWatched
-                                    ? `Marquer l'épisode ${row.latestAiredEpisode} comme non vu`
-                                    : "Pas encore regardé"
-                                }
-                                className={cn(
-                                  "h-8 px-2.5 rounded-lg text-[11.5px] font-semibold inline-flex items-center gap-1 transition-all cursor-pointer",
-                                  !row.isWatched
-                                    ? "bg-white/[0.12] text-white"
-                                    : "text-[#7D8296] hover:text-rose-300 hover:bg-rose-500/12"
-                                )}
-                              >
-                                <X className="w-3.5 h-3.5" />
-                                <span>Non</span>
-                              </button>
-
-                              {/* OUI (Vu ✓) */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (!row.isWatched) {
-                                    markEpisodeWatched(row, row.latestAiredEpisode);
-                                  }
-                                }}
-                                title={
-                                  row.isWatched
-                                    ? `Épisode ${row.latestAiredEpisode} déjà marqué comme vu`
-                                    : `Marquer l'épisode ${row.latestAiredEpisode} comme vu en 1 clic`
-                                }
-                                className={cn(
-                                  "h-8 px-3 rounded-lg text-[11.5px] font-semibold inline-flex items-center gap-1 transition-all cursor-pointer",
-                                  row.isWatched
-                                    ? "bg-emerald-500 text-[#07080C] shadow-[0_6px_18px_rgba(16,185,129,0.4)]"
-                                    : "text-[#C6CAD8] hover:bg-accent hover:text-accent-fg"
-                                )}
-                              >
-                                <Check className="w-3.5 h-3.5 stroke-[2.8]" />
-                                <span>Oui</span>
-                              </button>
+                          row.isWatched ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="h-11 px-3.5 rounded-xl bg-emerald-500/18 border border-emerald-400/40 text-emerald-300 text-xs font-bold inline-flex items-center gap-1.5">
+                                <Check className="w-4 h-4 stroke-[2.8]" />
+                                <span>À jour</span>
+                              </span>
+                              {row.userProgress > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDecrementOne(row)}
+                                  title="Retirer 1 épisode vu (-1)"
+                                  aria-label={`Retirer 1 épisode vu sur ${title}`}
+                                  className="w-9 h-11 rounded-xl bg-white/[0.04] hover:bg-white/[0.12] border border-white/[0.09] flex items-center justify-center text-[#9A9EAE] hover:text-white transition-colors cursor-pointer"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
-
-                            {/* Quick +1 step button ONLY when behind by 2+ episodes */}
-                            {row.inUserList && row.behindCount >= 2 && (
-                              <button
-                                type="button"
-                                onClick={() => incrementProgress(row.mediaId, 1)}
-                                className="text-[10.5px] font-mono font-semibold text-amber-300 hover:text-white px-2 py-0.5 rounded-md bg-amber-500/12 hover:bg-amber-500/25 border border-amber-400/30 transition-colors cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>Juste Ép. {row.userProgress + 1}</span>
-                              </button>
-                            )}
-                          </>
+                          ) : (
+                            <motion.button
+                              type="button"
+                              whileTap={{ scale: 0.93 }}
+                              disabled={!canIncrement}
+                              onClick={() => handlePlusOneWatched(row)}
+                              aria-label={`Marquer +1 épisode vu pour ${title} (Épisode ${nextStepEp})`}
+                              className="min-h-[44px] px-4 sm:px-5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-45 text-accent-fg font-bold text-xs sm:text-[13px] inline-flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 shadow-[0_10px_26px_rgba(229,72,77,0.38)] border border-white/15 transition-all cursor-pointer"
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                <Plus className="w-4 h-4 stroke-[2.8]" />
+                                <span>+1 Vu</span>
+                              </span>
+                              <span className="font-mono text-[10px] opacity-85">
+                                Ép. {nextStepEp}
+                              </span>
+                            </motion.button>
+                          )
                         ) : (
-                          /* Upcoming Episode 1 (not aired yet) -> 1-click Follow */
+                          /* Upcoming Episode 1 -> 1-click Follow */
                           <button
                             type="button"
                             onClick={() =>
@@ -837,7 +1004,7 @@ export function WeeklyEpisodeTracker({ initialSchedule }: WeeklyEpisodeTrackerPr
                               })
                             }
                             className={cn(
-                              "h-8 px-3 rounded-xl text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1.5",
+                              "min-h-[40px] px-3.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1.5",
                               row.inUserList
                                 ? "bg-emerald-500/15 border-emerald-500/35 text-emerald-300"
                                 : "bg-white/[0.06] hover:bg-accent border-white/[0.1] hover:border-accent text-white hover:text-accent-fg"

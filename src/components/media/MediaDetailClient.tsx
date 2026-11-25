@@ -19,10 +19,12 @@ import { useShiori } from "@/context/ShioriContext";
 import { MediaCard } from "@/components/media/MediaCard";
 import { LibraryTrackerCard } from "@/components/media/LibraryTrackerCard";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
+import { SeasonChronologySection } from "@/components/media/SeasonChronologySection";
 import {
   StreamingPillsInline,
   WhereToWatchSection,
 } from "@/components/media/WhereToWatchSection";
+import { computeGenreIntensities } from "@/lib/genre-intensity";
 import {
   CINEMA_EASE,
   ParallaxBanner,
@@ -75,6 +77,10 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
 
   const entry = getEntry(media.id);
   const title = getDisplayTitle(media);
+  const genreBadges =
+    media.genreIntensities && media.genreIntensities.length > 0
+      ? media.genreIntensities
+      : computeGenreIntensities(media.genres, media.tags);
 
   const totalUnits = media.type === "MANGA" ? media.chapters : media.episodes;
   const unitLabel = media.type === "MANGA" ? "Chapitre" : "Épisode";
@@ -136,8 +142,8 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
       </ParallaxBanner>
 
       {/* Main Layout */}
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-36 sm:-mt-44 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-28 sm:-mt-44 relative z-10 pb-10 md:pb-0">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
           {/* LEFT COLUMN: Poster + Tracker Controls + Metadata */}
           <div className="lg:col-span-3 space-y-5">
             {/* Poster */}
@@ -145,7 +151,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35 }}
-              className="w-44 sm:w-56 lg:w-full aspect-[2/3] rounded-2xl overflow-hidden border border-white/[0.14] shadow-[0_24px_60px_rgba(0,0,0,0.75)] bg-[#131622]"
+              className="w-36 sm:w-56 lg:w-full aspect-[2/3] rounded-2xl overflow-hidden border border-white/[0.14] shadow-[0_24px_60px_rgba(0,0,0,0.75)] bg-[#131622]"
             >
               <img
                 src={media.coverImage.extraLarge}
@@ -292,15 +298,47 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 <p className="text-sm text-[#858A9E] mt-1.5">{media.title.romaji}</p>
               )}
 
-              {/* Genres */}
+              {/* Genres with AniList Intensity Percentage & Subtle Progress Bar */}
               <div className="mt-4 flex flex-wrap gap-2">
-                {media.genres.map((g) => (
+                {genreBadges.map(({ genre, intensity }) => (
                   <Link
-                    key={g}
-                    href={`/discover?genre=${encodeURIComponent(g)}&type=${media.type}`}
-                    className="px-3 py-1 rounded-full bg-white/[0.05] hover:bg-accent/20 border border-white/[0.08] hover:border-accent/40 text-xs text-[#D6D9E6] hover:text-accent-fg transition-all"
+                    key={genre}
+                    href={`/discover?genres=${encodeURIComponent(genre)}&type=${media.type}`}
+                    className="group relative overflow-hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.045] hover:bg-accent/18 border border-white/[0.09] hover:border-accent/45 text-xs text-[#E4E6F0] hover:text-white transition-all"
                   >
-                    {g}
+                    <span className="font-medium">{genre}</span>
+                    {intensity !== null && (
+                      <>
+                        <span className="text-white/25">·</span>
+                        <span
+                          className={cn(
+                            "font-mono text-[11px] font-bold",
+                            intensity >= 75
+                              ? "text-kinpaku"
+                              : intensity >= 55
+                                ? "text-accent-soft"
+                                : "text-[#9A9EAE]"
+                          )}
+                        >
+                          {intensity}%
+                        </span>
+                        {/* Subtle intensity progress bar along bottom edge */}
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-white/[0.06]"
+                        >
+                          <span
+                            style={{ width: `${intensity}%` }}
+                            className={cn(
+                              "block h-full rounded-full",
+                              intensity >= 75
+                                ? "bg-gradient-to-r from-accent to-kinpaku"
+                                : "bg-accent/80"
+                            )}
+                          />
+                        </span>
+                      </>
+                    )}
                   </Link>
                 ))}
               </div>
@@ -317,7 +355,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             </div>
 
             {/* Synopsis (with On-the-Fly Auto Translation & 1-Click Original Toggle) */}
-            <section className="rounded-2xl card-surface p-6">
+            <section className="rounded-2xl card-surface p-4 sm:p-6">
               <TranslatedSynopsis
                 mediaId={media.id}
                 description={media.description}
@@ -338,6 +376,16 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 </div>
               )}
             </section>
+
+            {/* Interactive Seasons & Franchise Chronology (hidden automatically if standalone) */}
+            {media.seasonTimeline && media.seasonTimeline.length > 1 && (
+              <SeasonChronologySection
+                currentId={media.id}
+                timeline={media.seasonTimeline}
+                prevSeason={media.prevSeason ?? null}
+                nextSeason={media.nextSeason ?? null}
+              />
+            )}
 
             {/* Where to Watch / Official Streaming Platforms */}
             <WhereToWatchSection

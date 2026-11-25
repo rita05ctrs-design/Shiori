@@ -1,0 +1,1053 @@
+"use client";
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Sparkles,
+  ArrowUp,
+  RotateCcw,
+  Star,
+  Plus,
+  Check,
+  Bot,
+  User as UserIcon,
+  Loader2,
+  Tv,
+  ExternalLink,
+  Maximize2,
+  X,
+  Copy,
+  Bookmark,
+  BookmarkCheck,
+  History,
+  Trash2,
+  MessageSquarePlus,
+} from "lucide-react";
+import { useShiori } from "@/context/ShioriContext";
+import { cn, formatRelativeTime, formatScore, getDisplayTitle } from "@/lib/utils";
+import { formatStreamingDisplayName } from "@/lib/streaming";
+import {
+  AI_CHATS_SYNC_EVENT,
+  clearActiveAiChat,
+  deleteSavedAiChat,
+  readActiveAiChat,
+  readSavedAiChats,
+  sanitizeMessagesForStorage,
+  upsertSavedAiChat,
+  writeActiveAiChat,
+  writeSavedAiChats,
+  type SavedAiChat,
+} from "@/lib/ai-chat-storage";
+import type { AiResolvedRecommendation } from "@/lib/ai-recommend";
+
+export interface ChatBubbleMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  recommendations?: AiResolvedRecommendation[];
+  streaming?: boolean;
+}
+
+interface ChatMetaInfo {
+  source: "supabase" | "anilist" | "account" | "local" | "discovery";
+  totalSeen: number;
+  favoritesCount: number;
+  topGenres: string[];
+  geminiConfigured: boolean;
+}
+
+const STARTER_PROMPTS = [
+  "Un anime sombre et psychologique que je n'ai pas encore vu",
+  "Un anime court (12 ép.) intense pour ce week-end",
+  "Dans le même esprit que mes favoris",
+  "Une pépite méconnue très bien notée",
+];
+
+/**
+ * Safely renders simple inline markdown (**bold**, *italic*, `code`) as React nodes.
+ */
+function renderInlineMarkdown(line: string): React.ReactNode[] {
+  const tokens: React.ReactNode[] = [];
+  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = regex.exec(line)) !== null) {
+    if (match.index > lastIndex) {
+      tokens.push(line.slice(lastIndex, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith("**") && token.endsWith("**")) {
+      tokens.push(
+        <strong key={key++} className="font-semibold text-white">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith("*") && token.endsWith("*")) {
+      tokens.push(
+        <em key={key++} className="italic text-[#D8DBE8]">
+          {token.slice(1, -1)}
+        </em>
+      );
+    } else if (token.startsWith("`") && token.endsWith("`")) {
+      tokens.push(
+        <code
+          key={key++}
+          className="px-1.5 py-0.5 rounded bg-white/[0.08] border border-white/[0.1] font-mono text-[11px] text-kinpaku"
+        >
+          {token.slice(1, -1)}
+        </code>
+      );
+    }
+    lastIndex = match.index + token.length;
+  }
+
+  if (lastIndex < line.length) {
+    tokens.push(line.slice(lastIndex));
+  }
+  return tokens;
+}
+
+function FormattedChatText({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-1.5 text-[13px] leading-relaxed text-[#D8DBE8]">
+      {lines.map((rawLine, idx) => {
+        const line = rawLine.trim();
+        if (!line) return <div key={idx} className="h-1" />;
+
+        if (/^[-•*]\s+/.test(line)) {
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-1">
+              <span className="mt-2 w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+              <p className="flex-1">{renderInlineMarkdown(line.replace(/^[-•*]\s+/, ""))}</p>
+            </div>
+          );
+        }
+
+        if (/^\d+\.\s+/.test(line)) {
+          const numMatch = /^(\d+\.)\s+(.*)$/.exec(line);
+          if (numMatch) {
+            return (
+              <div key={idx} className="flex items-start gap-2 pl-0.5">
+                <span className="font-mono text-xs font-bold text-kinpaku shrink-0 mt-0.5">
+                  {numMatch[1]}
+                </span>
+                <p className="flex-1">{renderInlineMarkdown(numMatch[2])}</p>
+              </div>
+            );
+          }
+        }
+
+        return <p key={idx}>{renderInlineMarkdown(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+interface ShioriAiChatPanelProps {
+  compact?: boolean;
+  onClose?: () => void;
+  onNavigate?: () => void;
+}
+
+export function ShioriAiChatPanel({
+  compact = false,
+  onClose,
+  onNavigate,
+}: ShioriAiChatPanelProps) {
+  const { library, orderedFavorites, getEntry, quickAdd, toast } = useShiori();
+  const [messages, setMessages] = useState<ChatBubbleMessage[]>([]);
+  const [activeSavedId, setActiveSavedId] = useState<string | null>(null);
+  const [savedChats, setSavedChats] = useState<SavedAiChat[]>([]);
+  const [savedDrawerOpen, setSavedDrawerOpen] = useState(false);
+  const [hydratedStorage, setHydratedStorage] = useState(false);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [meta, setMeta] = useState<ChatMetaInfo | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Hydrate saved chats + active conversation on mount so closing the widget never loses recommendations
+  useEffect(() => {
+    setSavedChats(readSavedAiChats());
+    const active = readActiveAiChat();
+    if (active && active.messages.length > 0) {
+      setMessages(active.messages);
+      setActiveSavedId(active.savedChatId);
+    }
+    setHydratedStorage(true);
+
+    const onSync = () => setSavedChats(readSavedAiChats());
+    window.addEventListener(AI_CHATS_SYNC_EVENT, onSync);
+    window.addEventListener("storage", onSync);
+    return () => {
+      window.removeEventListener(AI_CHATS_SYNC_EVENT, onSync);
+      window.removeEventListener("storage", onSync);
+    };
+  }, []);
+
+  // Auto-persist active conversation whenever messages settle (so closing AI or browsing an anime keeps your chat!)
+  useEffect(() => {
+    if (!hydratedStorage || sending) return;
+    const hasStreaming = messages.some((m) => m.streaming);
+    if (hasStreaming) return;
+
+    if (messages.length === 0) {
+      clearActiveAiChat();
+      return;
+    }
+
+    const clean = sanitizeMessagesForStorage(messages);
+    writeActiveAiChat({
+      savedChatId: activeSavedId,
+      messages: clean,
+      updatedAt: new Date().toISOString(),
+    });
+
+    // If this conversation is already saved, keep the saved entry updated automatically
+    if (activeSavedId) {
+      const currentSaved = readSavedAiChats();
+      if (currentSaved.some((c) => c.id === activeSavedId)) {
+        const { list } = upsertSavedAiChat(currentSaved, {
+          id: activeSavedId,
+          messages: clean,
+        });
+        setSavedChats(list);
+        writeSavedAiChats(list);
+      }
+    }
+  }, [hydratedStorage, messages, sending, activeSavedId]);
+
+  // Auto-resize composer textarea cleanly when typing or pasting multi-line text
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
+
+  const handleCopyMessage = useCallback(async (id: string, text: string) => {
+    if (!text.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Fallback for restricted clipboard contexts
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    setCopiedId(id);
+    setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1800);
+  }, []);
+
+  const animeSeenCount = useMemo(
+    () => library.filter((e) => e.type === "ANIME").length,
+    [library]
+  );
+
+  // Compact sanitized client snapshot for local/guest mode fallback
+  const clientLibraryPayload = useMemo(
+    () =>
+      library.slice(0, 260).map((e) => ({
+        mediaId: e.mediaId,
+        type: e.type,
+        title: e.title,
+        status: e.status,
+        score: e.score,
+        isFavorite: e.isFavorite,
+        genres: e.genres.slice(0, 5),
+      })),
+    [library]
+  );
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages, sending]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const sendMessage = useCallback(
+    async (rawPrompt: string) => {
+      const prompt = rawPrompt.trim();
+      if (!prompt || sending) return;
+
+      setErrorMsg(null);
+      setInput("");
+      setSending(true);
+
+      const userMsgId = `u-${Date.now()}`;
+      const assistantMsgId = `a-${Date.now() + 1}`;
+
+      const nextHistory = [
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user" as const, content: prompt },
+      ];
+
+      setMessages((prev) => [
+        ...prev,
+        { id: userMsgId, role: "user", content: prompt },
+        { id: assistantMsgId, role: "assistant", content: "", streaming: true },
+      ]);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch("/api/recommend-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: nextHistory,
+            clientLibrary: clientLibraryPayload,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(
+            errData?.error || `Impossible de contacter l'assistant (HTTP ${res.status}).`
+          );
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        const handleSseBlock = (block: string) => {
+          const lines = block.split("\n");
+          let eventName = "message";
+          const dataLines: string[] = [];
+
+          for (const line of lines) {
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              dataLines.push(line.slice(5).trim());
+            }
+          }
+
+          if (dataLines.length === 0) return;
+          const rawJson = dataLines.join("\n");
+          try {
+            const payload = JSON.parse(rawJson);
+            if (eventName === "meta") {
+              setMeta(payload as ChatMetaInfo);
+            } else if (eventName === "delta" && typeof payload?.text === "string") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, content: m.content + payload.text }
+                    : m
+                )
+              );
+            } else if (eventName === "recommendations" && Array.isArray(payload?.items)) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId
+                    ? { ...m, recommendations: payload.items as AiResolvedRecommendation[] }
+                    : m
+                )
+              );
+            } else if (eventName === "done") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsgId ? { ...m, streaming: false } : m
+                )
+              );
+            }
+          } catch {
+            // ignore malformed SSE chunk
+          }
+        };
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split("\n\n");
+          buffer = blocks.pop() ?? "";
+          for (const block of blocks) {
+            if (block.trim()) handleSseBlock(block);
+          }
+        }
+
+        if (buffer.trim()) {
+          handleSseBlock(buffer);
+        }
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId ? { ...m, streaming: false } : m
+          )
+        );
+      } catch (err) {
+        if ((err as { name?: string })?.name === "AbortError") return;
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Erreur réseau lors de la recommandation.";
+        setErrorMsg(msg);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsgId
+              ? {
+                  ...m,
+                  content:
+                    m.content ||
+                    "Désolé, je n'ai pas pu générer de réponse pour le moment. Réessayez dans un instant.",
+                  streaming: false,
+                }
+              : m
+          )
+        );
+      } finally {
+        setSending(false);
+        abortRef.current = null;
+      }
+    },
+    [messages, sending, clientLibraryPayload]
+  );
+
+  const isCurrentChatSaved = useMemo(
+    () => Boolean(activeSavedId && savedChats.some((c) => c.id === activeSavedId)),
+    [activeSavedId, savedChats]
+  );
+
+  const handleSaveCurrentChat = () => {
+    const clean = sanitizeMessagesForStorage(messages);
+    if (clean.length === 0 || sending) return;
+    const { saved, list } = upsertSavedAiChat(savedChats, {
+      id: activeSavedId,
+      messages: clean,
+    });
+    setActiveSavedId(saved.id);
+    setSavedChats(list);
+    writeSavedAiChats(list);
+    writeActiveAiChat({
+      savedChatId: saved.id,
+      messages: clean,
+      updatedAt: saved.updatedAt,
+    });
+    toast({
+      title: isCurrentChatSaved ? "Chat mis à jour" : "Chat enregistré",
+      description:
+        saved.recommendedCount > 0
+          ? `${saved.recommendedCount} anime${saved.recommendedCount > 1 ? "s" : ""} conseillé${saved.recommendedCount > 1 ? "s" : ""} sauvegardé${saved.recommendedCount > 1 ? "s" : ""}`
+          : saved.title,
+      variant: "success",
+    });
+  };
+
+  const handleLoadSavedChat = (chat: SavedAiChat) => {
+    abortRef.current?.abort();
+    setSending(false);
+    setErrorMsg(null);
+    setMessages(chat.messages);
+    setActiveSavedId(chat.id);
+    setSavedDrawerOpen(false);
+    writeActiveAiChat({
+      savedChatId: chat.id,
+      messages: chat.messages,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleDeleteSavedChat = (chat: SavedAiChat) => {
+    const previousList = savedChats;
+    const nextList = deleteSavedAiChat(savedChats, chat.id);
+    setSavedChats(nextList);
+    writeSavedAiChats(nextList);
+
+    const wasActive = activeSavedId === chat.id;
+    if (wasActive) {
+      setActiveSavedId(null);
+    }
+
+    toast({
+      title: "Conversation supprimée",
+      description: chat.title,
+      variant: "info",
+      durationMs: 5500,
+      action: {
+        label: "Annuler",
+        onClick: () => {
+          setSavedChats(previousList);
+          writeSavedAiChats(previousList);
+          if (wasActive) setActiveSavedId(chat.id);
+        },
+      },
+    });
+  };
+
+  const handleNewChat = () => {
+    abortRef.current?.abort();
+    const prevMessages = messages;
+    const prevSavedId = activeSavedId;
+    setMessages([]);
+    setActiveSavedId(null);
+    setErrorMsg(null);
+    setSending(false);
+    setSavedDrawerOpen(false);
+    clearActiveAiChat();
+
+    if (prevMessages.length > 0 && !prevSavedId) {
+      toast({
+        title: "Conversation effacée",
+        description: "Vous pouvez la restaurer ou démarrer un nouveau chat.",
+        variant: "default",
+        durationMs: 5000,
+        action: {
+          label: "Annuler",
+          onClick: () => {
+            setMessages(prevMessages);
+            setActiveSavedId(prevSavedId);
+          },
+        },
+      });
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col overflow-hidden bg-surface-solid border border-white/[0.11]",
+        compact
+          ? "h-full rounded-2xl shadow-[0_28px_80px_rgba(0,0,0,0.88)]"
+          : "rounded-2xl sm:rounded-3xl min-h-[450px] h-[calc(100dvh-16.5rem)] sm:h-[calc(100dvh-16rem)] max-h-[760px] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+      )}
+    >
+      {/* Header */}
+      <div className="px-4 py-3.5 border-b border-white/[0.08] bg-gradient-to-r from-[#141724] via-[#11131E] to-[#191118] flex items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent-deep border border-white/20 flex items-center justify-center shadow-[0_0_20px_rgba(229,72,77,0.45)] shrink-0">
+            <Sparkles className="w-4 h-4 text-white" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-[#F4F3EE] truncate">
+                Shiori IA
+              </h2>
+              <span className="px-1.5 py-0.5 rounded-md bg-kinpaku/15 border border-kinpaku/35 font-mono text-[9.5px] font-bold text-kinpaku uppercase tracking-wider">
+                Gemini
+              </span>
+            </div>
+            <p className="text-[11px] text-[#8E93A6] truncate">
+              {meta
+                ? `${meta.totalSeen} vus exclus · ${meta.favoritesCount} favoris analysés`
+                : `${animeSeenCount} animés exclus · ${orderedFavorites.length} favoris pris en compte`}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Save Current Chat Button */}
+          {messages.length > 0 && !sending && (
+            <button
+              type="button"
+              onClick={handleSaveCurrentChat}
+              title={
+                isCurrentChatSaved
+                  ? "Conversation enregistrée (cliquer pour mettre à jour)"
+                  : "Enregistrer cette conversation et ses animés conseillés"
+              }
+              aria-label="Enregistrer cette conversation"
+              className={cn(
+                "h-8 px-2.5 rounded-xl border text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer",
+                isCurrentChatSaved
+                  ? "bg-kinpaku/16 border-kinpaku/45 text-kinpaku"
+                  : "bg-white/[0.05] hover:bg-kinpaku/15 border-white/[0.09] hover:border-kinpaku/40 text-[#CFD3E2] hover:text-kinpaku"
+              )}
+            >
+              {isCurrentChatSaved ? (
+                <BookmarkCheck className="w-3.5 h-3.5 shrink-0" />
+              ) : (
+                <Bookmark className="w-3.5 h-3.5 shrink-0" />
+              )}
+              <span className="hidden sm:inline">
+                {isCurrentChatSaved ? "Enregistré" : "Enregistrer"}
+              </span>
+            </button>
+          )}
+
+          {/* Saved Conversations Drawer Toggle */}
+          <button
+            type="button"
+            onClick={() => setSavedDrawerOpen((v) => !v)}
+            title="Conversations enregistrées"
+            aria-label="Ouvrir les conversations enregistrées"
+            aria-expanded={savedDrawerOpen}
+            className={cn(
+              "h-8 px-2 rounded-xl border text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer",
+              savedDrawerOpen
+                ? "bg-accent/20 border-accent/50 text-white"
+                : "bg-white/[0.05] hover:bg-white/[0.12] border-white/[0.08] text-[#B8BCCB] hover:text-white"
+            )}
+          >
+            <History className="w-3.5 h-3.5 shrink-0" />
+            {savedChats.length > 0 && (
+              <span className="font-mono text-[10px] px-1 rounded bg-white/[0.1] text-white">
+                {savedChats.length}
+              </span>
+            )}
+          </button>
+
+          {/* Clear / Start New Conversation */}
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={handleNewChat}
+              title="Effacer et démarrer une nouvelle conversation"
+              aria-label="Nouvelle conversation"
+              className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#A5A9BB] hover:text-white transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {compact && (
+            <Link
+              href="/assistant"
+              onClick={onClose}
+              title="Ouvrir en plein écran"
+              aria-label="Ouvrir Shiori IA en plein écran"
+              className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#A5A9BB] hover:text-white transition-colors"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </Link>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fermer Shiori IA"
+              className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#A5A9BB] hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Inline Saved Conversations Panel (Load or Delete saved AI chats & their recommended anime) */}
+      <AnimatePresence initial={false}>
+        {savedDrawerOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden border-b border-white/[0.08] bg-[#0B0D16] shrink-0"
+          >
+            <div className="p-3 space-y-2.5 max-h-[250px] overflow-y-auto overscroll-contain">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-kinpaku flex items-center gap-1.5">
+                  <BookmarkCheck className="w-3.5 h-3.5" />
+                  <span>Chats enregistrés ({savedChats.length})</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-accent text-[11px] font-semibold text-white transition-colors cursor-pointer"
+                >
+                  <MessageSquarePlus className="w-3 h-3" />
+                  <span>Nouveau</span>
+                </button>
+              </div>
+
+              {savedChats.length === 0 ? (
+                <p className="text-xs text-[#8A8FA4] py-3 text-center">
+                  Aucune conversation enregistrée pour l&apos;instant. Lancez un chat puis cliquez
+                  sur <strong className="text-white">Enregistrer</strong> pour conserver vos animés
+                  conseillés.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {savedChats.map((chat) => {
+                    const isActive = chat.id === activeSavedId;
+                    return (
+                      <div
+                        key={chat.id}
+                        className={cn(
+                          "rounded-xl p-2 border transition-colors flex items-center gap-2.5",
+                          isActive
+                            ? "bg-accent/14 border-accent/45"
+                            : "bg-surface/80 border-white/[0.07] hover:border-white/[0.16]"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleLoadSavedChat(chat)}
+                          className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                        >
+                          {/* Mini poster preview stack of recommended anime */}
+                          {chat.previewCovers.length > 0 && (
+                            <div className="flex -space-x-2 shrink-0">
+                              {chat.previewCovers.map((src, i) => (
+                                <img
+                                  key={`${chat.id}-cov-${i}`}
+                                  src={src}
+                                  alt=""
+                                  loading="lazy"
+                                  className="w-7 h-10 rounded-md object-cover border border-[#0B0D16] shadow"
+                                />
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-semibold text-[#F4F3EE] truncate">
+                                {chat.title}
+                              </p>
+                              {isActive && (
+                                <span className="px-1.5 py-0.2 rounded bg-accent text-accent-fg text-[9.5px] font-bold uppercase shrink-0">
+                                  Ouvert
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10.5px] font-mono text-[#8A8FA4] truncate mt-0.5">
+                              {chat.recommendedCount > 0
+                                ? `${chat.recommendedCount} anime${chat.recommendedCount > 1 ? "s" : ""} conseillé${chat.recommendedCount > 1 ? "s" : ""}`
+                                : `${chat.messages.length} message${chat.messages.length > 1 ? "s" : ""}`}
+                              {" · "}
+                              {formatRelativeTime(chat.updatedAt)}
+                            </p>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSavedChat(chat)}
+                          title="Supprimer cette conversation"
+                          aria-label={`Supprimer ${chat.title}`}
+                          className="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-rose-500/20 border border-white/[0.07] hover:border-rose-400/40 flex items-center justify-center text-[#8A8FA4] hover:text-rose-300 transition-colors cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Message Stream */}
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 bg-obsidian/55"
+      >
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col justify-between gap-5 py-2">
+            <div className="space-y-3 text-center max-w-md mx-auto my-auto">
+              <div className="w-12 h-12 rounded-2xl bg-accent/14 border border-accent/35 mx-auto flex items-center justify-center">
+                <Bot className="w-6 h-6 text-accent" />
+              </div>
+              <div>
+                <p className="text-base font-semibold text-[#F4F3EE]">
+                  Que voulez-vous regarder ce soir ?
+                </p>
+                <p className="text-xs text-[#8E93A6] mt-1 leading-relaxed">
+                  J&apos;analyse vos favoris, vos meilleures notes et j&apos;exclus automatiquement
+                  tout ce que vous avez déjà vu pour ne vous proposer que de vraies découvertes.
+                </p>
+              </div>
+
+              {/* Quick Starter Prompt Chips */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-left">
+                {STARTER_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => void sendMessage(prompt)}
+                    className="p-2.5 rounded-xl bg-white/[0.035] hover:bg-accent/14 border border-white/[0.08] hover:border-accent/40 text-xs text-[#D6D9E6] hover:text-white transition-all cursor-pointer leading-snug"
+                  >
+                    <Sparkles className="w-3 h-3 text-kinpaku inline mr-1.5 -mt-0.5" />
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => {
+              const isUser = msg.role === "user";
+              return (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className={cn("flex gap-2.5", isUser ? "justify-end" : "justify-start")}
+                >
+                  {!isUser && (
+                    <div className="w-7 h-7 rounded-lg bg-accent/18 border border-accent/35 flex items-center justify-center shrink-0 mt-0.5">
+                      <Sparkles className="w-3.5 h-3.5 text-accent" />
+                    </div>
+                  )}
+
+                  <div
+                    className={cn(
+                      "min-w-0 space-y-3",
+                      isUser ? "max-w-[85%]" : "flex-1 max-w-[92%]"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "rounded-2xl px-3.5 py-2.5 select-text cursor-text",
+                        isUser
+                          ? "bg-accent text-accent-fg font-medium text-[13px] rounded-tr-sm shadow-[0_8px_24px_rgba(229,72,77,0.28)]"
+                          : "bg-surface border border-white/[0.09] rounded-tl-sm"
+                      )}
+                    >
+                      {isUser ? (
+                        <p className="whitespace-pre-wrap leading-relaxed select-text">
+                          {msg.content}
+                        </p>
+                      ) : msg.content ? (
+                        <div className="select-text">
+                          <FormattedChatText text={msg.content} />
+                          {msg.streaming && (
+                            <span className="inline-block w-1.5 h-4 ml-1 align-middle bg-accent animate-pulse rounded-sm" />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-[#9A9EAE] py-0.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+                          <span>Analyse de vos goûts en cours...</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 1-Click Copy Button on every completed message (plus free text selection / Ctrl+C) */}
+                    {msg.content && !msg.streaming && (
+                      <div
+                        className={cn(
+                          "flex items-center",
+                          isUser ? "justify-end" : "justify-start"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyMessage(msg.id, msg.content)}
+                          aria-label="Copier le message"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10.5px] font-medium text-[#8A8FA4] hover:text-white hover:bg-white/[0.07] transition-colors cursor-pointer"
+                        >
+                          {copiedId === msg.id ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              <span className="text-emerald-300">Copié</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copier</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Structured Clickable Anime Recommendations */}
+                    {!isUser && msg.recommendations && msg.recommendations.length > 0 && (
+                      <div
+                        className={cn(
+                          "grid gap-2.5",
+                          compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"
+                        )}
+                      >
+                        {msg.recommendations.map((rec) => {
+                          const m = rec.media;
+                          const title = getDisplayTitle(m);
+                          const entry = getEntry(m.id);
+                          const primaryStream = m.streamingLinks?.[0] ?? null;
+
+                          return (
+                            <div
+                              key={m.id}
+                              className="group rounded-2xl p-2.5 bg-surface border border-white/[0.09] hover:border-accent/45 transition-all flex items-start gap-3"
+                            >
+                              <Link
+                                href={`/media/${m.id}`}
+                                onClick={onNavigate}
+                                className="relative w-14 aspect-[2/3] rounded-xl overflow-hidden shrink-0 border border-white/12 bg-[#121521]"
+                              >
+                                <img
+                                  src={m.coverImage.large || m.coverImage.extraLarge}
+                                  alt={title}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              </Link>
+
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <Link
+                                    href={`/media/${m.id}`}
+                                    onClick={onNavigate}
+                                    className="text-xs font-semibold text-[#F4F3EE] hover:text-accent-hover transition-colors line-clamp-1"
+                                  >
+                                    {title}
+                                  </Link>
+                                  {m.averageScore && (
+                                    <span className="inline-flex items-center gap-0.5 font-mono text-[10.5px] font-bold text-kinpaku shrink-0">
+                                      <Star className="w-2.5 h-2.5 fill-current" />
+                                      {formatScore(m.averageScore)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="text-[11px] text-[#9A9EAE] line-clamp-2 leading-snug">
+                                  {rec.reason}
+                                </p>
+
+                                <div className="flex items-center justify-between gap-1.5 pt-1 flex-wrap">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {rec.matchTag && (
+                                      <span className="px-1.5 py-0.5 rounded bg-kinpaku/12 border border-kinpaku/30 text-[10px] font-medium text-kinpaku">
+                                        {rec.matchTag}
+                                      </span>
+                                    )}
+                                    {primaryStream && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.09] text-[10px] text-[#CFD3E2]">
+                                        <Tv className="w-2.5 h-2.5 text-accent-soft" />
+                                        {formatStreamingDisplayName(primaryStream.site)}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!entry) quickAdd(m, "PLAN_TO_WATCH");
+                                      }}
+                                      className={cn(
+                                        "h-6.5 px-2 rounded-lg text-[10.5px] font-semibold inline-flex items-center gap-1 border transition-colors cursor-pointer",
+                                        entry
+                                          ? "bg-emerald-500/18 border-emerald-400/40 text-emerald-300"
+                                          : "bg-accent/18 hover:bg-accent border-accent/40 text-accent-soft hover:text-accent-fg"
+                                      )}
+                                    >
+                                      {entry ? (
+                                        <>
+                                          <Check className="w-3 h-3" />
+                                          <span>Ajouté</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Plus className="w-3 h-3" />
+                                          <span>À voir</span>
+                                        </>
+                                      )}
+                                    </button>
+                                    <Link
+                                      href={`/media/${m.id}`}
+                                      onClick={onNavigate}
+                                      aria-label={`Ouvrir ${title}`}
+                                      className="w-6.5 h-6.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#B8BCCB] hover:text-white transition-colors"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </Link>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {isUser && (
+                    <div className="w-7 h-7 rounded-lg bg-white/[0.08] border border-white/[0.12] flex items-center justify-center shrink-0 mt-0.5">
+                      <UserIcon className="w-3.5 h-3.5 text-[#D8DBE8]" />
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        )}
+
+        {errorMsg && (
+          <div className="px-3 py-2 rounded-xl bg-rose-500/12 border border-rose-500/30 text-xs text-rose-200">
+            {errorMsg}
+          </div>
+        )}
+      </div>
+
+      {/* Refined Floating Glass Input Composer ("Écrire à Shiori IA") */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void sendMessage(input);
+        }}
+        className="p-2.5 sm:p-3.5 border-t border-white/[0.07] bg-gradient-to-t from-[#090B12] via-[#0D101B] to-[#0F121E]/95 shrink-0"
+      >
+        <div className="group flex items-center gap-2 rounded-2xl bg-[#07080C]/95 border border-white/[0.12] hover:border-white/[0.2] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20 px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_28px_rgba(0,0,0,0.45)] transition-all">
+          <span
+            aria-hidden="true"
+            className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent/18 to-kinpaku/12 border border-white/[0.08] flex items-center justify-center shrink-0 transition-transform group-focus-within:scale-105"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-kinpaku" />
+          </span>
+
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void sendMessage(input);
+              }
+            }}
+            placeholder="Écris ton envie à Shiori IA..."
+            aria-label="Écrire un message à Shiori IA"
+            className="flex-1 resize-none bg-transparent py-2 px-1 max-h-[120px] overflow-y-auto text-[13px] sm:text-sm text-[#F4F3EE] placeholder:text-[#7E849C] focus:outline-none leading-snug select-text"
+          />
+
+          <button
+            type="submit"
+            disabled={sending || !input.trim()}
+            aria-label="Envoyer le message"
+            className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent-deep hover:brightness-110 disabled:opacity-35 disabled:from-white/10 disabled:to-white/10 text-white flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-[0_6px_18px_rgba(229,72,77,0.38)] disabled:shadow-none active:scale-95"
+          >
+            {sending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

@@ -7,7 +7,13 @@ import { Plus, SlidersHorizontal, ArrowRight, BookOpen, Tv } from "lucide-react"
 import { useShiori } from "@/context/ShioriContext";
 import { CINEMA_EASE, RevealSection } from "@/components/motion/MotionPrimitives";
 
-export function ContinueWatchingSection() {
+interface ContinueWatchingSectionProps {
+  embeddedInLibrary?: boolean;
+}
+
+export function ContinueWatchingSection({
+  embeddedInLibrary = false,
+}: ContinueWatchingSectionProps) {
   const { library, incrementProgress, openQuickEdit, setCommandOpen } = useShiori();
   const [pulseMap, setPulseMap] = useState<Record<number, number>>({});
   const [mediaFilter, setMediaFilter] = useState<"ALL" | "ANIME" | "MANGA">("ALL");
@@ -28,16 +34,26 @@ export function ContinueWatchingSection() {
     setPulseMap((prev) => ({ ...prev, [mediaId]: Date.now() }));
   };
 
+  if (embeddedInLibrary && allWatching.length === 0) {
+    return null;
+  }
+
   return (
-    <RevealSection className="space-y-4">
-      {/* Clean Header with Media Filter + Direct "+ Ajouter" & Library Link */}
+    <RevealSection
+      className={
+        embeddedInLibrary
+          ? "rounded-2xl card-surface border border-white/[0.09] p-4 sm:p-5 space-y-4"
+          : "space-y-4"
+      }
+    >
+      {/* Clean Header with Media Filter + Direct "+ Ajouter" & optional Library Link */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F4F3EE]">
+          <h2 className="text-lg sm:text-xl font-semibold tracking-tight text-[#F4F3EE]">
             Reprendre la lecture
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-0.5">
-            Avancez votre progression en un clic
+            Avancez votre progression en un clic (+ Ép. / + Ch.)
           </p>
         </div>
 
@@ -68,22 +84,26 @@ export function ContinueWatchingSection() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => setCommandOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Ajouter un titre</span>
-          </button>
+          {!embeddedInLibrary && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCommandOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Ajouter un titre</span>
+              </button>
 
-          <Link
-            href="/library?status=WATCHING"
-            className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white transition-colors"
-          >
-            <span>Bibliothèque</span>
-            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+              <Link
+                href="/library?status=WATCHING"
+                className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white transition-colors"
+              >
+                <span>Bibliothèque</span>
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -101,8 +121,14 @@ export function ContinueWatchingSection() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {watching.slice(0, 4).map((entry) => {
+        <div
+          className={
+            embeddedInLibrary
+              ? "flex gap-3 overflow-x-auto no-scrollbar snap-x pb-1 -mx-1 px-1 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-4 sm:overflow-visible sm:mx-0 sm:px-0 sm:pb-0"
+              : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+          }
+        >
+          {watching.slice(0, embeddedInLibrary ? 8 : 4).map((entry) => {
             const pct = entry.totalUnits
               ? Math.min(100, Math.round((entry.progress / entry.totalUnits) * 100))
               : 62;
@@ -110,7 +136,14 @@ export function ContinueWatchingSection() {
             const pulseKey = pulseMap[entry.mediaId];
 
             return (
-              <div key={entry.mediaId} className="group h-full">
+              <div
+                key={entry.mediaId}
+                className={
+                  embeddedInLibrary
+                    ? "group h-full w-[258px] shrink-0 snap-start sm:w-auto"
+                    : "group h-full"
+                }
+              >
                 <div className="h-full relative rounded-2xl overflow-hidden isolate [transform:translateZ(0)] card-surface group-hover:border-white/[0.18] group-hover:-translate-y-1 group-hover:shadow-[0_18px_40px_rgba(0,0,0,0.55)] transition-[transform,border-color,box-shadow] duration-200 ease-out flex flex-col will-change-transform">
                   {/* Landscape Backdrop */}
                   <Link

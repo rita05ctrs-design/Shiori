@@ -31,6 +31,38 @@ import {
   buildRegionalSearchLinks,
   normalizeStreamingLinks,
 } from "../src/lib/streaming.ts";
+import {
+  AI_RECS_END,
+  AI_RECS_START,
+  buildShioriSystemPrompt,
+  buildUserTasteSummary,
+  extractAiRecommendationsBlock,
+  filterUnseenResolvedRecommendations,
+  inferGenresFromPrompt,
+  stripRecommendationsMarkerForDisplay,
+} from "../src/lib/ai-recommend.ts";
+import {
+  normalizeSearchText,
+  resolveSearchAlias,
+} from "../src/lib/searchAliases.ts";
+import {
+  buildTypoFallbackQueries,
+  rankMediaByFuzzySearch,
+} from "../src/lib/fuzzy-search.ts";
+import {
+  computeGenreIntensities,
+  mediaMatchesGenreMinRanks,
+  mediaMatchesMinGenreIntensity,
+} from "../src/lib/genre-intensity.ts";
+import {
+  buildSeasonChronology,
+  type RawRelationMediaNode,
+} from "../src/lib/season-timeline.ts";
+import {
+  deleteSavedAiChat,
+  deriveAiChatTitle,
+  upsertSavedAiChat,
+} from "../src/lib/ai-chat-storage.ts";
 import type {
   AiringScheduleItem,
   CustomCollection,
@@ -624,4 +656,376 @@ test("streaming: prioritizes major platforms, upgrades https, filters unsafe/dis
   const frLinks = buildRegionalSearchLinks("Frieren", "ANIME");
   assert.equal(frLinks.length, 3);
   assert.ok(frLinks[0].url.includes("justwatch.com/fr"));
+});
+
+test("ai-recommend: builds taste summary, strips streaming JSON cleanly, and excludes already-seen anime", () => {
+  const summary = buildUserTasteSummary([
+    {
+      mediaId: 154587,
+      type: "ANIME",
+      title: "Frieren: Beyond Journey's End",
+      status: "COMPLETED",
+      score: 9.5,
+      isFavorite: true,
+      genres: ["Fantasy", "Drama"],
+    },
+    {
+      mediaId: 19,
+      type: "ANIME",
+      title: "Monster",
+      status: "COMPLETED",
+      score: 9.0,
+      isFavorite: false,
+      genres: ["Mystery", "Psychological"],
+    },
+  ]);
+
+  assert.equal(summary.favorites.length, 1);
+  assert.equal(summary.topRated.length, 2);
+  assert.ok(summary.seenIds.has(154587));
+  assert.ok(summary.seenIds.has(19));
+
+  const prompt = buildShioriSystemPrompt(summary, "Rita");
+  assert.ok(prompt.includes("Frieren: Beyond Journey's End"));
+  assert.ok(prompt.includes("Monster"));
+  assert.ok(prompt.includes(AI_RECS_START));
+
+  // Partial marker during streaming must never leak to display
+  assert.equal(
+    stripRecommendationsMarkerForDisplay("Voici mes conseils ! <<<SHIORI"),
+    "Voici mes conseils ! "
+  );
+
+  const rawOutput = `Je te recommande ces deux pépites !\n${AI_RECS_START}[{"title":"Mushishi","reason":"Poétique et contemplatif","matchTag":"Fantasy"},{"title":"Pluto","reason":"Thriller psychologique magistral","matchTag":"Mystery"}]${AI_RECS_END}`;
+  const parsed = extractAiRecommendationsBlock(rawOutput);
+  assert.equal(parsed.cleanText, "Je te recommande ces deux pépites !");
+  assert.equal(parsed.recommendations.length, 2);
+  assert.equal(parsed.recommendations[0].title, "Mushishi");
+
+  const makeMedia = (id: number, romaji: string): MediaItem => ({
+    id,
+    type: "ANIME",
+    title: { romaji, english: romaji, native: null },
+    coverImage: { extraLarge: "", large: "", color: null },
+    bannerImage: null,
+    description: null,
+    format: "TV",
+    status: "FINISHED",
+    episodes: 12,
+    chapters: null,
+    volumes: null,
+    duration: 24,
+    season: null,
+    seasonYear: 2023,
+    startYear: 2023,
+    averageScore: 86,
+    meanScore: 86,
+    popularity: 50000,
+    favourites: 1000,
+    genres: ["Fantasy"],
+    studio: null,
+    trailer: null,
+    nextAiringEpisode: null,
+  });
+
+  const filtered = filterUnseenResolvedRecommendations(
+    [
+      { media: makeMedia(19, "Monster"), reason: "Déjà vu par ID" },
+      { media: makeMedia(999999, "Frieren: Beyond Journey's End"), reason: "Déjà vu par titre" },
+      { media: makeMedia(457, "Mushishi"), reason: "Inédit" },
+    ],
+    summary.seenIds,
+    summary.seenNormalizedTitles
+  );
+
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].media.id, 457);
+
+  assert.deepEqual(inferGenresFromPrompt("Un anime sombre et psychologique", ["Action"]), [
+    "Horror",
+    "Psychological",
+  ]);
+});
+
+test("searchAliases & fuzzy-search: resolves FR titles/abbreviations and ranks typo/synonym matches first", () => {
+  assert.equal(normalizeSearchText("L'Attaque des Titans : Saison 1"), "l attaque des titans saison 1");
+
+  const snk = resolveSearchAlias("snk");
+  assert.equal(snk.didExpand, true);
+  assert.equal(snk.resolvedQuery, "Shingeki no Kyojin");
+
+  const jjk = resolveSearchAlias("JJK");
+  assert.equal(jjk.resolvedQuery, "Jujutsu Kaisen");
+
+  const slimeFr = resolveSearchAlias("Moi quand je me réincarne en Slime");
+  assert.equal(slimeFr.didExpand, true);
+  assert.equal(slimeFr.resolvedQuery, "Tensei Shitara Slime Datta Ken");
+
+  const aotFr = resolveSearchAlias("L'Attaque des Titans");
+  assert.equal(aotFr.resolvedQuery, "Shingeki no Kyojin");
+
+  const makeItem = (
+    id: number,
+    romaji: string,
+    english: string | null,
+    native: string | null,
+    synonyms: string[]
+  ): MediaItem => ({
+    id,
+    type: "ANIME",
+    title: { romaji, english, native },
+    synonyms,
+    coverImage: { extraLarge: "", large: "", color: null },
+    bannerImage: null,
+    description: null,
+    format: "TV",
+    status: "FINISHED",
+    episodes: 24,
+    chapters: null,
+    volumes: null,
+    duration: 24,
+    season: null,
+    seasonYear: 2023,
+    startYear: 2023,
+    averageScore: 85,
+    meanScore: 85,
+    popularity: 100000,
+    favourites: 5000,
+    genres: ["Fantasy"],
+    studio: "Madhouse",
+    trailer: null,
+    nextAiringEpisode: null,
+  });
+
+  const pool = [
+    makeItem(1, "Bocchi the Rock!", "BOCCHI THE ROCK!", "ぼっち・ざ・ろっく！", []),
+    makeItem(2, "Sousou no Frieren", "Frieren: Beyond Journey's End", "葬送のフリーレン", ["Frieren"]),
+    makeItem(3, "Shingeki no Kyojin", "Attack on Titan", "進撃の巨人", ["AoT", "L'Attaque des Titans"]),
+  ];
+
+  // Typo tolerance: "frierne" -> Frieren first
+  const typoRanked = rankMediaByFuzzySearch(pool, "frierne");
+  assert.equal(typoRanked[0].id, 2);
+
+  // Native Japanese search
+  const jpRanked = rankMediaByFuzzySearch(pool, "進撃の巨人");
+  assert.equal(jpRanked[0].id, 3);
+
+  // Synonym match
+  const synRanked = rankMediaByFuzzySearch(pool, "AoT");
+  assert.equal(synRanked[0].id, 3);
+
+  assert.ok(buildTypoFallbackQueries("frierne").includes("frier"));
+});
+
+test("genre-intensity: matches homonymous AniList tags case-insensitively and filters Discover minGenreRank", () => {
+  const tags = [
+    { name: "drama", rank: 85, category: "Theme-Drama" },
+    { name: "Romance", rank: 78, category: "Theme-Romance" },
+    { name: "Cyberpunk", rank: 90, category: "Theme-Sci-Fi" },
+  ];
+
+  const badges = computeGenreIntensities(["Drama", "Romance", "Sci-Fi", "Sports"], tags);
+  assert.equal(badges[0].intensity, 85);
+  assert.equal(badges[0].source, "exact_tag");
+  assert.equal(badges[1].intensity, 78);
+  assert.equal(badges[1].source, "exact_tag");
+  assert.equal(badges[2].intensity, 90);
+  assert.equal(badges[2].source, "category_tag");
+  assert.equal(badges[3].intensity, null);
+
+  assert.equal(
+    mediaMatchesMinGenreIntensity({ genres: ["Drama", "Romance"], tags }, ["Romance"], 70),
+    true
+  );
+  assert.equal(
+    mediaMatchesMinGenreIntensity({ genres: ["Drama", "Romance"], tags }, ["Romance"], 85),
+    false
+  );
+
+  // Independent per-genre thresholds: Romance >= 80% AND Comedy >= 30%
+  const multiTagsPass = [
+    { name: "Romance", rank: 85, category: "Theme-Romance" },
+    { name: "Comedy", rank: 45, category: "Theme-Comedy" },
+  ];
+  const multiTagsFailRomance = [
+    { name: "Romance", rank: 75, category: "Theme-Romance" },
+    { name: "Comedy", rank: 60, category: "Theme-Comedy" },
+  ];
+  const multiTagsFailComedy = [
+    { name: "Romance", rank: 90, category: "Theme-Romance" },
+    { name: "Comedy", rank: 20, category: "Theme-Comedy" },
+  ];
+
+  const thresholds = { Romance: 80, Comedy: 30 };
+  assert.equal(
+    mediaMatchesGenreMinRanks(
+      { genres: ["Romance", "Comedy"], tags: multiTagsPass },
+      ["Romance", "Comedy"],
+      thresholds
+    ),
+    true
+  );
+  assert.equal(
+    mediaMatchesGenreMinRanks(
+      { genres: ["Romance", "Comedy"], tags: multiTagsFailRomance },
+      ["Romance", "Comedy"],
+      thresholds
+    ),
+    false
+  );
+  assert.equal(
+    mediaMatchesGenreMinRanks(
+      { genres: ["Romance", "Comedy"], tags: multiTagsFailComedy },
+      ["Romance", "Comedy"],
+      thresholds
+    ),
+    false
+  );
+
+  // Verify independent genreMinRanks round-trip via URL params (`genreRanks=Romance:80,Comedy:30`)
+  const qs = discoverStateToSearchParams({
+    ...DEFAULT_DISCOVER_STATE,
+    selectedGenres: ["Romance", "Comedy"],
+    genreMinRanks: { Romance: 80, Comedy: 30, Action: 90 },
+  });
+  assert.equal(qs.get("genreRanks"), "Romance:80,Comedy:30");
+  const parsed = searchParamsToDiscoverState(qs);
+  assert.deepEqual(parsed.genreMinRanks, { Romance: 80, Comedy: 30 });
+});
+
+test("season-timeline: reconstructs full chronological PREQUEL/SEQUEL chain and hides standalone titles", () => {
+  const mkNode = (
+    id: number,
+    title: string,
+    year: number,
+    format: string,
+    relations: { relationType: string; toId: number; toTitle: string; toYear: number; toFormat: string }[]
+  ): RawRelationMediaNode => ({
+    id,
+    type: "ANIME",
+    title: { romaji: title, english: title },
+    coverImage: "",
+    format,
+    episodes: format === "MOVIE" ? 1 : 12,
+    chapters: null,
+    seasonYear: year,
+    startDate: { year, month: 4, day: 1 },
+    averageScore: 86,
+    relations: relations.map((r) => ({
+      relationType: r.relationType,
+      node: {
+        id: r.toId,
+        type: "ANIME",
+        title: { romaji: r.toTitle, english: r.toTitle },
+        coverImage: "",
+        format: r.toFormat,
+        episodes: r.toFormat === "MOVIE" ? 1 : 12,
+        chapters: null,
+        seasonYear: r.toYear,
+        startDate: { year: r.toYear, month: 4, day: 1 },
+        averageScore: 86,
+      },
+    })),
+  });
+
+  const graph = new Map<number, RawRelationMediaNode>([
+    [
+      1,
+      mkNode(1, "Example Anime", 2020, "TV", [
+        { relationType: "SEQUEL", toId: 2, toTitle: "Example Anime Season 2", toYear: 2022, toFormat: "TV" },
+      ]),
+    ],
+    [
+      2,
+      mkNode(2, "Example Anime Season 2", 2022, "TV", [
+        { relationType: "PREQUEL", toId: 1, toTitle: "Example Anime", toYear: 2020, toFormat: "TV" },
+        { relationType: "SEQUEL", toId: 3, toTitle: "Example Anime Season 3", toYear: 2024, toFormat: "TV" },
+      ]),
+    ],
+    [
+      3,
+      mkNode(3, "Example Anime Season 3", 2024, "TV", [
+        { relationType: "PREQUEL", toId: 2, toTitle: "Example Anime Season 2", toYear: 2022, toFormat: "TV" },
+      ]),
+    ],
+  ]);
+
+  // Viewing Season 2 should reconstruct S1 -> S2 -> S3 with prev=S1 and next=S3
+  const res = buildSeasonChronology(2, graph);
+  assert.deepEqual(
+    res.timeline.map((t) => t.id),
+    [1, 2, 3]
+  );
+  assert.equal(res.prevSeason?.id, 1);
+  assert.equal(res.nextSeason?.id, 3);
+  assert.equal(res.timeline[1].relationKind, "CURRENT");
+
+  // Standalone anime should return empty timeline
+  const standalone = new Map<number, RawRelationMediaNode>([
+    [99, mkNode(99, "Standalone Gem", 2023, "MOVIE", [])],
+  ]);
+  const emptyRes = buildSeasonChronology(99, standalone);
+  assert.equal(emptyRes.timeline.length, 0);
+  assert.equal(emptyRes.prevSeason, null);
+  assert.equal(emptyRes.nextSeason, null);
+});
+
+test("ai-chat-storage: saves, updates, extracts recommended covers, and deletes AI chats", () => {
+  const recMedia: MediaItem = {
+    id: 5114,
+    type: "ANIME",
+    title: { romaji: "Fullmetal Alchemist: Brotherhood", english: "Fullmetal Alchemist: Brotherhood", native: null },
+    coverImage: { extraLarge: "https://example.com/fma.jpg", large: "https://example.com/fma.jpg", color: null },
+    bannerImage: null,
+    description: "Long description stripped on save",
+    format: "TV",
+    status: "FINISHED",
+    episodes: 64,
+    chapters: null,
+    volumes: null,
+    duration: 24,
+    season: "SPRING",
+    seasonYear: 2009,
+    startYear: 2009,
+    averageScore: 90,
+    meanScore: 90,
+    popularity: 500000,
+    favourites: 100000,
+    genres: ["Action", "Adventure"],
+    studio: "Bones",
+    trailer: null,
+    nextAiringEpisode: null,
+  };
+
+  const msgs = [
+    { id: "u1", role: "user" as const, content: "Un anime d'aventure culte pour ce week-end" },
+    {
+      id: "a1",
+      role: "assistant" as const,
+      content: "Je te conseille Fullmetal Alchemist: Brotherhood.",
+      recommendations: [{ media: recMedia, reason: "Chef-d'œuvre absolu", matchTag: "Action" }],
+    },
+  ];
+
+  assert.equal(deriveAiChatTitle(msgs), "Un anime d'aventure culte pour ce week-end");
+
+  const first = upsertSavedAiChat([], { messages: msgs, nowIso: "2026-11-25T14:00:00.000Z" });
+  assert.equal(first.list.length, 1);
+  assert.equal(first.saved.recommendedCount, 1);
+  assert.deepEqual(first.saved.previewCovers, ["https://example.com/fma.jpg"]);
+  assert.equal(first.saved.messages[1].recommendations?.[0].media.description, null);
+
+  // Updating existing saved chat keeps same id & updates messages without duplicating
+  const updated = upsertSavedAiChat(first.list, {
+    id: first.saved.id,
+    messages: [...msgs, { id: "u2", role: "user", content: "Encore un autre ?" }],
+    nowIso: "2026-11-25T14:05:00.000Z",
+  });
+  assert.equal(updated.list.length, 1);
+  assert.equal(updated.saved.id, first.saved.id);
+  assert.equal(updated.saved.messages.length, 3);
+
+  const afterDelete = deleteSavedAiChat(updated.list, first.saved.id);
+  assert.equal(afterDelete.length, 0);
 });

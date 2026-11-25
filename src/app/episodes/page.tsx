@@ -13,5 +13,5 @@ export const metadata: Metadata = {
 
 export default async function EpisodesPage() {
   const schedule = await fetchWeeklyEpisodeTrackerSchedule();
-  return <WeeklyEpisodeTracker initialSchedule={schedule} />;
+  return <WeeklyEpisodeTracker initialSchedule={schedule} renderedAtMs={Date.now()} />;
 }

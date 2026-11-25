@@ -46,6 +46,7 @@ import {
 import { useShiori } from "@/context/ShioriContext";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import { LuxurySelect, type LuxurySelectOption } from "@/components/ui/LuxurySelect";
+import { ContinueWatchingSection } from "@/components/media/ContinueWatchingSection";
 import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
 import { CollectionsManagerPanel } from "@/components/library/CollectionsManagerPanel";
 import {
@@ -586,6 +587,9 @@ function LibraryPageInner() {
           </div>
         </div>
       </div>
+
+      {/* Reprendre la lecture — placé tout en haut de la Bibliothèque avec boutons rapides + Ép. / + Ch. */}
+      <ContinueWatchingSection embeddedInLibrary />
 
       {/* Category Tabs — 100% French clear statuses */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-white/[0.07]">
