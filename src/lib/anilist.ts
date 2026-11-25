@@ -158,10 +158,24 @@ export function normalizeMediaDetail(raw: any): MediaDetail {
     }
   );
 
-  const relations: MediaRelation[] = (raw?.relations?.edges ?? [])
+  const rawRelations = (raw?.relations?.edges ?? [])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((edge: any) => edge?.node && !edge.node.isAdult)
-    .slice(0, 8)
+    .filter((edge: any) => edge?.node && !edge.node.isAdult);
+
+  // Ensure SOURCE / ADAPTATION manga/manhwa relations are never truncated on large franchises
+  const prioritizedRelations = [
+    ...rawRelations.filter(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (e: any) => e.relationType === "SOURCE" || (e.relationType === "ADAPTATION" && e.node?.type === "MANGA")
+    ),
+    ...rawRelations.filter(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (e: any) => !(e.relationType === "SOURCE" || (e.relationType === "ADAPTATION" && e.node?.type === "MANGA"))
+    ),
+  ];
+
+  const relations: MediaRelation[] = prioritizedRelations
+    .slice(0, 12)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((edge: any) => ({
       relationType: edge.relationType ?? "OTHER",
@@ -175,6 +189,10 @@ export function normalizeMediaDetail(raw: any): MediaDetail {
           base.coverImage.large,
         format: edge.node.format ?? null,
         averageScore: edge.node.averageScore ?? null,
+        countryOfOrigin: edge.node.countryOfOrigin ?? null,
+        chapters: typeof edge.node.chapters === "number" ? edge.node.chapters : null,
+        volumes: typeof edge.node.volumes === "number" ? edge.node.volumes : null,
+        status: typeof edge.node.status === "string" ? edge.node.status : null,
       },
     }));
 
@@ -974,7 +992,8 @@ export async function fetchMediaDetail(id: number): Promise<MediaDetail | null> 
                 title { romaji english }
                 coverImage { large medium }
                 format averageScore
-                episodes chapters seasonYear
+                countryOfOrigin status
+                episodes chapters volumes seasonYear
                 startDate { year month day }
               }
             }

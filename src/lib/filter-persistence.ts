@@ -41,10 +41,61 @@ const EMPTY_LIBRARY_FILTERS: LibraryFilterState = {
 
 export const FILTER_STORAGE_KEYS = {
   library: "shiori_library_filters_v1",
+  libraryScroll: "shiori_library_scroll_v1",
   discover: "shiori_discover_filters_v1",
+  discoverScroll: "shiori_discover_scroll_v1",
   calendar: "shiori_calendar_filters_v1",
   community: "shiori_community_filters_v1",
 } as const;
+
+export interface DiscoverScrollSnapshot {
+  queryKey: string;
+  scrollY: number;
+  page: number;
+  itemCount: number;
+  savedAt: number;
+}
+
+export interface LibraryScrollSnapshot {
+  scrollY: number;
+  visibleCount: number;
+  savedAt: number;
+}
+
+export const SCROLL_SNAPSHOT_TTL_MS = 15 * 60 * 1000;
+
+export function isFreshScrollSnapshot(
+  snapshot: { savedAt?: number; scrollY?: number } | null | undefined,
+  now = Date.now(),
+  ttlMs = SCROLL_SNAPSHOT_TTL_MS
+): boolean {
+  if (!snapshot || typeof snapshot !== "object") return false;
+  if (typeof snapshot.savedAt !== "number" || !Number.isFinite(snapshot.savedAt)) return false;
+  if (typeof snapshot.scrollY !== "number" || !Number.isFinite(snapshot.scrollY)) return false;
+  return snapshot.scrollY >= 0 && now - snapshot.savedAt <= ttlMs;
+}
+
+/**
+ * Deduplicates paginated media lists while preserving exact rank order when appending
+ * subsequent pages ("Charger plus de titres").
+ */
+export function mergeUniqueMediaItems<T extends { id: number; type?: string }>(
+  existing: readonly T[],
+  incoming: readonly T[]
+): T[] {
+  if (existing.length === 0) return [...incoming];
+  if (incoming.length === 0) return [...existing];
+  const seen = new Set<string>(existing.map((item) => `${item.type ?? "M"}:${item.id}`));
+  const merged = [...existing];
+  for (const item of incoming) {
+    const key = `${item.type ?? "M"}:${item.id}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item);
+    }
+  }
+  return merged;
+}
 
 export function readSessionState<T>(key: string): T | null {
   if (typeof window === "undefined") return null;

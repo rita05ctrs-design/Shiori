@@ -173,12 +173,21 @@ export interface DiscoverQuerySnapshot<TItem = unknown> {
   items: TItem[];
   hasNextPage: boolean;
   total: number;
+  page?: number;
 }
 
-/** 5-minute session cache for Discover catalog queries (instant back-navigation!) */
+/** 15-minute session cache for Discover catalog queries (instant multi-page back-navigation!) */
 export const discoverQueryCache = new BoundedClientCache<DiscoverQuerySnapshot>({
   storageKey: "shiori_discover_cache_v1",
   maxEntries: 24,
-  ttlMs: 5 * 60 * 1000,
+  ttlMs: 15 * 60 * 1000,
   storage: "session",
+});
+
+/** 14-day persistent cache for AI-resolved Anime -> Manga/Manhwa continuation breakpoints */
+export const mangaContinuationCache = new BoundedClientCache<Record<string, unknown>>({
+  storageKey: "shiori_manga_continuation_v1",
+  maxEntries: 120,
+  ttlMs: 14 * 24 * 60 * 60 * 1000,
+  storage: "local",
 });

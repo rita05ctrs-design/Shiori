@@ -21,6 +21,7 @@ import { MediaCard } from "@/components/media/MediaCard";
 import { LibraryTrackerCard } from "@/components/media/LibraryTrackerCard";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import { SeasonChronologySection } from "@/components/media/SeasonChronologySection";
+import { MangaContinuationSection } from "@/components/media/MangaContinuationSection";
 import {
   StreamingPillsInline,
   WhereToWatchSection,
@@ -388,6 +389,9 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 nextSeason={media.nextSeason ?? null}
               />
             )}
+
+            {/* Where to continue in the Manga / Manhwa / Light Novel (hidden for anime-original works) */}
+            {media.type === "ANIME" && <MangaContinuationSection media={media} />}
 
             {/* Where to Watch / Official Streaming Platforms */}
             <WhereToWatchSection

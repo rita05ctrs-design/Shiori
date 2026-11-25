@@ -155,6 +155,22 @@ export interface UiMessages {
   "detail.techSheet": string;
   "detail.characters": string;
   "detail.recommendations": string;
+  "detail.mangaBridgeEyebrow": string;
+  "detail.mangaBridgeTitle": string;
+  "detail.animeStopsAt": string;
+  "detail.continueAt": string;
+  "detail.chapterLabel": string;
+  "detail.volumeLabel": string;
+  "detail.coveredArc": string;
+  "detail.fullyAdapted": string;
+  "detail.fullyAdaptedSub": string;
+  "detail.verifiedBadge": string;
+  "detail.aiEstimateBadge": string;
+  "detail.openSourceSheet": string;
+  "detail.startReadingInList": string;
+  "detail.alreadyReadingInList": string;
+  "detail.notReleasedYet": string;
+  "detail.unknownChapterHint": string;
 
   // Weekly Episodes & Calendar
   "episodes.title": string;
@@ -377,6 +393,22 @@ export const UI_TRANSLATIONS: Record<ContentLanguage, UiMessages> = {
     "detail.techSheet": "Fiche technique",
     "detail.characters": "Personnages",
     "detail.recommendations": "Recommandations similaires",
+    "detail.mangaBridgeEyebrow": "Suite en lecture",
+    "detail.mangaBridgeTitle": "Où reprendre dans le",
+    "detail.animeStopsAt": "L'anime s'arrête au",
+    "detail.continueAt": "Continuer au",
+    "detail.chapterLabel": "Chapitre",
+    "detail.volumeLabel": "Tome",
+    "detail.coveredArc": "Arc couvert",
+    "detail.fullyAdapted": "Adaptation complète",
+    "detail.fullyAdaptedSub": "L'anime couvre l'intégralité de l'œuvre originale jusqu'à sa fin.",
+    "detail.verifiedBadge": "Vérifié",
+    "detail.aiEstimateBadge": "Repère IA",
+    "detail.openSourceSheet": "Voir la fiche",
+    "detail.startReadingInList": "Suivre dès ce chapitre",
+    "detail.alreadyReadingInList": "Suivi dans ma liste",
+    "detail.notReleasedYet": "Anime pas encore diffusé — vous pouvez commencer directement au Chapitre 1.",
+    "detail.unknownChapterHint": "Chapitre exact non confirmé pour cette saison — ouvrez la fiche source pour suivre votre lecture.",
 
     "episodes.title": "Épisodes de la semaine",
     "episodes.subtitle": "Validez vos nouveaux épisodes sortis en un seul clic.",
@@ -592,6 +624,22 @@ export const UI_TRANSLATIONS: Record<ContentLanguage, UiMessages> = {
     "detail.techSheet": "Details",
     "detail.characters": "Characters",
     "detail.recommendations": "Similar Recommendations",
+    "detail.mangaBridgeEyebrow": "Continue Reading",
+    "detail.mangaBridgeTitle": "Where to continue in the",
+    "detail.animeStopsAt": "Anime ends at",
+    "detail.continueAt": "Continue from",
+    "detail.chapterLabel": "Chapter",
+    "detail.volumeLabel": "Volume",
+    "detail.coveredArc": "Adapted Arc",
+    "detail.fullyAdapted": "Fully Adapted",
+    "detail.fullyAdaptedSub": "This anime adapts the entire source story through its ending.",
+    "detail.verifiedBadge": "Verified",
+    "detail.aiEstimateBadge": "AI Guide",
+    "detail.openSourceSheet": "Open source page",
+    "detail.startReadingInList": "Track from this chapter",
+    "detail.alreadyReadingInList": "Tracked in my list",
+    "detail.notReleasedYet": "Anime hasn't aired yet — you can start directly from Chapter 1.",
+    "detail.unknownChapterHint": "Exact chapter breakpoint isn't confirmed for this season — open the source page to track your reading.",
 
     "episodes.title": "Weekly Episodes",
     "episodes.subtitle": "Check off newly aired episodes in a single tap.",
@@ -807,6 +855,22 @@ export const UI_TRANSLATIONS: Record<ContentLanguage, UiMessages> = {
     "detail.techSheet": "Ficha técnica",
     "detail.characters": "Personajes",
     "detail.recommendations": "Recomendaciones similares",
+    "detail.mangaBridgeEyebrow": "Seguir leyendo",
+    "detail.mangaBridgeTitle": "Dónde continuar en el",
+    "detail.animeStopsAt": "El anime termina en",
+    "detail.continueAt": "Continuar en",
+    "detail.chapterLabel": "Capítulo",
+    "detail.volumeLabel": "Tomo",
+    "detail.coveredArc": "Arco adaptado",
+    "detail.fullyAdapted": "Adaptación completa",
+    "detail.fullyAdaptedSub": "El anime adapta toda la obra original hasta el final.",
+    "detail.verifiedBadge": "Verificado",
+    "detail.aiEstimateBadge": "Guía IA",
+    "detail.openSourceSheet": "Ver ficha",
+    "detail.startReadingInList": "Seguir desde este capítulo",
+    "detail.alreadyReadingInList": "En mi lista",
+    "detail.notReleasedYet": "Anime aún no emitido — puedes empezar directamente en el Capítulo 1.",
+    "detail.unknownChapterHint": "Capítulo exacto aún no confirmado — abre la ficha original para seguir tu lectura.",
 
     "episodes.title": "Episodios de la semana",
     "episodes.subtitle": "Marca tus nuevos episodios vistos en un solo clic.",
@@ -1022,6 +1086,22 @@ export const UI_TRANSLATIONS: Record<ContentLanguage, UiMessages> = {
     "detail.techSheet": "Details",
     "detail.characters": "Charaktere",
     "detail.recommendations": "Ähnliche Empfehlungen",
+    "detail.mangaBridgeEyebrow": "Weiterlesen",
+    "detail.mangaBridgeTitle": "Wo weiterlesen im",
+    "detail.animeStopsAt": "Anime endet bei",
+    "detail.continueAt": "Weiter ab",
+    "detail.chapterLabel": "Kapitel",
+    "detail.volumeLabel": "Band",
+    "detail.coveredArc": "Adaptierter Arc",
+    "detail.fullyAdapted": "Vollständig adaptiert",
+    "detail.fullyAdaptedSub": "Der Anime deckt die gesamte Vorlage bis zum Ende ab.",
+    "detail.verifiedBadge": "Geprüft",
+    "detail.aiEstimateBadge": "KI-Hinweis",
+    "detail.openSourceSheet": "Zur Vorlage",
+    "detail.startReadingInList": "Ab hier in Liste verfolgen",
+    "detail.alreadyReadingInList": "In meiner Liste",
+    "detail.notReleasedYet": "Noch nicht ausgestrahlt — du kannst direkt bei Kapitel 1 starten.",
+    "detail.unknownChapterHint": "Genaues Kapitel für diese Staffel nicht bestätigt — öffne die Vorlage zum Nachverfolgen.",
 
     "episodes.title": "Episoden der Woche",
     "episodes.subtitle": "Hake neu erschienene Episoden mit einem Klick ab.",
@@ -1237,6 +1317,22 @@ export const UI_TRANSLATIONS: Record<ContentLanguage, UiMessages> = {
     "detail.techSheet": "Scheda tecnica",
     "detail.characters": "Personaggi",
     "detail.recommendations": "Consigli simili",
+    "detail.mangaBridgeEyebrow": "Continua a leggere",
+    "detail.mangaBridgeTitle": "Da dove continuare nel",
+    "detail.animeStopsAt": "L'anime si ferma al",
+    "detail.continueAt": "Continua dal",
+    "detail.chapterLabel": "Capitolo",
+    "detail.volumeLabel": "Volume",
+    "detail.coveredArc": "Arco adattato",
+    "detail.fullyAdapted": "Adattamento completo",
+    "detail.fullyAdaptedSub": "L'anime copre interamente l'opera originale fino alla conclusione.",
+    "detail.verifiedBadge": "Verificato",
+    "detail.aiEstimateBadge": "Guida IA",
+    "detail.openSourceSheet": "Apri scheda",
+    "detail.startReadingInList": "Segui da questo capitolo",
+    "detail.alreadyReadingInList": "Nella mia lista",
+    "detail.notReleasedYet": "Anime non ancora trasmesso — puoi iniziare direttamente dal Capitolo 1.",
+    "detail.unknownChapterHint": "Capitolo esatto non ancora confermato — apri la scheda originale per tracciare la lettura.",
 
     "episodes.title": "Episodi della settimana",
     "episodes.subtitle": "Segna i nuovi episodi visti con un solo clic.",
@@ -1452,6 +1548,22 @@ export const UI_TRANSLATIONS: Record<ContentLanguage, UiMessages> = {
     "detail.techSheet": "Ficha técnica",
     "detail.characters": "Personagens",
     "detail.recommendations": "Recomendações similares",
+    "detail.mangaBridgeEyebrow": "Continuar lendo",
+    "detail.mangaBridgeTitle": "Onde continuar no",
+    "detail.animeStopsAt": "O anime para no",
+    "detail.continueAt": "Continue no",
+    "detail.chapterLabel": "Capítulo",
+    "detail.volumeLabel": "Volume",
+    "detail.coveredArc": "Arco adaptado",
+    "detail.fullyAdapted": "Adaptação completa",
+    "detail.fullyAdaptedSub": "O anime adapta toda a obra original até o final.",
+    "detail.verifiedBadge": "Verificado",
+    "detail.aiEstimateBadge": "Guia IA",
+    "detail.openSourceSheet": "Ver ficha",
+    "detail.startReadingInList": "Acompanhar deste capítulo",
+    "detail.alreadyReadingInList": "Na minha lista",
+    "detail.notReleasedYet": "Anime ainda não lançado — você pode começar direto no Capítulo 1.",
+    "detail.unknownChapterHint": "Capítulo exato ainda não confirmado — abra a ficha original para acompanhar a leitura.",
 
     "episodes.title": "Episódios da semana",
     "episodes.subtitle": "Marque novos episódios assistidos com um toque.",
@@ -1667,6 +1779,22 @@ export const UI_TRANSLATIONS: Record<ContentLanguage, UiMessages> = {
     "detail.techSheet": "作品情報",
     "detail.characters": "キャラクター",
     "detail.recommendations": "関連おすすめ作品",
+    "detail.mangaBridgeEyebrow": "原作の続き",
+    "detail.mangaBridgeTitle": "続きの巻・話数ガイド",
+    "detail.animeStopsAt": "アニメ終了地点",
+    "detail.continueAt": "続きはこちらから",
+    "detail.chapterLabel": "第",
+    "detail.volumeLabel": "巻",
+    "detail.coveredArc": "映像化エピソード",
+    "detail.fullyAdapted": "原作完結まで映像化済み",
+    "detail.fullyAdaptedSub": "このアニメは原作の最終話まで完結して映像化されています。",
+    "detail.verifiedBadge": "確認済み",
+    "detail.aiEstimateBadge": "AIガイド",
+    "detail.openSourceSheet": "原作ページへ",
+    "detail.startReadingInList": "この話数からリストに追加",
+    "detail.alreadyReadingInList": "リスト登録済み",
+    "detail.notReleasedYet": "未放送のアニメです。原作の第1話から読み始められます。",
+    "detail.unknownChapterHint": "正確な対応話数が未確認です。原作ページから読書進捗を管理できます。",
 
     "episodes.title": "今週のエピソード",
     "episodes.subtitle": "放送済みの最新話をワンタップで記録。",

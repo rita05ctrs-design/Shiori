@@ -94,6 +94,10 @@ export interface MediaRelation {
     coverImage: string;
     format: string | null;
     averageScore: number | null;
+    countryOfOrigin?: string | null;
+    chapters?: number | null;
+    volumes?: number | null;
+    status?: string | null;
   };
 }
 

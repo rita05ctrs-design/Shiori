@@ -19,6 +19,13 @@ import { computeProfileAffinity } from "../src/lib/affinity.ts";
 import { evaluateAllBadges, extractBadgeMetrics } from "../src/lib/badges.ts";
 import { CONTENT_LANGUAGES, normalizeContentLanguage } from "../src/lib/i18n.ts";
 import {
+  CURATED_CONTINUATION_COUNT,
+  detectSourceMediumKind,
+  findSourceMangaRelation,
+  getCuratedMangaContinuation,
+  shouldShowMangaContinuation,
+} from "../src/lib/manga-continuation.ts";
+import {
   translateGenreName,
   translateLibraryStatus,
   translateSeasonName,
@@ -28,7 +35,9 @@ import {
 import {
   DEFAULT_DISCOVER_STATE,
   discoverStateToSearchParams,
+  isFreshScrollSnapshot,
   libraryStateToSearchParams,
+  mergeUniqueMediaItems,
   searchParamsToDiscoverState,
   searchParamsToLibraryState,
 } from "../src/lib/filter-persistence.ts";
@@ -1035,6 +1044,52 @@ test("season-timeline: reconstructs full chronological PREQUEL/SEQUEL chain and 
   assert.equal(res.nextSeason?.id, 3);
   assert.equal(res.timeline[1].relationKind, "CURRENT");
 
+  // OVAs and Movies released between Season 1 and Season 2 must NEVER interrupt S1 -> S2 -> S3 order
+  const graphWithOvaAndMovie = new Map<number, RawRelationMediaNode>([
+    [
+      10,
+      mkNode(10, "Solo Saga", 2024, "TV", [
+        { relationType: "SEQUEL", toId: 11, toTitle: "Solo Saga Recap Film", toYear: 2024, toFormat: "MOVIE" },
+        { relationType: "SEQUEL", toId: 12, toTitle: "Solo Saga OVA", toYear: 2024, toFormat: "OVA" },
+      ]),
+    ],
+    [
+      11,
+      mkNode(11, "Solo Saga Recap Film", 2024, "MOVIE", [
+        { relationType: "PREQUEL", toId: 10, toTitle: "Solo Saga", toYear: 2024, toFormat: "TV" },
+        { relationType: "SEQUEL", toId: 13, toTitle: "Solo Saga Season 2", toYear: 2025, toFormat: "TV" },
+      ]),
+    ],
+    [
+      12,
+      mkNode(12, "Solo Saga OVA", 2024, "OVA", [
+        { relationType: "PREQUEL", toId: 10, toTitle: "Solo Saga", toYear: 2024, toFormat: "TV" },
+      ]),
+    ],
+    [
+      13,
+      mkNode(13, "Solo Saga Season 2", 2025, "TV", [
+        { relationType: "PREQUEL", toId: 11, toTitle: "Solo Saga Recap Film", toYear: 2024, toFormat: "MOVIE" },
+        { relationType: "SEQUEL", toId: 14, toTitle: "Solo Saga Season 3", toYear: 2026, toFormat: "TV" },
+      ]),
+    ],
+    [
+      14,
+      mkNode(14, "Solo Saga Season 3", 2026, "TV", [
+        { relationType: "PREQUEL", toId: 13, toTitle: "Solo Saga Season 2", toYear: 2025, toFormat: "TV" },
+      ]),
+    ],
+  ]);
+
+  const ordered = buildSeasonChronology(10, graphWithOvaAndMovie);
+  // Main seasons strictly first (S1 -> S2 -> S3), then Film, then OVA
+  assert.deepEqual(
+    ordered.timeline.map((t) => t.id),
+    [10, 13, 14, 11, 12]
+  );
+  // Clicking "Saison suivante" on Season 1 jumps directly to Season 2 (13), NOT the Movie (11) or OVA (12)
+  assert.equal(ordered.nextSeason?.id, 13);
+
   // Standalone anime should return empty timeline
   const standalone = new Map<number, RawRelationMediaNode>([
     [99, mkNode(99, "Standalone Gem", 2023, "MOVIE", [])],
@@ -1190,4 +1245,110 @@ test("i18n & ui-translations: supports all 7 languages completely without missin
   assert.equal(translateSeasonName("en", "SPRING"), "Spring");
   assert.equal(translateSeasonName("de", "WINTER"), "Winter");
   assert.equal(translateSeasonName("ja", "FALL"), "秋");
+});
+
+test("filter-persistence: mergeUniqueMediaItems deduplicates paginated pages and validates scroll TTL", () => {
+  const page1 = [
+    { id: 1, type: "ANIME", title: "Frieren" },
+    { id: 2, type: "ANIME", title: "Jujutsu Kaisen" },
+    { id: 3, type: "ANIME", title: "One Piece" },
+  ];
+  const page2 = [
+    { id: 3, type: "ANIME", title: "One Piece" }, // shifted overlap between pages
+    { id: 4, type: "ANIME", title: "Dandadan" },
+    { id: 1, type: "MANGA", title: "Frieren Manga" }, // same numeric ID but different media type
+  ];
+  const merged = mergeUniqueMediaItems(page1, page2);
+  assert.deepEqual(
+    merged.map((m) => `${m.type}:${m.id}`),
+    ["ANIME:1", "ANIME:2", "ANIME:3", "ANIME:4", "MANGA:1"]
+  );
+
+  const now = 1_700_000_000_000;
+  assert.equal(isFreshScrollSnapshot({ scrollY: 1850, savedAt: now - 60_000 }, now), true);
+  assert.equal(isFreshScrollSnapshot({ scrollY: 1850, savedAt: now - 20 * 60_000 }, now), false);
+  assert.equal(isFreshScrollSnapshot({ scrollY: -10, savedAt: now }, now), false);
+  assert.equal(isFreshScrollSnapshot(null, now), false);
+});
+
+test("manga-continuation: resolves verified Manga & Manhwa breakpoints, detects KR manhwa, and hides anime originals", () => {
+  assert.ok(CURATED_CONTINUATION_COUNT >= 60, "Expected rich verified continuation catalog");
+
+  // Frieren S1 -> ends Ch. 60, continue Ch. 61 (Vol. 7)
+  const frieren = getCuratedMangaContinuation(154587, "fr");
+  assert.ok(frieren);
+  assert.equal(frieren.sourceKind, "MANGA");
+  assert.equal(frieren.endedAtChapter, 60);
+  assert.equal(frieren.continueAtChapter, 61);
+  assert.equal(frieren.continueAtVolume, 7);
+  assert.equal(frieren.verified, true);
+  assert.equal(frieren.isFullyAdapted, false);
+
+  // Solo Leveling S1 (Manhwa!) -> ends Ch. 45, continue Ch. 46
+  const soloS1 = getCuratedMangaContinuation(151807, "en");
+  assert.ok(soloS1);
+  assert.equal(soloS1.sourceKind, "MANHWA");
+  assert.equal(soloS1.endedAtChapter, 45);
+  assert.equal(soloS1.continueAtChapter, 46);
+  assert.ok(soloS1.note?.includes("46"));
+
+  // FMA Brotherhood -> fully adapted
+  const fmab = getCuratedMangaContinuation(5114, "fr");
+  assert.ok(fmab);
+  assert.equal(fmab.isFullyAdapted, true);
+  assert.equal(fmab.continueAtChapter, null);
+
+  // Source medium detection (JP Manga vs KR Manhwa vs CN Manhua vs Light Novel)
+  assert.equal(
+    detectSourceMediumKind("MANGA", {
+      id: 1,
+      type: "MANGA",
+      title: "Solo Leveling",
+      coverImage: "",
+      format: "MANGA",
+      averageScore: 86,
+      countryOfOrigin: "KR",
+    }),
+    "MANHWA"
+  );
+  assert.equal(
+    detectSourceMediumKind("MANGA", {
+      id: 2,
+      type: "MANGA",
+      title: "Link Click",
+      coverImage: "",
+      format: "MANGA",
+      averageScore: 85,
+      countryOfOrigin: "CN",
+    }),
+    "MANHUA"
+  );
+  assert.equal(detectSourceMediumKind("LIGHT_NOVEL", null), "NOVEL");
+
+  // Eligibility: shown for Manga/Manhwa/LN anime, hidden for pure Original anime or Manga pages
+  assert.equal(
+    shouldShowMangaContinuation({ id: 999999, type: "ANIME", source: "ORIGINAL", relations: [] }),
+    false
+  );
+  assert.equal(
+    shouldShowMangaContinuation({ id: 30002, type: "MANGA", source: "ORIGINAL", relations: [] }),
+    false
+  );
+  assert.equal(
+    shouldShowMangaContinuation({ id: 999998, type: "ANIME", source: "MANGA", relations: [] }),
+    true
+  );
+
+  // Relation priority picks SOURCE non-novel Manga over side stories
+  const picked = findSourceMangaRelation([
+    {
+      relationType: "SIDE_STORY",
+      media: { id: 10, type: "ANIME", title: "OVA", coverImage: "", format: "OVA", averageScore: 70 },
+    },
+    {
+      relationType: "SOURCE",
+      media: { id: 20, type: "MANGA", title: "Source Manhwa", coverImage: "", format: "MANGA", averageScore: 88, countryOfOrigin: "KR" },
+    },
+  ]);
+  assert.equal(picked?.id, 20);
 });

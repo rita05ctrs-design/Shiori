@@ -56,11 +56,14 @@ import {
   DEFAULT_DISCOVER_STATE,
   discoverStateToSearchParams,
   FILTER_STORAGE_KEYS,
+  isFreshScrollSnapshot,
+  mergeUniqueMediaItems,
   readSessionState,
   sanitizeDiscoverState,
   searchParamsToDiscoverState,
   syncUrlSearchParams,
   writeSessionState,
+  type DiscoverScrollSnapshot,
   type PersistedDiscoverState,
 } from "@/lib/filter-persistence";
 import { discoverQueryCache } from "@/lib/client-cache";
@@ -232,6 +235,14 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const reqIdRef = useRef(0);
   const didInitRef = useRef(false);
   const lastWrittenQsRef = useRef<string | null>(null);
+  const itemsRef = useRef<MediaItem[]>(initialItems);
+  const pageRef = useRef(1);
+  const totalRef = useRef(initialTotal);
+  const hasNextPageRef = useRef<boolean>(true);
+  const prevQueryKeyRef = useRef<string | null>(null);
+  const isRestoringScrollRef = useRef(false);
+  const navigatingAwayRef = useRef(false);
+  const scrollCleanupRef = useRef<(() => void) | null>(null);
 
   const applyDiscoverState = useCallback((next: PersistedDiscoverState) => {
     setType(next.type);
@@ -384,83 +395,332 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     return () => clearTimeout(t);
   }, [minUnits, maxUnits]);
 
+  const baseQueryKey = useMemo(() => {
+    const qs = new URLSearchParams({
+      action: "discover",
+      type,
+      sort,
+      perPage: "24",
+    });
+    if (debouncedSearch.trim()) qs.set("search", debouncedSearch.trim());
+    if (selectedGenres.length > 0) {
+      qs.set("genres", selectedGenres.join(","));
+      if (encodedDebouncedGenreRanks) {
+        qs.set("genreRanks", encodedDebouncedGenreRanks);
+      }
+    }
+    if (selectedTags.length > 0) qs.set("tags", selectedTags.join(","));
+    if (minScore !== "ALL") qs.set("minScore", minScore);
+    if (maxScore !== "ALL") qs.set("maxScore", maxScore);
+    if (type === "ANIME") {
+      if (debouncedMinUnits && Number(debouncedMinUnits) > 0) {
+        qs.set("minEpisodes", debouncedMinUnits);
+      }
+      if (debouncedMaxUnits && Number(debouncedMaxUnits) > 0) {
+        qs.set("maxEpisodes", debouncedMaxUnits);
+      }
+    } else {
+      if (debouncedMinUnits && Number(debouncedMinUnits) > 0) {
+        qs.set("minChapters", debouncedMinUnits);
+      }
+      if (debouncedMaxUnits && Number(debouncedMaxUnits) > 0) {
+        qs.set("maxChapters", debouncedMaxUnits);
+      }
+    }
+    if (year !== "ALL") qs.set("year", year);
+    if (season !== "ALL" && type === "ANIME") qs.set("season", season);
+    if (format !== "ALL") qs.set("format", format);
+    if (status !== "ALL") qs.set("status", status);
+    return qs.toString();
+  }, [
+    type,
+    debouncedSearch,
+    selectedGenres,
+    encodedDebouncedGenreRanks,
+    selectedTags,
+    minScore,
+    maxScore,
+    debouncedMinUnits,
+    debouncedMaxUnits,
+    year,
+    season,
+    format,
+    status,
+    sort,
+  ]);
+
+  const compactMediaForCache = useCallback(
+    (list: readonly MediaItem[]): MediaItem[] =>
+      list.map((item) => ({
+        ...item,
+        description: null,
+        tags: undefined,
+      })),
+    []
+  );
+
+  const baseQueryKeyRef = useRef(baseQueryKey);
+  useEffect(() => {
+    baseQueryKeyRef.current = baseQueryKey;
+  }, [baseQueryKey]);
+
+  const saveDiscoverScrollNow = useCallback((overrideScrollY?: number) => {
+    if (typeof window === "undefined" || isRestoringScrollRef.current) return;
+    if (navigatingAwayRef.current && overrideScrollY === undefined) return;
+    if (window.location.pathname !== "/discover") return;
+
+    const y = Math.round(overrideScrollY ?? window.scrollY);
+    if (y <= 0 && pageRef.current <= 1) {
+      clearSessionState(FILTER_STORAGE_KEYS.discoverScroll);
+      return;
+    }
+    writeSessionState<DiscoverScrollSnapshot>(FILTER_STORAGE_KEYS.discoverScroll, {
+      queryKey: baseQueryKeyRef.current,
+      scrollY: Math.max(0, y),
+      page: pageRef.current,
+      itemCount: itemsRef.current.length,
+      savedAt: Date.now(),
+    });
+  }, []);
+
+  const persistCurrentResultsToCache = useCallback(
+    (queryKey: string, list: readonly MediaItem[], targetPage: number, nextHasPage: boolean, nextTotal: number) => {
+      if (list.length === 0) return;
+      discoverQueryCache.set(queryKey, {
+        items: compactMediaForCache(list),
+        hasNextPage: nextHasPage,
+        total: nextTotal,
+        page: targetPage,
+      });
+    },
+    [compactMediaForCache]
+  );
+
+  const handleCardNavigationCapture = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement | null;
+      const anchor = target?.closest('a[href^="/media/"], a[href^="/anime/"]');
+      if (!anchor) return;
+      // Ignore modified clicks that open in a new tab
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+
+      const currentY = Math.round(window.scrollY);
+      // Cancel any ongoing scroll restoration so we save the real live position
+      if (scrollCleanupRef.current) {
+        scrollCleanupRef.current();
+        scrollCleanupRef.current = null;
+      }
+
+      // Freeze scroll/cache mutations from route-exit scrollTo(0, 0) or late in-flight fetches
+      navigatingAwayRef.current = true;
+      window.setTimeout(() => {
+        navigatingAwayRef.current = false;
+      }, 2500);
+
+      persistCurrentResultsToCache(
+        baseQueryKeyRef.current,
+        itemsRef.current,
+        pageRef.current,
+        hasNextPageRef.current,
+        totalRef.current
+      );
+
+      writeSessionState<DiscoverScrollSnapshot>(FILTER_STORAGE_KEYS.discoverScroll, {
+        queryKey: baseQueryKeyRef.current,
+        scrollY: Math.max(0, currentY),
+        page: pageRef.current,
+        itemCount: itemsRef.current.length,
+        savedAt: Date.now(),
+      });
+    },
+    [persistCurrentResultsToCache]
+  );
+
+  const restoreScrollPosition = useCallback((targetY: number) => {
+    if (typeof window === "undefined" || targetY <= 0) return;
+
+    // Cancel any previous restoration timers/listeners
+    if (scrollCleanupRef.current) {
+      scrollCleanupRef.current();
+      scrollCleanupRef.current = null;
+    }
+
+    isRestoringScrollRef.current = true;
+    let cancelled = false;
+    const timers: number[] = [];
+    let raf1 = 0;
+    let raf2 = 0;
+    let resizeObs: ResizeObserver | null = null;
+
+    const cleanup = () => {
+      if (cancelled) return;
+      cancelled = true;
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+      timers.forEach((id) => window.clearTimeout(id));
+      if (resizeObs) {
+        resizeObs.disconnect();
+        resizeObs = null;
+      }
+      window.removeEventListener("wheel", onUserInteract);
+      window.removeEventListener("touchstart", onUserInteract);
+      window.removeEventListener("pointerdown", onUserInteract);
+      window.removeEventListener("keydown", onKeyInteract);
+      window.removeEventListener("scroll", onUnexpectedReset);
+      isRestoringScrollRef.current = false;
+      if (scrollCleanupRef.current === cleanup) {
+        scrollCleanupRef.current = null;
+      }
+    };
+
+    const onUserInteract = () => cleanup();
+    const onKeyInteract = (e: KeyboardEvent) => {
+      if (
+        e.key === "ArrowDown" ||
+        e.key === "ArrowUp" ||
+        e.key === "PageDown" ||
+        e.key === "PageUp" ||
+        e.key === "Space" ||
+        e.key === "Home" ||
+        e.key === "End"
+      ) {
+        cleanup();
+      }
+    };
+
+    const jumpNow = () => {
+      if (cancelled) return;
+      const maxScrollable = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight
+      );
+      if (maxScrollable <= 0) return;
+      const clampedY = Math.min(targetY, maxScrollable);
+      if (Math.abs(window.scrollY - clampedY) > 2) {
+        window.scrollTo({
+          top: clampedY,
+          left: 0,
+          behavior: "instant" as ScrollBehavior,
+        });
+      }
+    };
+
+    // Counteract Next.js App Router's delayed post-navigation window.scrollTo(0, 0)
+    const onUnexpectedReset = () => {
+      if (cancelled) return;
+      if (window.scrollY < Math.min(targetY * 0.5, 80)) {
+        window.requestAnimationFrame(jumpNow);
+      }
+    };
+
+    window.addEventListener("wheel", onUserInteract, { passive: true });
+    window.addEventListener("touchstart", onUserInteract, { passive: true });
+    window.addEventListener("pointerdown", onUserInteract, { passive: true });
+    window.addEventListener("keydown", onKeyInteract);
+    window.addEventListener("scroll", onUnexpectedReset, { passive: true });
+
+    if (typeof ResizeObserver !== "undefined" && document.body) {
+      resizeObs = new ResizeObserver(() => {
+        jumpNow();
+      });
+      resizeObs.observe(document.body);
+    }
+
+    scrollCleanupRef.current = cleanup;
+
+    raf1 = window.requestAnimationFrame(() => {
+      jumpNow();
+      raf2 = window.requestAnimationFrame(() => {
+        jumpNow();
+      });
+    });
+
+    // Re-apply across initial paint & Next.js router settle window, cancelling immediately on user input
+    timers.push(window.setTimeout(jumpNow, 60));
+    timers.push(window.setTimeout(jumpNow, 160));
+    timers.push(window.setTimeout(jumpNow, 320));
+    timers.push(window.setTimeout(jumpNow, 520));
+    timers.push(window.setTimeout(jumpNow, 760));
+    timers.push(window.setTimeout(cleanup, 900));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (scrollCleanupRef.current) {
+        scrollCleanupRef.current();
+      }
+    };
+  }, []);
+
+  // Track live scroll position (throttled) so browser Back always lands back at the exact spot
+  useEffect(() => {
+    if (!filtersReady || typeof window === "undefined") return;
+    let timer: number | null = null;
+    const onScroll = () => {
+      if (isRestoringScrollRef.current || navigatingAwayRef.current) return;
+      if (window.location.pathname !== "/discover") return;
+      if (timer !== null) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (isRestoringScrollRef.current || navigatingAwayRef.current) return;
+        if (window.location.pathname !== "/discover") return;
+        saveDiscoverScrollNow(window.scrollY);
+      }, 140);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [filtersReady, saveDiscoverScrollNow]);
+
   const fetchResults = useCallback(
-    async (targetPage: number, append: boolean) => {
+    async (
+      targetPage: number,
+      append: boolean,
+      options?: { restoreScrollY?: number }
+    ) => {
       const reqId = ++reqIdRef.current;
       if (append) setLoadingMore(true);
       else setLoading(true);
 
       try {
-        const qs = new URLSearchParams({
-          action: "discover",
-          type,
-          sort,
-          page: String(targetPage),
-          perPage: "24",
-        });
-        if (debouncedSearch.trim()) qs.set("search", debouncedSearch.trim());
-        if (selectedGenres.length > 0) {
-          qs.set("genres", selectedGenres.join(","));
-          if (encodedDebouncedGenreRanks) {
-            qs.set("genreRanks", encodedDebouncedGenreRanks);
-          }
-        }
-        if (selectedTags.length > 0) qs.set("tags", selectedTags.join(","));
-        if (minScore !== "ALL") qs.set("minScore", minScore);
-        if (maxScore !== "ALL") qs.set("maxScore", maxScore);
-        if (type === "ANIME") {
-          if (debouncedMinUnits && Number(debouncedMinUnits) > 0) {
-            qs.set("minEpisodes", debouncedMinUnits);
-          }
-          if (debouncedMaxUnits && Number(debouncedMaxUnits) > 0) {
-            qs.set("maxEpisodes", debouncedMaxUnits);
-          }
-        } else {
-          if (debouncedMinUnits && Number(debouncedMinUnits) > 0) {
-            qs.set("minChapters", debouncedMinUnits);
-          }
-          if (debouncedMaxUnits && Number(debouncedMaxUnits) > 0) {
-            qs.set("maxChapters", debouncedMaxUnits);
-          }
-        }
-        if (year !== "ALL") qs.set("year", year);
-        if (season !== "ALL" && type === "ANIME") qs.set("season", season);
-        if (format !== "ALL") qs.set("format", format);
-        if (status !== "ALL") qs.set("status", status);
-
-        const queryKey = qs.toString();
-        if (!append && targetPage === 1) {
-          const cached = discoverQueryCache.get(queryKey);
-          if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
-            setItems(cached.items as MediaItem[]);
-            setHasNextPage(Boolean(cached.hasNextPage));
-            setTotal(Number(cached.total ?? cached.items.length));
-            setPage(1);
-            setLoading(false);
-          }
-        }
-
-        const res = await fetch(`/api/anilist?${queryKey}`);
+        const res = await fetch(`/api/anilist?${baseQueryKey}&page=${targetPage}`);
         if (!res.ok) throw new Error("fetch failed");
         const data = await res.json();
-        if (reqId !== reqIdRef.current) return;
+        if (reqId !== reqIdRef.current || navigatingAwayRef.current) return;
 
         const nextItems: MediaItem[] = data.items ?? [];
         const nextHasPage = Boolean(data.hasNextPage);
         const nextTotal = Number(data.total ?? nextItems.length ?? 0);
 
-        if (!append && targetPage === 1 && nextItems.length > 0) {
-          discoverQueryCache.set(queryKey, {
-            items: nextItems,
-            hasNextPage: nextHasPage,
-            total: nextTotal,
-          });
-        }
+        const mergedItems = append
+          ? mergeUniqueMediaItems(itemsRef.current, nextItems)
+          : nextItems;
 
-        setItems((prev) => (append ? [...prev, ...nextItems] : nextItems));
+        itemsRef.current = mergedItems;
+        pageRef.current = targetPage;
+        totalRef.current = nextTotal;
+        hasNextPageRef.current = nextHasPage;
+
+        persistCurrentResultsToCache(
+          baseQueryKey,
+          mergedItems,
+          targetPage,
+          nextHasPage,
+          nextTotal
+        );
+
+        setItems(mergedItems);
         setHasNextPage(nextHasPage);
         setTotal(nextTotal);
         setPage(targetPage);
+
+        if (append) {
+          saveDiscoverScrollNow();
+        } else if (options?.restoreScrollY && options.restoreScrollY > 0) {
+          restoreScrollPosition(options.restoreScrollY);
+        }
       } catch {
         // keep current items on error
       } finally {
@@ -471,27 +731,207 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       }
     },
     [
-      type,
-      debouncedSearch,
-      selectedGenres,
-      encodedDebouncedGenreRanks,
-      selectedTags,
-      minScore,
-      maxScore,
-      debouncedMinUnits,
-      debouncedMaxUnits,
-      year,
-      season,
-      format,
-      status,
-      sort,
+      baseQueryKey,
+      persistCurrentResultsToCache,
+      restoreScrollPosition,
+      saveDiscoverScrollNow,
     ]
   );
 
+  // Hydrate multi-page cached items + scroll position on Back return, or fetch clean page 1 on filter change
   useEffect(() => {
     if (!filtersReady) return;
-    void fetchResults(1, false);
-  }, [filtersReady, fetchResults]);
+
+    const isInitialMount = prevQueryKeyRef.current === null;
+    prevQueryKeyRef.current = baseQueryKey;
+
+    if (!isInitialMount) {
+      // Active filter change or "Tout effacer": clear saved scroll & start fresh from page 1
+      clearSessionState(FILTER_STORAGE_KEYS.discoverScroll);
+      pageRef.current = 1;
+      void fetchResults(1, false);
+      return;
+    }
+
+    const savedScroll = readSessionState<DiscoverScrollSnapshot>(
+      FILTER_STORAGE_KEYS.discoverScroll
+    );
+    const matchingScroll =
+      savedScroll &&
+      savedScroll.queryKey === baseQueryKey &&
+      isFreshScrollSnapshot(savedScroll)
+        ? savedScroll
+        : null;
+
+    const cached = discoverQueryCache.get(baseQueryKey);
+    const hasCachedItems = Boolean(
+      cached && Array.isArray(cached.items) && cached.items.length > 0
+    );
+
+    if (hasCachedItems && cached) {
+      const cachedItems = cached.items as MediaItem[];
+      const cachedPage = Math.max(
+        1,
+        Number(cached.page ?? Math.ceil(cachedItems.length / 24))
+      );
+      const cachedTotal = Number(cached.total ?? cachedItems.length);
+      const cachedHasNext = Boolean(cached.hasNextPage);
+
+      // Invalidate any in-flight request before restoring cached multi-page snapshot
+      const reqId = ++reqIdRef.current;
+      itemsRef.current = cachedItems;
+      pageRef.current = cachedPage;
+      totalRef.current = cachedTotal;
+      hasNextPageRef.current = cachedHasNext;
+      setItems(cachedItems);
+      setHasNextPage(cachedHasNext);
+      setTotal(cachedTotal);
+      setPage(cachedPage);
+      setLoading(false);
+      setLoadingMore(false);
+
+      if (matchingScroll) {
+        const targetPages = Math.min(Math.max(1, matchingScroll.page), 8);
+        if (targetPages > cachedPage && cachedHasNext) {
+          void (async () => {
+            setLoadingMore(true);
+            try {
+              let accumulated = cachedItems;
+              let currentHasNext: boolean = cachedHasNext;
+              let currentTotal = cachedTotal;
+              let lastLoadedPage = cachedPage;
+
+              for (let p = cachedPage + 1; p <= targetPages && currentHasNext; p++) {
+                const res = await fetch(`/api/anilist?${baseQueryKey}&page=${p}`);
+                if (!res.ok || reqId !== reqIdRef.current) break;
+                const data = await res.json();
+                if (reqId !== reqIdRef.current || navigatingAwayRef.current) return;
+                const pageItems: MediaItem[] = data.items ?? [];
+                accumulated = mergeUniqueMediaItems(accumulated, pageItems);
+                currentHasNext = Boolean(data.hasNextPage);
+                currentTotal = Number(data.total ?? currentTotal);
+                lastLoadedPage = p;
+              }
+
+              if (reqId !== reqIdRef.current || navigatingAwayRef.current) return;
+              itemsRef.current = accumulated;
+              pageRef.current = lastLoadedPage;
+              totalRef.current = currentTotal;
+              hasNextPageRef.current = currentHasNext;
+              persistCurrentResultsToCache(
+                baseQueryKey,
+                accumulated,
+                lastLoadedPage,
+                currentHasNext,
+                currentTotal
+              );
+              setItems(accumulated);
+              setHasNextPage(currentHasNext);
+              setTotal(currentTotal);
+              setPage(lastLoadedPage);
+            } finally {
+              if (reqId === reqIdRef.current) {
+                setLoadingMore(false);
+              }
+            }
+            if (matchingScroll.scrollY > 0) {
+              restoreScrollPosition(matchingScroll.scrollY);
+            }
+          })();
+        } else if (matchingScroll.scrollY > 0) {
+          restoreScrollPosition(matchingScroll.scrollY);
+        }
+      }
+      return;
+    }
+
+    // Cache miss on Back return after multi-page "Charger plus": rebuild pages 1..N then jump back
+    if (matchingScroll && matchingScroll.page > 1) {
+      const reqId = ++reqIdRef.current;
+      const targetPages = Math.min(matchingScroll.page, 8);
+      setLoading(true);
+      void (async () => {
+        try {
+          let accumulated: MediaItem[] = [];
+          let currentHasNext = true;
+          let currentTotal = 0;
+          let lastLoadedPage = 1;
+
+          for (let p = 1; p <= targetPages && currentHasNext; p++) {
+            const res = await fetch(`/api/anilist?${baseQueryKey}&page=${p}`);
+            if (!res.ok || reqId !== reqIdRef.current) break;
+            const data = await res.json();
+            if (reqId !== reqIdRef.current || navigatingAwayRef.current) return;
+            const pageItems: MediaItem[] = data.items ?? [];
+            accumulated = mergeUniqueMediaItems(accumulated, pageItems);
+            currentHasNext = Boolean(data.hasNextPage);
+            currentTotal = Number(data.total ?? accumulated.length);
+            lastLoadedPage = p;
+          }
+
+          if (reqId !== reqIdRef.current || navigatingAwayRef.current) return;
+          if (accumulated.length > 0) {
+            itemsRef.current = accumulated;
+            pageRef.current = lastLoadedPage;
+            totalRef.current = currentTotal;
+            hasNextPageRef.current = currentHasNext;
+            persistCurrentResultsToCache(
+              baseQueryKey,
+              accumulated,
+              lastLoadedPage,
+              currentHasNext,
+              currentTotal
+            );
+            setItems(accumulated);
+            setHasNextPage(currentHasNext);
+            setTotal(currentTotal);
+            setPage(lastLoadedPage);
+            if (matchingScroll.scrollY > 0) {
+              restoreScrollPosition(matchingScroll.scrollY);
+            }
+          }
+        } finally {
+          if (reqId === reqIdRef.current) {
+            setLoading(false);
+          }
+        }
+      })();
+      return;
+    }
+
+    // Fresh default SSR landing: seed cache with SSR initialItems immediately (avoids racing with quick "Charger plus")
+    const isDefaultTrendingQuery =
+      baseQueryKey === "action=discover&type=ANIME&sort=TRENDING_DESC&perPage=24";
+    if (isDefaultTrendingQuery && initialItems.length > 0) {
+      itemsRef.current = initialItems;
+      pageRef.current = 1;
+      totalRef.current = initialTotal;
+      hasNextPageRef.current = true;
+      persistCurrentResultsToCache(
+        baseQueryKey,
+        initialItems,
+        1,
+        true,
+        initialTotal
+      );
+      if (matchingScroll && matchingScroll.scrollY > 0) {
+        restoreScrollPosition(matchingScroll.scrollY);
+      }
+      return;
+    }
+
+    void fetchResults(1, false, {
+      restoreScrollY: matchingScroll?.scrollY,
+    });
+  }, [
+    filtersReady,
+    baseQueryKey,
+    fetchResults,
+    initialItems,
+    initialTotal,
+    persistCurrentResultsToCache,
+    restoreScrollPosition,
+  ]);
 
   const handleTypeSwitch = (next: MediaType) => {
     setType(next);
@@ -1609,7 +2049,10 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5">
+          <div
+            onClickCapture={handleCardNavigationCapture}
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5"
+          >
             {visibleItems.map((item) => (
               <MediaCard key={`${item.id}-${item.type}`} media={item} />
             ))}

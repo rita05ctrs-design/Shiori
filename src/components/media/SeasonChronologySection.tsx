@@ -225,7 +225,16 @@ export function SeasonChronologySection({
               : ""
           )}
         >
-          {timeline.map((item) => {
+          {timeline.map((item, idx) => {
+            const isExtra =
+              item.format === "MOVIE" || item.format === "OVA" || item.format === "SPECIAL";
+            const prevItem = idx > 0 ? timeline[idx - 1] : null;
+            const prevWasMain =
+              prevItem !== null &&
+              prevItem.format !== "MOVIE" &&
+              prevItem.format !== "OVA" &&
+              prevItem.format !== "SPECIAL";
+            const showExtrasDivider = isExtra && prevWasMain;
             const isCurrent = item.id === currentId;
             const unitCount =
               item.type === "MANGA"
@@ -299,23 +308,41 @@ export function SeasonChronologySection({
               </div>
             );
 
+            const divider = showExtrasDivider ? (
+              <div
+                aria-hidden="true"
+                className="flex flex-col items-center justify-center px-1 shrink-0 select-none"
+              >
+                <span className="w-px h-4 bg-white/[0.12]" />
+                <span className="my-1 px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.09] font-mono text-[9px] uppercase tracking-wider text-[#7E8397]">
+                  +
+                </span>
+                <span className="w-px h-4 bg-white/[0.12]" />
+              </div>
+            ) : null;
+
             if (isCurrent) {
               return (
-                <div key={item.id} ref={activeCardRef} aria-current="page" className="shrink-0">
-                  {cardInner}
-                </div>
+                <React.Fragment key={item.id}>
+                  {divider}
+                  <div ref={activeCardRef} aria-current="page" className="shrink-0">
+                    {cardInner}
+                  </div>
+                </React.Fragment>
               );
             }
 
             return (
-              <Link
-                key={item.id}
-                href={getSeasonHref(item)}
-                draggable={false}
-                className="group block shrink-0"
-              >
-                {cardInner}
-              </Link>
+              <React.Fragment key={item.id}>
+                {divider}
+                <Link
+                  href={getSeasonHref(item)}
+                  draggable={false}
+                  className="group block shrink-0"
+                >
+                  {cardInner}
+                </Link>
+              </React.Fragment>
             );
           })}
         </div>

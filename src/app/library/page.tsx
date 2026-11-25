@@ -63,12 +63,14 @@ import {
 import {
   clearSessionState,
   FILTER_STORAGE_KEYS,
+  isFreshScrollSnapshot,
   libraryStateToSearchParams,
   readSessionState,
   sanitizeLibraryState,
   searchParamsToLibraryState,
   syncUrlSearchParams,
   writeSessionState,
+  type LibraryScrollSnapshot,
   type LibraryViewMode,
   type PersistedLibraryState,
 } from "@/lib/filter-persistence";
@@ -181,6 +183,14 @@ function LibraryPageInner() {
   const toolsRef = useRef<HTMLDivElement>(null);
   const didInitRef = useRef(false);
   const lastWrittenQsRef = useRef<string | null>(null);
+  const visibleCountRef = useRef(36);
+  const isRestoringScrollRef = useRef(false);
+  const navigatingAwayRef = useRef(false);
+  const pendingLibraryScrollYRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    visibleCountRef.current = visibleCount;
+  }, [visibleCount]);
 
   // Restore filters from URL query params (Priority 1: Back button & deep links like /library?favorites=1)
   // or sessionStorage fallback (Priority 2: returning via Navbar link after viewing an anime)
@@ -208,6 +218,20 @@ function LibraryPageInner() {
         setView(restored.view);
         setShowAdvancedFilters(restored.showAdvancedFilters);
       }
+
+      const savedScroll = readSessionState<LibraryScrollSnapshot>(
+        FILTER_STORAGE_KEYS.libraryScroll
+      );
+      if (savedScroll && isFreshScrollSnapshot(savedScroll)) {
+        if (savedScroll.visibleCount > 36) {
+          setVisibleCount(savedScroll.visibleCount);
+          visibleCountRef.current = savedScroll.visibleCount;
+        }
+        if (savedScroll.scrollY > 0) {
+          pendingLibraryScrollYRef.current = savedScroll.scrollY;
+        }
+      }
+
       setFiltersReady(true);
       return;
     }
@@ -242,6 +266,85 @@ function LibraryPageInner() {
       clearSessionState(FILTER_STORAGE_KEYS.library);
     }
   }, [filtersReady, filters, sortBy, view, showAdvancedFilters]);
+
+  // Restore saved library scroll position on Back navigation after visible items mount
+  useEffect(() => {
+    if (!filtersReady || typeof window === "undefined") return;
+    const targetY = pendingLibraryScrollYRef.current;
+    if (!targetY || targetY <= 0) return;
+    pendingLibraryScrollYRef.current = null;
+
+    isRestoringScrollRef.current = true;
+    let cancelled = false;
+    const timers: number[] = [];
+    const cancel = () => {
+      if (cancelled) return;
+      cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
+      window.removeEventListener("wheel", cancel);
+      window.removeEventListener("touchstart", cancel);
+      window.removeEventListener("pointerdown", cancel);
+      isRestoringScrollRef.current = false;
+    };
+    window.addEventListener("wheel", cancel, { passive: true });
+    window.addEventListener("touchstart", cancel, { passive: true });
+    window.addEventListener("pointerdown", cancel, { passive: true });
+
+    const jump = () => {
+      if (cancelled) return;
+      window.scrollTo({ top: targetY, left: 0, behavior: "instant" as ScrollBehavior });
+    };
+    window.requestAnimationFrame(jump);
+    timers.push(window.setTimeout(jump, 70));
+    timers.push(window.setTimeout(jump, 180));
+    timers.push(window.setTimeout(cancel, 320));
+    return cancel;
+  }, [filtersReady, visibleCount]);
+
+  // Save library scroll + expanded visibleCount continuously so Back never resets to top
+  useEffect(() => {
+    if (!filtersReady || typeof window === "undefined") return;
+    let timer: number | null = null;
+    const onScroll = () => {
+      if (isRestoringScrollRef.current || navigatingAwayRef.current || timer !== null) return;
+      if (window.location.pathname !== "/library") return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        if (isRestoringScrollRef.current || navigatingAwayRef.current) return;
+        if (window.location.pathname !== "/library") return;
+        const y = Math.round(window.scrollY);
+        if (y <= 0 && visibleCountRef.current <= 36) {
+          clearSessionState(FILTER_STORAGE_KEYS.libraryScroll);
+          return;
+        }
+        writeSessionState<LibraryScrollSnapshot>(FILTER_STORAGE_KEYS.libraryScroll, {
+          scrollY: Math.max(0, y),
+          visibleCount: visibleCountRef.current,
+          savedAt: Date.now(),
+        });
+      }, 140);
+    };
+    const onLinkClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement | null)?.closest('a[href^="/media/"], a[href^="/anime/"]');
+      if (!anchor || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      navigatingAwayRef.current = true;
+      window.setTimeout(() => {
+        navigatingAwayRef.current = false;
+      }, 2500);
+      writeSessionState<LibraryScrollSnapshot>(FILTER_STORAGE_KEYS.libraryScroll, {
+        scrollY: Math.max(0, Math.round(window.scrollY)),
+        visibleCount: visibleCountRef.current,
+        savedAt: Date.now(),
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("click", onLinkClick, true);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("click", onLinkClick, true);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [filtersReady]);
 
   useEffect(() => {
     if (!toolsMenuOpen) return;

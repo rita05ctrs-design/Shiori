@@ -49,6 +49,34 @@ function getDateSortKey(node: {
   return y * 10000 + m * 100 + d;
 }
 
+function extractSeasonOrderTuple(title: string): [number, number] | null {
+  const partMatch = /(?:Season|Saison)\s*(\d+)\s*(?:Part|Cour|Partie)\s*(\d+)/i.exec(title);
+  if (partMatch) return [Number(partMatch[1]), Number(partMatch[2])];
+
+  const finalPartMatch = /Final\s+Season.*(?:Part|Cour|Partie)\s*(\d+)/i.exec(title);
+  if (finalPartMatch) return [99, Number(finalPartMatch[1])];
+
+  if (/Final\s+Season/i.test(title)) return [99, 0];
+
+  const seasonMatch = /(?:Season|Saison)\s*(\d+)/i.exec(title);
+  if (seasonMatch) return [Number(seasonMatch[1]), 0];
+
+  const romanMatch = /\b(?:II|III|IV|V|VI)\b/.exec(title);
+  if (romanMatch) {
+    const map: Record<string, number> = { II: 2, III: 3, IV: 4, V: 5, VI: 6 };
+    return [map[romanMatch[0]] ?? 0, 0];
+  }
+
+  return null;
+}
+
+function getFormatGroupRank(format: string | null): number {
+  if (CANON_MAIN_FORMATS.has(format ?? "")) return 0; // Main seasons first (Saison 1, Saison 2, ...)
+  if (format === "MOVIE") return 1; // Films after all main seasons
+  if (format === "OVA" || format === "SPECIAL") return 2; // OVAs & Specials last
+  return 0;
+}
+
 function detectExplicitSeasonLabel(title: string): string | null {
   const partMatch = /Season\s*(\d+)\s*Part\s*(\d+)/i.exec(title);
   if (partMatch) return `Saison ${partMatch[1]} · P.${partMatch[2]}`;
@@ -186,8 +214,23 @@ export function buildSeasonChronology(
     }
   }
 
-  // Chronological sort by release date (startDate -> seasonYear -> id)
+  // Order strictly: all main seasons in chronological/season order (Saison 1 -> Saison 2 -> ...),
+  // then Movies, then OVAs & Specials (never interrupting main seasons with OVAs or recap movies).
   const sorted = Array.from(rawEntries.values()).sort((a, b) => {
+    const ga = getFormatGroupRank(a.format);
+    const gb = getFormatGroupRank(b.format);
+    if (ga !== gb) return ga - gb;
+
+    // Within main seasons, respect explicit Season numbers when both specify them cleanly
+    if (ga === 0) {
+      const ta = extractSeasonOrderTuple(a.title);
+      const tb = extractSeasonOrderTuple(b.title);
+      if (ta && tb) {
+        if (ta[0] !== tb[0]) return ta[0] - tb[0];
+        if (ta[1] !== tb[1]) return ta[1] - tb[1];
+      }
+    }
+
     const da = getDateSortKey(a);
     const db = getDateSortKey(b);
     if (da !== db) return da - db;
@@ -196,6 +239,7 @@ export function buildSeasonChronology(
 
   let seasonCounter = 0;
   let movieCounter = 0;
+  let ovaCounter = 0;
 
   const timeline: SeasonTimelineEntry[] = sorted.map((item) => {
     const isMovie = item.format === "MOVIE";
@@ -206,7 +250,9 @@ export function buildSeasonChronology(
       movieCounter++;
       shortLabel = movieCounter > 1 ? `Film ${movieCounter}` : "Film";
     } else if (isOva && !CANON_MAIN_FORMATS.has(item.format ?? "")) {
-      shortLabel = item.format === "OVA" ? "OAV" : "Spécial";
+      ovaCounter++;
+      const baseOva = item.format === "OVA" ? "OAV" : "Spécial";
+      shortLabel = ovaCounter > 1 ? `${baseOva} ${ovaCounter}` : baseOva;
     } else {
       seasonCounter++;
       const explicit = detectExplicitSeasonLabel(item.title);
@@ -223,11 +269,13 @@ export function buildSeasonChronology(
         ? "CURRENT"
         : isMovie
           ? "MOVIE"
-          : item.isMainChain
-            ? "MAIN_CHAIN"
-            : CANON_EXTRA_FORMATS.has(item.format ?? "")
-              ? "SIDE_STORY"
-              : "MAIN_CHAIN";
+          : isOva
+            ? "SIDE_STORY"
+            : item.isMainChain
+              ? "MAIN_CHAIN"
+              : CANON_EXTRA_FORMATS.has(item.format ?? "")
+                ? "SIDE_STORY"
+                : "MAIN_CHAIN";
 
     return {
       id: item.id,
@@ -245,16 +293,36 @@ export function buildSeasonChronology(
     };
   });
 
-  // Resolve prevSeason / nextSeason prioritizing direct PREQUEL/SEQUEL, falling back to adjacent main-chain entry
-  const currentIdx = timeline.findIndex((t) => t.id === currentId);
-  const prevSeason =
-    (directPrevId ? timeline.find((t) => t.id === directPrevId) : null) ??
-    (currentIdx > 0 ? timeline[currentIdx - 1] : null);
-  const nextSeason =
-    (directNextId ? timeline.find((t) => t.id === directNextId) : null) ??
-    (currentIdx >= 0 && currentIdx < timeline.length - 1
-      ? timeline[currentIdx + 1]
-      : null);
+  // Resolve prevSeason / nextSeason:
+  // When viewing a main season, step strictly across Main Seasons (Saison 1 -> Saison 2 -> Saison 3)
+  // so clicking "Saison suivante" never detours through an OVA or recap movie.
+  const currentEntry = timeline.find((t) => t.id === currentId);
+  const isCurrentMainSeason = currentEntry
+    ? getFormatGroupRank(currentEntry.format) === 0
+    : false;
+  const mainSeasonsOnly = timeline.filter((t) => getFormatGroupRank(t.format) === 0);
+
+  let prevSeason: SeasonTimelineEntry | null = null;
+  let nextSeason: SeasonTimelineEntry | null = null;
+
+  if (isCurrentMainSeason && mainSeasonsOnly.length > 1) {
+    const mainIdx = mainSeasonsOnly.findIndex((t) => t.id === currentId);
+    prevSeason = mainIdx > 0 ? mainSeasonsOnly[mainIdx - 1] : null;
+    nextSeason =
+      mainIdx >= 0 && mainIdx < mainSeasonsOnly.length - 1
+        ? mainSeasonsOnly[mainIdx + 1]
+        : null;
+  } else {
+    const currentIdx = timeline.findIndex((t) => t.id === currentId);
+    prevSeason =
+      (directPrevId ? timeline.find((t) => t.id === directPrevId) : null) ??
+      (currentIdx > 0 ? timeline[currentIdx - 1] : null);
+    nextSeason =
+      (directNextId ? timeline.find((t) => t.id === directNextId) : null) ??
+      (currentIdx >= 0 && currentIdx < timeline.length - 1
+        ? timeline[currentIdx + 1]
+        : null);
+  }
 
   return {
     timeline,
