@@ -50,6 +50,8 @@ export interface BrowserSpeechRecognition extends EventTarget {
 
 export type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
 
+export type VoiceInputStatus = "idle" | "requesting" | "listening" | "error";
+
 const VOICE_AUTOSPEAK_STORAGE_KEY = "shiori_ai_voice_autospeak_v1";
 
 /**
@@ -125,13 +127,61 @@ export function sanitizeTextForSpeech(rawText: string): string {
 }
 
 /**
+ * Translates navigator.mediaDevices.getUserMedia DOMExceptions into clear French guidance.
+ */
+export function mapMediaDeviceErrorToFrench(err: unknown): string {
+  const name =
+    typeof (err as { name?: unknown })?.name === "string"
+      ? (err as { name: string }).name
+      : "";
+  const message =
+    typeof (err as { message?: unknown })?.message === "string"
+      ? (err as { message: string }).message
+      : "";
+
+  if (
+    name === "NotAllowedError" ||
+    name === "PermissionDeniedError" ||
+    /permission denied|not allowed/i.test(message)
+  ) {
+    return "Accès au microphone refusé ou bloqué. Autorisez le micro via l'icône de cadenas dans la barre d'adresse puis réessayez.";
+  }
+
+  if (
+    name === "NotFoundError" ||
+    name === "DevicesNotFoundError" ||
+    /requested device not found|no audio/i.test(message)
+  ) {
+    return "Aucun microphone détecté sur cet appareil. Vérifiez qu'un micro est branché ou activé.";
+  }
+
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "Le microphone est déjà utilisé par une autre application ou momentanément inaccessible.";
+  }
+
+  if (name === "SecurityError") {
+    return "L'accès au microphone nécessite une connexion sécurisée (HTTPS ou localhost).";
+  }
+
+  if (name === "AbortError") {
+    return "La demande d'accès au microphone a été annulée. Cliquez à nouveau sur le micro pour réessayer.";
+  }
+
+  if (message.trim()) {
+    return message.trim();
+  }
+
+  return "Impossible d'accéder au microphone pour le moment.";
+}
+
+/**
  * Translates Web Speech API error codes into clear French messages for the UI.
  */
 export function mapSpeechErrorToFrench(errorCode: string): string {
   switch (errorCode) {
     case "not-allowed":
     case "service-not-allowed":
-      return "Accès au microphone refusé. Autorisez le micro dans les réglages de votre navigateur.";
+      return "Accès au microphone refusé ou bloqué. Autorisez le micro dans la barre d'adresse de votre navigateur puis réessayez.";
     case "no-speech":
       return "Aucune voix détectée. Parlez plus près du micro et réessayez.";
     case "audio-capture":

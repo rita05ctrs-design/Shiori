@@ -24,9 +24,11 @@ import {
   Trash2,
   MessageSquarePlus,
   Mic,
+  MicOff,
   Square,
   Volume2,
   VolumeX,
+  AlertCircle,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { cn, formatRelativeTime, formatScore, getDisplayTitle } from "@/lib/utils";
@@ -46,6 +48,7 @@ import {
 import {
   getSpeechRecognitionConstructor,
   isSpeechSynthesisSupported,
+  mapMediaDeviceErrorToFrench,
   mapSpeechErrorToFrench,
   mergeTranscriptWithDraft,
   pickPreferredSpeechVoice,
@@ -54,6 +57,7 @@ import {
   sanitizeTextForSpeech,
   writeVoiceAutoSpeakPref,
   type BrowserSpeechRecognition,
+  type VoiceInputStatus,
 } from "@/lib/ai-voice";
 import type { AiResolvedRecommendation } from "@/lib/ai-recommend";
 
@@ -186,13 +190,17 @@ export function ShioriAiChatPanel({
   const [meta, setMeta] = useState<ChatMetaInfo | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Voice dictation (SpeechRecognition) & Read-aloud (speechSynthesis) state
+  // Voice dictation (getUserMedia + SpeechRecognition) & Read-aloud (speechSynthesis) state
   const [voiceInputSupported, setVoiceInputSupported] = useState(false);
   const [speechOutputSupported, setSpeechOutputSupported] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<VoiceInputStatus>("idle");
+  const [voiceErrorMsg, setVoiceErrorMsg] = useState<string | null>(null);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [voiceAutoSpeak, setVoiceAutoSpeak] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+
+  const isListening = voiceStatus === "listening";
+  const isRequestingMic = voiceStatus === "requesting";
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -201,6 +209,7 @@ export function ShioriAiChatPanel({
   const voiceDraftBaseRef = useRef<string>("");
   const voiceFinalTextRef = useRef<string>("");
   const voiceCancelledRef = useRef<boolean>(false);
+  const voiceHadErrorRef = useRef<boolean>(false);
   const voiceAutoSpeakRef = useRef<boolean>(false);
   const lastSpokenAutoMsgIdRef = useRef<string | null>(null);
   const sendMessageRef = useRef<(rawPrompt: string) => Promise<void>>(async () => {});
@@ -409,20 +418,22 @@ export function ShioriAiChatPanel({
 
   const cancelVoiceInput = useCallback(() => {
     voiceCancelledRef.current = true;
+    voiceHadErrorRef.current = false;
     try {
       recognitionRef.current?.abort();
     } catch {
       // ignore already-stopped recognition
     }
     recognitionRef.current = null;
-    setIsListening(false);
+    setVoiceStatus("idle");
+    setVoiceErrorMsg(null);
     setInterimTranscript("");
     setInput(voiceDraftBaseRef.current);
   }, []);
 
   const stopVoiceInput = useCallback(() => {
     if (!recognitionRef.current) {
-      setIsListening(false);
+      setVoiceStatus("idle");
       return;
     }
     if (!voiceFinalTextRef.current.trim()) {
@@ -432,25 +443,36 @@ export function ShioriAiChatPanel({
     try {
       recognitionRef.current.stop();
     } catch {
-      setIsListening(false);
+      setVoiceStatus("idle");
     }
   }, [cancelVoiceInput]);
 
-  const startVoiceInput = useCallback(() => {
-    if (sending) return;
+  const startVoiceInput = useCallback(async () => {
+    if (sending || voiceStatus === "requesting") return;
+
+    // 1. Check SpeechRecognition compatibility first so unsupported browsers get an instant clear message
     const RecognitionCtor = getSpeechRecognitionConstructor();
     if (!RecognitionCtor) {
+      const msg =
+        "Votre navigateur ne prend pas en charge la dictée vocale (SpeechRecognition). Utilisez Chrome, Edge ou Safari.";
+      setVoiceStatus("error");
+      setVoiceErrorMsg(msg);
       toast({
-        title: "Dictée vocale indisponible",
-        description:
-          "Utilisez Chrome, Edge ou Safari (en HTTPS ou localhost) pour parler à Shiori IA.",
-        variant: "info",
+        title: "Dictée vocale non prise en charge",
+        description: msg,
+        variant: "warning",
         durationMs: 4500,
       });
       return;
     }
 
     stopSpeaking();
+    setVoiceErrorMsg(null);
+    setErrorMsg(null);
+    voiceDraftBaseRef.current = input;
+    voiceFinalTextRef.current = "";
+    voiceCancelledRef.current = false;
+    voiceHadErrorRef.current = false;
 
     if (recognitionRef.current) {
       try {
@@ -461,6 +483,53 @@ export function ShioriAiChatPanel({
       recognitionRef.current = null;
     }
 
+    // 2. Explicitly call navigator.mediaDevices.getUserMedia({ audio: true }) inside the click
+    //    handler so the browser ALWAYS prompts the user for microphone permission before SpeechRecognition.
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      const msg =
+        typeof window !== "undefined" && !window.isSecureContext
+          ? "L'accès au microphone nécessite une connexion sécurisée (HTTPS ou localhost)."
+          : "Votre navigateur ne permet pas l'accès au microphone (mediaDevices.getUserMedia indisponible).";
+      setVoiceStatus("error");
+      setVoiceErrorMsg(msg);
+      toast({
+        title: "Microphone indisponible",
+        description: msg,
+        variant: "warning",
+        durationMs: 4500,
+      });
+      return;
+    }
+
+    setVoiceStatus("requesting");
+    let mediaStream: MediaStream | null = null;
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      const msg = mapMediaDeviceErrorToFrench(err);
+      setVoiceStatus("error");
+      setVoiceErrorMsg(msg);
+      toast({
+        title: "Autorisation microphone requise",
+        description: msg,
+        variant: "warning",
+        durationMs: 5000,
+      });
+      return;
+    } finally {
+      // Immediately release hardware audio tracks so SpeechRecognition can acquire the mic cleanly
+      if (mediaStream) {
+        mediaStream.getTracks().forEach((track) => track.stop());
+      }
+    }
+
+    // If user clicked Annuler while the browser permission popup was open, abort cleanly
+    if (voiceCancelledRef.current) {
+      setVoiceStatus("idle");
+      return;
+    }
+
+    // 3. Start Web Speech Recognition now that microphone access is explicitly granted
     try {
       const recognition = new RecognitionCtor();
       recognition.lang = speechLocale;
@@ -468,14 +537,10 @@ export function ShioriAiChatPanel({
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
-      voiceDraftBaseRef.current = input;
-      voiceFinalTextRef.current = "";
-      voiceCancelledRef.current = false;
-
       recognition.onstart = () => {
-        setIsListening(true);
+        setVoiceStatus("listening");
+        setVoiceErrorMsg(null);
         setInterimTranscript("");
-        setErrorMsg(null);
       };
 
       recognition.onresult = (event) => {
@@ -502,19 +567,24 @@ export function ShioriAiChatPanel({
           voiceCancelledRef.current = true;
         }
         if (msg) {
+          voiceHadErrorRef.current = true;
+          setVoiceStatus("error");
+          setVoiceErrorMsg(msg);
           toast({
             title: "Micro / Dictée vocale",
             description: msg,
             variant: "warning",
-            durationMs: 4200,
+            durationMs: 4500,
           });
         }
       };
 
       recognition.onend = () => {
         recognitionRef.current = null;
-        setIsListening(false);
         setInterimTranscript("");
+        if (!voiceHadErrorRef.current) {
+          setVoiceStatus("idle");
+        }
 
         if (!voiceCancelledRef.current) {
           const finalPrompt = mergeTranscriptWithDraft(
@@ -529,24 +599,30 @@ export function ShioriAiChatPanel({
 
       recognitionRef.current = recognition;
       recognition.start();
-    } catch {
-      setIsListening(false);
+    } catch (err) {
+      const msg = mapMediaDeviceErrorToFrench(err);
+      setVoiceStatus("error");
+      setVoiceErrorMsg(msg);
       recognitionRef.current = null;
       toast({
         title: "Impossible de démarrer le micro",
-        description: "Vérifiez les permissions du microphone dans votre navigateur.",
+        description: msg,
         variant: "warning",
       });
     }
-  }, [input, sending, speechLocale, stopSpeaking, toast]);
+  }, [input, sending, speechLocale, stopSpeaking, toast, voiceStatus]);
 
   const toggleVoiceInput = useCallback(() => {
-    if (isListening) {
-      stopVoiceInput();
-    } else {
-      startVoiceInput();
+    if (voiceStatus === "requesting") {
+      cancelVoiceInput();
+      return;
     }
-  }, [isListening, startVoiceInput, stopVoiceInput]);
+    if (voiceStatus === "listening") {
+      stopVoiceInput();
+      return;
+    }
+    void startVoiceInput();
+  }, [cancelVoiceInput, startVoiceInput, stopVoiceInput, voiceStatus]);
 
   useEffect(() => {
     return () => {
@@ -757,7 +833,12 @@ export function ShioriAiChatPanel({
   const handleLoadSavedChat = (chat: SavedAiChat) => {
     abortRef.current?.abort();
     stopSpeaking();
-    if (isListening) cancelVoiceInput();
+    if (isListening || isRequestingMic) {
+      cancelVoiceInput();
+    } else {
+      setVoiceStatus("idle");
+      setVoiceErrorMsg(null);
+    }
     setSending(false);
     setErrorMsg(null);
     setMessages(chat.messages);
@@ -800,7 +881,12 @@ export function ShioriAiChatPanel({
   const handleNewChat = () => {
     abortRef.current?.abort();
     stopSpeaking();
-    if (isListening) cancelVoiceInput();
+    if (isListening || isRequestingMic) {
+      cancelVoiceInput();
+    } else {
+      setVoiceStatus("idle");
+      setVoiceErrorMsg(null);
+    }
     const prevMessages = messages;
     const prevSavedId = activeSavedId;
     setMessages([]);
@@ -1364,7 +1450,7 @@ export function ShioriAiChatPanel({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (isListening) {
+          if (isListening || isRequestingMic) {
             voiceCancelledRef.current = true;
             try {
               recognitionRef.current?.abort();
@@ -1372,20 +1458,50 @@ export function ShioriAiChatPanel({
               // ignore
             }
             recognitionRef.current = null;
-            setIsListening(false);
+            setVoiceStatus("idle");
             setInterimTranscript("");
           }
+          setVoiceErrorMsg(null);
           void sendMessage(input);
         }}
         className="p-2.5 sm:p-3.5 border-t border-white/[0.07] bg-gradient-to-t from-[#090B12] via-[#0D101B] to-[#0F121E]/95 shrink-0 space-y-2"
       >
-        <AnimatePresence initial={false}>
-          {isListening && (
+        <AnimatePresence initial={false} mode="wait">
+          {isRequestingMic && (
             <motion.div
+              key="voice-requesting"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
               transition={{ duration: 0.16 }}
+              role="status"
+              className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-kinpaku/14 border border-kinpaku/45 text-xs"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-kinpaku shrink-0" />
+                <span className="text-[#F4F3EE] font-medium truncate">
+                  Demande d&apos;autorisation du microphone… Autorisez l&apos;accès dans le navigateur
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={cancelVoiceInput}
+                aria-label="Annuler la demande de microphone"
+                className="px-2 py-0.5 rounded-lg bg-white/[0.07] hover:bg-white/[0.14] text-[#D4D7E4] hover:text-white text-[11px] font-medium transition-colors cursor-pointer shrink-0"
+              >
+                Annuler
+              </button>
+            </motion.div>
+          )}
+
+          {isListening && (
+            <motion.div
+              key="voice-listening"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.16 }}
+              role="status"
               className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-accent/14 border border-accent/40 text-xs"
             >
               <div className="flex items-center gap-2 min-w-0">
@@ -1428,6 +1544,34 @@ export function ShioriAiChatPanel({
               </div>
             </motion.div>
           )}
+
+          {voiceStatus === "error" && voiceErrorMsg && (
+            <motion.div
+              key="voice-error"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.16 }}
+              role="alert"
+              className="flex items-start justify-between gap-2 px-3 py-2 rounded-xl bg-rose-500/14 border border-rose-500/40 text-xs text-rose-100"
+            >
+              <div className="flex items-start gap-2 min-w-0">
+                <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">{voiceErrorMsg}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setVoiceStatus("idle");
+                  setVoiceErrorMsg(null);
+                }}
+                aria-label="Fermer le message d'erreur micro"
+                className="w-5 h-5 rounded-md bg-white/[0.07] hover:bg-white/[0.15] flex items-center justify-center text-rose-200 hover:text-white transition-colors cursor-pointer shrink-0"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </motion.div>
+          )}
         </AnimatePresence>
 
         <div
@@ -1435,7 +1579,11 @@ export function ShioriAiChatPanel({
             "group flex items-center gap-1.5 sm:gap-2 rounded-2xl bg-[#07080C]/95 border px-2 sm:px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_28px_rgba(0,0,0,0.45)] transition-all",
             isListening
               ? "border-accent/80 ring-2 ring-accent/25"
-              : "border-white/[0.12] hover:border-white/[0.2] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20"
+              : isRequestingMic
+                ? "border-kinpaku/75 ring-2 ring-kinpaku/25"
+                : voiceStatus === "error"
+                  ? "border-rose-500/55 ring-1 ring-rose-500/20"
+                  : "border-white/[0.12] hover:border-white/[0.2] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20"
           )}
         >
           <span
@@ -1449,16 +1597,22 @@ export function ShioriAiChatPanel({
             ref={textareaRef}
             rows={1}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              if (voiceStatus === "error") {
+                setVoiceStatus("idle");
+                setVoiceErrorMsg(null);
+              }
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Escape" && isListening) {
+              if (e.key === "Escape" && (isListening || isRequestingMic)) {
                 e.preventDefault();
                 cancelVoiceInput();
                 return;
               }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if (isListening) {
+                if (isListening || isRequestingMic) {
                   voiceCancelledRef.current = true;
                   try {
                     recognitionRef.current?.abort();
@@ -1466,16 +1620,19 @@ export function ShioriAiChatPanel({
                     // ignore
                   }
                   recognitionRef.current = null;
-                  setIsListening(false);
+                  setVoiceStatus("idle");
                   setInterimTranscript("");
                 }
+                setVoiceErrorMsg(null);
                 void sendMessage(input);
               }
             }}
             placeholder={
-              isListening
-                ? "Écoute en cours… parle librement"
-                : "Écris ou parle à Shiori IA..."
+              isRequestingMic
+                ? "Autorisation du microphone en cours..."
+                : isListening
+                  ? "Écoute en cours… parle librement"
+                  : "Écris ou parle à Shiori IA..."
             }
             aria-label="Écrire ou dicter un message à Shiori IA"
             className="flex-1 min-w-0 resize-none bg-transparent py-2 px-1 max-h-[120px] overflow-y-auto text-[13px] sm:text-sm text-[#F4F3EE] placeholder:text-[#7E849C] focus:outline-none leading-snug select-text"
@@ -1486,26 +1643,37 @@ export function ShioriAiChatPanel({
             type="button"
             onClick={toggleVoiceInput}
             disabled={sending}
+            data-voice-status={voiceStatus}
             title={
-              isListening
-                ? "Arrêter la dictée vocale"
-                : voiceInputSupported
-                  ? "Parler à Shiori IA (dictée vocale)"
-                  : "Dictée vocale (Chrome, Edge ou Safari requis)"
+              isRequestingMic
+                ? "Demande d'autorisation du microphone en cours…"
+                : isListening
+                  ? "Arrêter la dictée vocale"
+                  : voiceStatus === "error"
+                    ? "Réessayer la dictée vocale"
+                    : voiceInputSupported
+                      ? "Parler à Shiori IA (dictée vocale)"
+                      : "Dictée vocale (Chrome, Edge ou Safari requis)"
             }
             aria-label={
-              isListening
-                ? "Arrêter la dictée vocale"
-                : "Parler à Shiori IA avec le micro"
+              isRequestingMic
+                ? "Annuler la demande d'autorisation du microphone"
+                : isListening
+                  ? "Arrêter la dictée vocale"
+                  : "Parler à Shiori IA avec le micro"
             }
             aria-pressed={isListening}
             className={cn(
               "relative w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 disabled:opacity-35",
               isListening
                 ? "bg-accent border-accent text-white shadow-[0_0_20px_rgba(229,72,77,0.65)]"
-                : voiceInputSupported
-                  ? "bg-white/[0.05] hover:bg-accent/18 border-white/[0.1] hover:border-accent/45 text-[#CFD3E2] hover:text-white"
-                  : "bg-white/[0.03] border-white/[0.07] text-[#6E7389] hover:text-[#B8BCCB]"
+                : isRequestingMic
+                  ? "bg-kinpaku/20 border-kinpaku/65 text-kinpaku shadow-[0_0_16px_rgba(240,185,91,0.35)]"
+                  : voiceStatus === "error"
+                    ? "bg-rose-500/18 hover:bg-rose-500/28 border-rose-500/55 text-rose-200 hover:text-white"
+                    : voiceInputSupported
+                      ? "bg-white/[0.05] hover:bg-accent/18 border-white/[0.1] hover:border-accent/45 text-[#CFD3E2] hover:text-white"
+                      : "bg-white/[0.03] border-white/[0.07] text-[#6E7389] hover:text-[#B8BCCB]"
             )}
           >
             {isListening && (
@@ -1514,8 +1682,12 @@ export function ShioriAiChatPanel({
                 className="absolute inset-0 rounded-xl border border-accent animate-ping opacity-55 pointer-events-none"
               />
             )}
-            {isListening ? (
+            {isRequestingMic ? (
+              <Loader2 className="w-4 h-4 animate-spin relative z-10" />
+            ) : isListening ? (
               <Square className="w-3.5 h-3.5 fill-current relative z-10" />
+            ) : voiceStatus === "error" ? (
+              <MicOff className="w-4 h-4 relative z-10" />
             ) : (
               <Mic className="w-4 h-4 relative z-10" />
             )}

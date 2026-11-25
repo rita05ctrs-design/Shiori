@@ -64,6 +64,7 @@ import {
   upsertSavedAiChat,
 } from "../src/lib/ai-chat-storage.ts";
 import {
+  mapMediaDeviceErrorToFrench,
   mapSpeechErrorToFrench,
   mergeTranscriptWithDraft,
   resolveSpeechLocale,
@@ -1121,4 +1122,17 @@ test("ai-voice: resolves locales, merges voice transcripts, cleans markdown for 
   assert.ok(mapSpeechErrorToFrench("not-allowed").includes("microphone"));
   assert.ok(mapSpeechErrorToFrench("no-speech").includes("Aucune voix"));
   assert.equal(mapSpeechErrorToFrench("aborted"), "");
+
+  assert.ok(
+    mapMediaDeviceErrorToFrench({ name: "NotAllowedError" }).includes("refusé ou bloqué")
+  );
+  assert.ok(
+    mapMediaDeviceErrorToFrench({ name: "NotFoundError" }).includes("Aucun microphone détecté")
+  );
+  assert.ok(
+    mapMediaDeviceErrorToFrench({ name: "NotReadableError" }).includes("autre application")
+  );
+  assert.ok(
+    mapMediaDeviceErrorToFrench({ name: "SecurityError" }).includes("HTTPS")
+  );
 });
