@@ -106,7 +106,7 @@ export function HomeCuratedTabsSection({
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 max-w-full">
-          <div className="w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar pb-0.5">
+          <div className="w-full sm:w-auto max-w-full overflow-x-auto touch-rail no-scrollbar pb-0.5">
             <div
               role="tablist"
               aria-label="Collections curatées"

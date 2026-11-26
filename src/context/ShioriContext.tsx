@@ -718,6 +718,15 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       .then((data) => {
         if (data?.authenticated && data.user) {
           setProfile(data.user);
+          if (data.user.preferredLanguage) {
+            const normalizedLang = normalizeContentLanguage(data.user.preferredLanguage);
+            setContentLanguageState(normalizedLang);
+            try {
+              localStorage.setItem(STORAGE_KEYS.contentLanguage, normalizedLang);
+            } catch {
+              // ignore
+            }
+          }
           if (Array.isArray(data.library)) setLibrary(data.library);
           if (Array.isArray(data.notifications)) setNotifications(data.notifications);
           if (Array.isArray(data.activity)) setActivity(data.activity);
@@ -3485,6 +3494,15 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       }
 
       setProfile(data.user);
+      if (data.user?.preferredLanguage) {
+        const normalizedLang = normalizeContentLanguage(data.user.preferredLanguage);
+        setContentLanguageState(normalizedLang);
+        try {
+          localStorage.setItem(STORAGE_KEYS.contentLanguage, normalizedLang);
+        } catch {
+          // ignore
+        }
+      }
       setLibrary(Array.isArray(data.library) ? data.library : []);
       setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
       setActivity(Array.isArray(data.activity) ? data.activity : []);
@@ -3627,7 +3645,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, message: data.error || "Impossible de créer le compte." };
       }
 
-      setProfile(data.user);
+      setProfile({ ...data.user, preferredLanguage: contentLanguage });
       setLibrary(Array.isArray(data.library) ? data.library : []);
       setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
       setActivity(Array.isArray(data.activity) ? data.activity : []);
@@ -3654,7 +3672,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       });
       return { ok: true, message: `Compte @${data.user.username} créé avec succès !` };
     },
-    [library, toast]
+    [contentLanguage, library, toast]
   );
 
   const signInWithGoogle = useCallback(async () => {

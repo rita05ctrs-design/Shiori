@@ -14,6 +14,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { getSettingsCopy } from "@/lib/settings-translations";
 import { cn } from "@/lib/utils";
 import type {
   AmbianceDensity,
@@ -92,17 +93,15 @@ const SPEED_OPTIONS: { id: AmbianceSpeed; label: string }[] = [
 ];
 
 export function AmbianceSettingsCard() {
-  const { ambiance, updateAmbiance, toast } = useShiori();
+  const { ambiance, updateAmbiance, contentLanguage, toast } = useShiori();
+  const copy = getSettingsCopy(contentLanguage).ambiance;
 
   const handleSelectEffect = (id: AmbianceEffect) => {
     updateAmbiance({ effect: id });
-    const meta = AMBIANCE_OPTIONS.find((o) => o.id === id);
+    const loc = copy.effects[id];
     toast({
-      title: id === "none" ? "Effets d'ambiance désactivés" : `Ambiance : ${meta?.label}`,
-      description:
-        id === "none"
-          ? "Vous pouvez réactiver les particules à tout moment."
-          : "Aperçu actif en direct sur tout le site.",
+      title: id === "none" ? copy.disabledToastTitle : loc.label,
+      description: id === "none" ? copy.disabledToastDesc : copy.enabledToastDesc,
     });
   };
 
@@ -116,10 +115,10 @@ export function AmbianceSettingsCard() {
         <div>
           <h2 className="text-base font-semibold text-white flex items-center gap-2">
             <Flower2 className="w-4 h-4 text-accent" />
-            <span>Effets d&apos;ambiance</span>
+            <span>{copy.title}</span>
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-0.5">
-            Ajoutez une atmosphère animée légère en arrière-plan ou gardez l&apos;interface épurée.
+            {copy.subtitle}
           </p>
         </div>
 
@@ -130,7 +129,7 @@ export function AmbianceSettingsCard() {
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#C8CCE0] hover:text-white transition-colors cursor-pointer self-start sm:self-auto"
           >
             <EyeOff className="w-3.5 h-3.5" />
-            <span>Désactiver</span>
+            <span>{copy.disable}</span>
           </button>
         )}
       </div>
@@ -140,6 +139,7 @@ export function AmbianceSettingsCard() {
         {AMBIANCE_OPTIONS.map((opt) => {
           const Icon = opt.icon;
           const active = ambiance.effect === opt.id;
+          const loc = copy.effects[opt.id];
 
           return (
             <button
@@ -171,7 +171,7 @@ export function AmbianceSettingsCard() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1.5">
                   <p className="text-xs font-semibold text-white truncate">
-                    {opt.label}
+                    {loc.label}
                   </p>
                   {active && (
                     <span
@@ -183,7 +183,7 @@ export function AmbianceSettingsCard() {
                   )}
                 </div>
                 <p className="text-[11px] text-[#83889C] mt-0.5 line-clamp-2 leading-snug">
-                  {opt.subtitle}
+                  {loc.subtitle}
                 </p>
               </div>
             </button>
@@ -198,7 +198,7 @@ export function AmbianceSettingsCard() {
           <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-obsidian/70 border border-white/[0.07]">
             <span className="text-xs font-medium text-[#C6CAD8] flex items-center gap-2">
               <Sliders className="w-3.5 h-3.5 text-accent" />
-              <span>Intensité</span>
+              <span>{copy.density}</span>
             </span>
             <div className="inline-flex items-center p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07]">
               {DENSITY_OPTIONS.map((d) => (
@@ -213,7 +213,7 @@ export function AmbianceSettingsCard() {
                       : "text-[#8E93A6] hover:text-white"
                   )}
                 >
-                  {d.label}
+                  {copy.densities[d.id]}
                 </button>
               ))}
             </div>
@@ -223,7 +223,7 @@ export function AmbianceSettingsCard() {
           <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-obsidian/70 border border-white/[0.07]">
             <span className="text-xs font-medium text-[#C6CAD8] flex items-center gap-2">
               <Gauge className="w-3.5 h-3.5 text-kinpaku" />
-              <span>Vitesse</span>
+              <span>{copy.speed}</span>
             </span>
             <div className="inline-flex items-center p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07]">
               {SPEED_OPTIONS.map((s) => (
@@ -238,7 +238,7 @@ export function AmbianceSettingsCard() {
                       : "text-[#8E93A6] hover:text-white"
                   )}
                 >
-                  {s.label}
+                  {copy.speeds[s.id]}
                 </button>
               ))}
             </div>

@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
     const typeParam = searchParams.get("type");
     const type: MediaType = typeParam === "MANGA" ? "MANGA" : "ANIME";
     const yearParam = searchParams.get("year");
+    const minYearParam = searchParams.get("minYear");
+    const maxYearParam = searchParams.get("maxYear");
     const minScoreParam = searchParams.get("minScore");
     const maxScoreParam = searchParams.get("maxScore");
     const minEpisodesParam = searchParams.get("minEpisodes");
@@ -90,7 +92,9 @@ export async function GET(request: NextRequest) {
       minChapters: toPosInt(minChaptersParam),
       maxChapters: toPosInt(maxChaptersParam),
       season: searchParams.get("season") ?? undefined,
-      year: yearParam && yearParam !== "ALL" ? Number(yearParam) : undefined,
+      year: yearParam && yearParam !== "ALL" ? yearParam : undefined,
+      minYear: toPosInt(minYearParam),
+      maxYear: toPosInt(maxYearParam),
       format: searchParams.get("format") ?? undefined,
       status: searchParams.get("status") ?? undefined,
       sort: searchParams.get("sort") ?? "TRENDING_DESC",

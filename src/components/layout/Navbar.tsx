@@ -79,9 +79,15 @@ const NAV_ITEMS: {
 const MOBILE_BOTTOM_NAV: {
   href: string;
   labelKey: UiMessageKey;
-  icon: typeof ListChecks;
+  icon: typeof Home;
   match: (p: string) => boolean;
 }[] = [
+  {
+    href: "/",
+    labelKey: "nav.home",
+    icon: Home,
+    match: (p: string) => p === "/",
+  },
   {
     href: "/episodes",
     labelKey: "nav.week",
@@ -173,7 +179,7 @@ export function Navbar() {
         className={cn(
           "fixed top-0 inset-x-0 z-50 transition-all duration-300 pt-[env(safe-area-inset-top)]",
           scrolled
-            ? "bg-obsidian/90 backdrop-blur-xl border-b border-white/[0.07] shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
+            ? "bg-obsidian/88 backdrop-blur-2xl border-b border-white/[0.09] shadow-[0_12px_36px_rgba(0,0,0,0.52),inset_0_-1px_0_rgba(255,255,255,0.04)]"
             : "bg-gradient-to-b from-obsidian/94 via-obsidian/55 to-transparent border-b border-transparent"
         )}
       >
@@ -181,13 +187,6 @@ export function Navbar() {
           {/* Brand Logo: Shiori 栞 */}
           <Link
             href="/"
-            onClick={() => {
-              try {
-                sessionStorage.setItem("shiori_mobile_default_week_v1", "1");
-              } catch {
-                // ignore
-              }
-            }}
             className="flex items-center gap-2 sm:gap-2.5 group shrink-0 min-w-0"
           >
             <motion.div
@@ -274,8 +273,8 @@ export function Navbar() {
                   {isActive && (
                     <motion.span
                       layoutId="shiori-nav-pill"
-                      transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                      className="absolute inset-0 rounded-full bg-white/[0.1] border border-white/[0.12] shadow-sm"
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-full bg-gradient-to-b from-white/[0.14] to-white/[0.07] border border-white/[0.16] shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.18),inset_0_1px_0_rgba(255,255,255,0.16)]"
                     />
                   )}
                   <Icon className="w-3.5 h-3.5 relative z-10 opacity-85 shrink-0" />
@@ -574,41 +573,67 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation — 4 clear mobile-first tabs */}
+      {/* Mobile Floating Frosted-Glass Dock — 5 clear tabs (Accueil + Semaine + Ma Liste + Découvrir + Profil/IA) */}
       <nav
         aria-label="Mobile navigation"
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-obsidian/95 backdrop-blur-xl border-t border-white/[0.08] px-1.5 pt-1.5 pb-[calc(0.45rem+env(safe-area-inset-bottom))]"
+        data-mobile-bottom-nav="true"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 px-2.5 pb-[calc(0.55rem+env(safe-area-inset-bottom))] pt-1.5 pointer-events-none"
       >
-        <div className="grid grid-cols-4 items-center gap-1">
-          {MOBILE_BOTTOM_NAV.map((item) => {
-            const isActive = item.match(pathname);
-            const Icon = item.icon;
-            const label = t(item.labelKey);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "relative flex flex-col items-center justify-center gap-0.5 min-h-[46px] py-1 rounded-xl transition-colors min-w-0",
-                  isActive
-                    ? "text-accent-hover bg-accent/12 border border-accent/25"
-                    : "text-[#8A8FA3] border border-transparent"
-                )}
-              >
-                <div className="relative">
-                  <Icon className="w-4.5 h-4.5 shrink-0" />
-                  {item.href === "/library" && watchingCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full bg-accent text-[9px] font-mono font-bold text-accent-fg flex items-center justify-center">
-                      {watchingCount > 9 ? "9+" : watchingCount}
-                    </span>
+        <div className="pointer-events-auto relative rounded-2xl bg-[#0B0D16]/90 backdrop-blur-2xl border border-white/[0.11] shadow-[0_18px_46px_rgba(0,0,0,0.82),inset_0_1px_0_rgba(255,255,255,0.1)] p-1">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-accent/65 to-transparent"
+          />
+          <div className="grid grid-cols-5 items-center gap-0.5">
+            {MOBILE_BOTTOM_NAV.map((item) => {
+              const isActive = item.match(pathname);
+              const Icon = item.icon;
+              const label = t(item.labelKey);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "relative flex flex-col items-center justify-center gap-0.5 min-h-[48px] py-1 rounded-xl transition-all duration-200 active:scale-92 min-w-0",
+                    isActive ? "text-white" : "text-[#8A8FA3] hover:text-[#CFD3E2]"
                   )}
-                </div>
-                <span className="text-[10.5px] font-semibold truncate max-w-full px-0.5">
-                  {label}
-                </span>
-              </Link>
-            );
-          })}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="shiori-mobile-nav-pill"
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-xl bg-gradient-to-b from-accent/25 to-accent/10 border border-accent/40 shadow-[0_4px_18px_rgb(var(--shiori-accent-rgb)/0.28)]"
+                    />
+                  )}
+                  <motion.div
+                    animate={isActive ? { y: -1, scale: 1.08 } : { y: 0, scale: 1 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 28 }}
+                    className="relative z-10"
+                  >
+                    <Icon
+                      className={cn(
+                        "w-[18px] h-[18px] shrink-0 transition-colors",
+                        isActive && "text-accent-soft drop-shadow-[0_0_8px_rgb(var(--shiori-accent-rgb)/0.65)]"
+                      )}
+                    />
+                    {item.href === "/library" && watchingCount > 0 && (
+                      <span className="absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full bg-accent text-[9px] font-mono font-bold text-accent-fg flex items-center justify-center shadow-sm">
+                        {watchingCount > 9 ? "9+" : watchingCount}
+                      </span>
+                    )}
+                  </motion.div>
+                  <span
+                    className={cn(
+                      "relative z-10 text-[9.5px] font-semibold truncate max-w-full px-0.5 leading-tight",
+                      isActive ? "text-white" : "text-[#8A8FA3]"
+                    )}
+                  >
+                    {label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </nav>
     </>

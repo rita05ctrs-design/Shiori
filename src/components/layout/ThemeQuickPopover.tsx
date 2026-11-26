@@ -11,11 +11,11 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { getSettingsCopy } from "@/lib/settings-translations";
 import {
   SURFACE_OPTIONS,
   THEME_PRESETS,
 } from "@/lib/theme";
-import { AMBIANCE_OPTIONS } from "@/components/settings/AmbianceSettingsCard";
 import { cn } from "@/lib/utils";
 
 export function ThemeQuickPopover() {
@@ -26,7 +26,10 @@ export function ThemeQuickPopover() {
     resetTheme,
     ambiance,
     updateAmbiance,
+    contentLanguage,
   } = useShiori();
+  const fullCopy = getSettingsCopy(contentLanguage);
+  const copy = fullCopy.theme;
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -48,15 +51,15 @@ export function ThemeQuickPopover() {
   }, []);
 
   const currentAmbianceLabel =
-    AMBIANCE_OPTIONS.find((o) => o.id === ambiance.effect)?.label ?? "Particules";
+    fullCopy.ambiance.effects[ambiance.effect]?.label ?? fullCopy.ambiance.title;
 
   return (
     <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Personnaliser les couleurs et le thème"
-        title="Personnaliser les couleurs"
+        aria-label={copy.title}
+        title={copy.title}
         className={cn(
           "relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer",
           open
@@ -85,17 +88,17 @@ export function ThemeQuickPopover() {
               <div className="flex items-center gap-2">
                 <Palette className="w-4 h-4 text-accent" />
                 <span className="text-xs font-semibold text-white">
-                  Thème & Couleurs
+                  {copy.title}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={resetTheme}
-                title="Réinitialiser par défaut"
+                title={copy.defaultBtn}
                 className="inline-flex items-center gap-1 text-[11px] text-[#9A9EAE] hover:text-white transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>Défaut</span>
+                <span>{copy.defaultShort}</span>
               </button>
             </div>
 
@@ -103,7 +106,7 @@ export function ThemeQuickPopover() {
               {/* 8 Preset Swatches */}
               <div>
                 <p className="text-[10px] font-mono uppercase tracking-wider text-[#858A9E] mb-2">
-                  Thèmes rapides
+                  {copy.quickTitle}
                 </p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {THEME_PRESETS.map((preset) => {
@@ -139,19 +142,19 @@ export function ThemeQuickPopover() {
 
               {/* Custom Accent Color Picker Bar */}
               <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-                <span className="text-[11.5px] text-[#C6CAD8]">Couleur libre</span>
+                <span className="text-[11.5px] text-[#C6CAD8]">{copy.customColor}</span>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] text-[#9A9EAE]">
                     {theme.accentColor}
                   </span>
                   <label
-                    title="Choisir n'importe quelle couleur"
+                    title={copy.customColor}
                     className="relative w-6 h-6 rounded-md border border-white/25 overflow-hidden cursor-pointer"
                     style={{ backgroundColor: theme.accentColor }}
                   >
                     <input
                       type="color"
-                      aria-label="Couleur personnalisée rapide"
+                      aria-label={copy.customColor}
                       value={theme.accentColor}
                       onChange={(e) =>
                         updateTheme({ accentColor: e.target.value, presetId: "custom" })
@@ -165,7 +168,7 @@ export function ThemeQuickPopover() {
               {/* Background Surface Selector */}
               <div>
                 <p className="text-[10px] font-mono uppercase tracking-wider text-[#858A9E] mb-1.5">
-                  Fond de l&apos;app
+                  {copy.appBg}
                 </p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {SURFACE_OPTIONS.map((surf) => {
@@ -182,7 +185,7 @@ export function ThemeQuickPopover() {
                             : "bg-white/[0.03] border-white/[0.07] text-[#A2A6B8] hover:text-white hover:bg-white/[0.06]"
                         )}
                       >
-                        {surf.label}
+                        {copy.surfaces[surf.id].label}
                       </button>
                     );
                   })}
@@ -221,7 +224,7 @@ export function ThemeQuickPopover() {
               className="flex items-center justify-center gap-1.5 px-4 py-2.5 border-t border-white/[0.08] bg-surface-solid-header text-xs font-semibold text-accent-soft hover:text-white transition-colors"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Studio complet & réglages avancés</span>
+              <span>{copy.fullStudioLink}</span>
             </Link>
           </motion.div>
         )}

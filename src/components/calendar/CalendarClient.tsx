@@ -692,7 +692,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
         {viewMode === "day" && (
           <>
             {/* 7-Day Selector Bar (horizontally scrollable on mobile so day labels never truncate) */}
-            <div className="flex overflow-x-auto no-scrollbar gap-2 pb-1 sm:grid sm:grid-cols-7 sm:gap-2.5 sm:overflow-visible sm:pb-0">
+            <div className="flex overflow-x-auto touch-rail no-scrollbar gap-2 pb-1 sm:grid sm:grid-cols-7 sm:gap-2.5 sm:overflow-visible sm:pb-0">
           {rollingDays.map((day) => {
             const isSelected = selectedDayKey === day.key;
             const list = byDay[day.key] ?? [];

@@ -6,14 +6,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ListChecks,
   Plus,
+  Minus,
   Check,
   ArrowRight,
   Loader2,
   Flame,
   Tv,
+  Sun,
+  CalendarRange,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import { getSettingsCopy } from "@/lib/settings-translations";
 import { cn } from "@/lib/utils";
 import type { WatchingAiringItem } from "@/app/api/anilist/watching-airing/route";
 
@@ -26,29 +30,45 @@ interface CachedAiring {
 let airingMemCache: CachedAiring | null = null;
 const CACHE_TTL_MS = 3 * 60 * 1000;
 
-function formatShortBroadcastDay(unixSec: number | null): string {
-  if (!unixSec) return "En cours";
+function isSameLocalDay(unixSec: number | null): boolean {
+  if (!unixSec) return false;
+  const dt = new Date(unixSec * 1000);
+  const now = new Date();
+  return (
+    dt.getFullYear() === now.getFullYear() &&
+    dt.getMonth() === now.getMonth() &&
+    dt.getDate() === now.getDate()
+  );
+}
+
+function formatShortBroadcastDay(
+  unixSec: number | null,
+  locale: string,
+  todayLabel: string,
+  fallbackLabel: string
+): string {
+  if (!unixSec) return fallbackLabel;
   const dt = new Date(unixSec * 1000);
   const now = new Date();
   const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const startTarget = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
   const diffDays = Math.round((startTarget - startToday) / 86400000);
-  const timeStr = dt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  if (diffDays === 0) return `Aujourd'hui · ${timeStr}`;
-  if (diffDays === -1) return `Hier · ${timeStr}`;
-  const day = dt.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+  const timeStr = dt.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 0) return `${todayLabel} · ${timeStr}`;
+  const day = dt.toLocaleDateString(locale, { weekday: "short", day: "numeric" });
   return `${day.charAt(0).toUpperCase() + day.slice(1)} · ${timeStr}`;
 }
 
 /**
- * PC (`>= 768px`) Quick Access Shortcut for "Épisodes de la semaine / À voir".
- * Lets desktop users mark "+1 Vu" directly from any page without opening a modal,
- * while preserving the complete existing PC interface.
+ * Universal Quick Access Drawer (Mobile & Desktop) for Today / Week Episodes:
+ * Mark "+1 Vu" or "-1 Pas vu" directly from any page in 1 tap without leaving your view.
  */
 export function QuickEpisodesPopover() {
-  const { library, hydrated, incrementProgress } = useShiori();
-  const { t } = useTranslation();
+  const { library, hydrated, incrementProgress, contentLanguage } = useShiori();
+  const { t, locale } = useTranslation();
+  const copy = getSettingsCopy(contentLanguage).quickEp;
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"week" | "today">("week");
   const [loading, setLoading] = useState(false);
   const [airingItems, setAiringItems] = useState<WatchingAiringItem[]>([]);
   const [flashId, setFlashId] = useState<number | null>(null);
@@ -136,7 +156,6 @@ export function QuickEpisodesPopover() {
     return map;
   }, [airingItems]);
 
-  // Build prioritized quick-watch rows: unwatched aired episodes first, then remaining Watching anime
   const quickRows = useMemo(() => {
     return watchingAnime
       .map((entry) => {
@@ -145,6 +164,9 @@ export function QuickEpisodesPopover() {
         const behindCount =
           latestAiredEpisode > 0 ? Math.max(0, latestAiredEpisode - entry.progress) : 0;
         const hasNewAired = behindCount > 0;
+        const isToday =
+          isSameLocalDay(live?.latestAiredAt ?? null) ||
+          isSameLocalDay(live?.nextAiringEpisode?.airingAt ?? null);
 
         return {
           entry,
@@ -152,10 +174,12 @@ export function QuickEpisodesPopover() {
           latestAiredAt: live?.latestAiredAt ?? null,
           behindCount,
           hasNewAired,
+          isToday,
         };
       })
       .sort((a, b) => {
         if (a.hasNewAired !== b.hasNewAired) return a.hasNewAired ? -1 : 1;
+        if (a.isToday !== b.isToday) return a.isToday ? -1 : 1;
         if (a.hasNewAired && b.hasNewAired) {
           return (b.latestAiredAt ?? 0) - (a.latestAiredAt ?? 0);
         }
@@ -165,30 +189,34 @@ export function QuickEpisodesPopover() {
       });
   }, [watchingAnime, airingById]);
 
+  const todayRows = useMemo(() => quickRows.filter((r) => r.isToday), [quickRows]);
+  const visibleRows = tab === "today" ? todayRows : quickRows;
+
   const unwatchedAiredCount = useMemo(
     () => quickRows.filter((r) => r.hasNewAired).length,
     [quickRows]
   );
 
-  const handleQuickPlusOne = (mediaId: number) => {
-    incrementProgress(mediaId, 1);
+  const handleStep = (mediaId: number, delta: 1 | -1) => {
+    incrementProgress(mediaId, delta);
     setFlashId(mediaId);
-    setTimeout(() => setFlashId((prev) => (prev === mediaId ? null : prev)), 650);
+    setTimeout(() => setFlashId((prev) => (prev === mediaId ? null : prev)), 620);
   };
 
   return (
-    <div className="hidden md:block relative" ref={containerRef}>
-      <button
+    <div className="relative" ref={containerRef}>
+      <motion.button
         type="button"
+        whileTap={{ scale: 0.93 }}
         onClick={() => setOpen((v) => !v)}
-        aria-label="Accès rapide aux épisodes de la semaine et animés à voir"
+        aria-label={copy.title}
         aria-expanded={open}
-        title="Épisodes de la semaine / À voir (+1 Vu rapide)"
+        title={copy.title}
         className={cn(
-          "relative flex items-center justify-center gap-1.5 h-9 px-2 xl:px-2.5 rounded-full border text-xs font-medium transition-all cursor-pointer shrink-0",
+          "relative flex items-center justify-center gap-1.5 h-8.5 sm:h-9 px-2 xl:px-2.5 rounded-full border text-xs font-medium transition-all cursor-pointer shrink-0",
           open
-            ? "bg-accent/20 border-accent/55 text-white"
-            : "bg-white/[0.045] hover:bg-white/[0.1] border-white/[0.09] hover:border-white/[0.18] text-[#CFD3E2] hover:text-white"
+            ? "bg-accent/22 border-accent/60 text-white shadow-[0_0_16px_rgb(var(--shiori-accent-rgb)/0.35)]"
+            : "bg-white/[0.05] hover:bg-white/[0.1] border-white/[0.09] hover:border-white/[0.2] text-[#CFD3E2] hover:text-white"
         )}
       >
         <ListChecks className="w-3.5 h-3.5 text-accent-soft shrink-0" />
@@ -198,61 +226,97 @@ export function QuickEpisodesPopover() {
             className={cn(
               "min-w-[17px] h-[17px] px-1 rounded-full font-mono text-[10px] font-bold flex items-center justify-center",
               unwatchedAiredCount > 0
-                ? "bg-accent text-accent-fg shadow-[0_0_10px_rgba(229,72,77,0.6)]"
-                : "bg-white/[0.1] text-[#D8DBE8]"
+                ? "bg-accent text-accent-fg shadow-[0_0_10px_rgb(var(--shiori-accent-rgb)/0.65)]"
+                : "bg-white/[0.11] text-[#D8DBE8]"
             )}
           >
             {unwatchedAiredCount > 0 ? unwatchedAiredCount : watchingAnime.length}
           </span>
         )}
-      </button>
+      </motion.button>
 
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.97 }}
+            initial={{ opacity: 0, y: 10, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.97 }}
-            transition={{ duration: 0.16 }}
-            className="absolute right-0 top-full mt-2.5 w-[395px] max-w-[calc(100vw-1.5rem)] rounded-2xl bg-surface-solid border border-white/[0.13] shadow-[0_28px_72px_rgba(0,0,0,0.92)] overflow-hidden z-50"
+            transition={{ type: "spring", stiffness: 420, damping: 32 }}
+            className="fixed inset-x-3 top-[calc(3.85rem+env(safe-area-inset-top))] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2.5 sm:w-[410px] max-w-[calc(100vw-1.5rem)] rounded-2xl bg-surface-solid/98 backdrop-blur-2xl border border-white/[0.14] shadow-[0_28px_72px_rgba(0,0,0,0.92)] overflow-hidden z-50"
           >
-            {/* Header */}
-            <div className="px-4 py-3 border-b border-white/[0.08] bg-surface-solid-header flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Flame className="w-3.5 h-3.5 text-accent" />
-                  <span>{t("episodes.quickHeader")}</span>
-                </p>
-                <p className="text-[11px] text-[#8A8FA4] mt-0.5">
-                  {unwatchedAiredCount > 0
-                    ? `${unwatchedAiredCount} nouvel épisode sorti à cocher en 1 clic`
-                    : `${watchingAnime.length} anime${watchingAnime.length > 1 ? "s" : ""} en cours`}
-                </p>
+            {/* Header + Day / Week Switch */}
+            <div className="px-4 py-3 border-b border-white/[0.08] bg-surface-solid-header space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Flame className="w-3.5 h-3.5 text-accent" />
+                    <span>{t("episodes.quickHeader")}</span>
+                  </p>
+                  <p className="text-[11px] text-[#8A8FA4] mt-0.5">
+                    {unwatchedAiredCount > 0
+                      ? `${unwatchedAiredCount} ${copy.newToCheck}`
+                      : `${watchingAnime.length} ${copy.inProgressUnit}`}
+                  </p>
+                </div>
+                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent shrink-0" />}
               </div>
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent shrink-0" />}
+
+              <div className="grid grid-cols-2 gap-1 p-0.5 rounded-xl bg-obsidian/80 border border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setTab("today")}
+                  className={cn(
+                    "py-1.5 rounded-lg text-[11.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                    tab === "today"
+                      ? "bg-accent text-accent-fg shadow-sm"
+                      : "text-[#9A9EAE] hover:text-white"
+                  )}
+                >
+                  <Sun className="w-3 h-3" />
+                  <span>
+                    {copy.today} ({todayRows.length})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("week")}
+                  className={cn(
+                    "py-1.5 rounded-lg text-[11.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                    tab === "week"
+                      ? "bg-accent text-accent-fg shadow-sm"
+                      : "text-[#9A9EAE] hover:text-white"
+                  )}
+                >
+                  <CalendarRange className="w-3 h-3" />
+                  <span>
+                    {copy.week} ({quickRows.length})
+                  </span>
+                </button>
+              </div>
             </div>
 
-            {/* Direct +1 Vu List */}
-            <div className="max-h-[380px] overflow-y-auto overscroll-contain p-2 space-y-1.5">
-              {quickRows.length === 0 ? (
+            {/* Direct -1 / +1 Vu List */}
+            <div className="max-h-[58dvh] sm:max-h-[380px] overflow-y-auto overscroll-contain p-2 space-y-1.5">
+              {visibleRows.length === 0 ? (
                 <div className="py-8 px-4 text-center space-y-2">
                   <Tv className="w-7 h-7 text-[#6E7387] mx-auto" />
                   <p className="text-xs font-medium text-[#CFD3E2]">
-                    Aucun anime en cours pour le moment.
+                    {tab === "today" ? copy.noTodayPopover : copy.noWatchingPopover}
                   </p>
                   <Link
                     href="/episodes"
                     onClick={() => setOpen(false)}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-accent-soft hover:text-white"
                   >
-                    <span>Explorer les sorties de la semaine</span>
+                    <span>{copy.exploreWeek}</span>
                     <ArrowRight className="w-3 h-3" />
                   </Link>
                 </div>
               ) : (
-                quickRows.slice(0, 8).map((row) => {
+                visibleRows.slice(0, 10).map((row) => {
                   const e = row.entry;
                   const canInc = !e.totalUnits || e.progress < e.totalUnits;
+                  const canDec = e.progress > 0;
                   const isFlashing = flashId === e.mediaId;
 
                   return (
@@ -261,9 +325,9 @@ export function QuickEpisodesPopover() {
                       className={cn(
                         "p-2 rounded-xl border flex items-center gap-2.5 transition-all",
                         row.hasNewAired
-                          ? "bg-accent/[0.07] border-accent/35"
+                          ? "bg-accent/[0.08] border-accent/38"
                           : "bg-obsidian/65 border-white/[0.07] hover:border-white/[0.15]",
-                        isFlashing && "ring-2 ring-emerald-400/70"
+                        isFlashing && "ring-2 ring-emerald-400/75"
                       )}
                     >
                       <Link
@@ -291,37 +355,56 @@ export function QuickEpisodesPopover() {
                         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                           {row.hasNewAired ? (
                             <span className="px-1.5 py-0.2 rounded bg-accent/20 border border-accent/40 font-mono text-[10px] font-bold text-accent-soft">
-                              Ép. {row.latestAiredEpisode} sorti
+                              {t("common.epShort")} {row.latestAiredEpisode} {copy.epOut}
                             </span>
                           ) : (
                             <span className="font-mono text-[10px] text-[#8E93A6]">
-                              {formatShortBroadcastDay(row.latestAiredAt)}
+                              {formatShortBroadcastDay(
+                                row.latestAiredAt,
+                                locale,
+                                copy.today,
+                                t("home.inProgress")
+                              )}
                             </span>
                           )}
-                          <span className="font-mono text-[10.5px] text-white/80">
-                            Ép. {e.progress}
+                          <span className="font-mono text-[10.5px] text-white/85">
+                            {t("common.epShort")} {e.progress}
                             {e.totalUnits ? `/${e.totalUnits}` : ""}
                           </span>
                         </div>
                       </div>
 
-                      {canInc ? (
-                        <motion.button
-                          type="button"
-                          whileTap={{ scale: 0.92 }}
-                          onClick={() => handleQuickPlusOne(e.mediaId)}
-                          aria-label={`Marquer +1 épisode vu pour ${e.title}`}
-                          className="shrink-0 h-8.5 px-3 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-[11.5px] font-bold inline-flex items-center gap-1 shadow-[0_6px_16px_rgba(229,72,77,0.35)] transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
-                          <span>{t("episodes.markWatched")}</span>
-                        </motion.button>
-                      ) : (
-                        <span className="shrink-0 h-8 px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-[11px] font-semibold inline-flex items-center gap-1">
-                          <Check className="w-3.5 h-3.5" />
-                          <span>{t("home.completed")}</span>
-                        </span>
-                      )}
+                      <div className="shrink-0 flex items-center gap-1">
+                        {canDec && (
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleStep(e.mediaId, -1)}
+                            title={`${copy.notWatched} (-1)`}
+                            aria-label={`${copy.notWatched} (-1) · ${e.title}`}
+                            className="w-7.5 h-8.5 rounded-lg bg-white/[0.05] hover:bg-rose-500/20 border border-white/[0.09] hover:border-rose-400/40 text-[#9A9EAE] hover:text-rose-200 flex items-center justify-center transition-colors cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </motion.button>
+                        )}
+                        {canInc ? (
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
+                            onClick={() => handleStep(e.mediaId, 1)}
+                            aria-label={`+1 ${copy.watched} · ${e.title}`}
+                            className="h-8.5 px-2.5 sm:px-3 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-[11.5px] font-bold inline-flex items-center gap-1 shadow-[0_6px_16px_rgb(var(--shiori-accent-rgb)/0.38)] transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5 stroke-[2.8]" />
+                            <span>{t("episodes.markWatched")}</span>
+                          </motion.button>
+                        ) : (
+                          <span className="h-8 px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-[11px] font-semibold inline-flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{t("home.completed")}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -333,7 +416,7 @@ export function QuickEpisodesPopover() {
               <Link
                 href="/episodes"
                 onClick={() => setOpen(false)}
-                className="w-full py-2 px-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.08] text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full py-2.5 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors"
               >
                 <span>{t("episodes.seeFullWeek")}</span>
                 <ArrowRight className="w-3.5 h-3.5 text-accent-soft" />

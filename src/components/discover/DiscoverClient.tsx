@@ -72,16 +72,18 @@ import {
   normalizeGenreMinRanks,
   serializeGenreMinRanks,
 } from "@/lib/genre-intensity";
+import {
+  getYearEraOptions,
+  getYearFilterCopy,
+  getYearFilterLabel,
+  parseYearFilter,
+} from "@/lib/year-eras";
 import { cn } from "@/lib/utils";
 import type { MediaItem, MediaType } from "@/types/media";
 
-const YEAR_OPTIONS: LuxurySelectOption[] = [
-  { id: "ALL", label: "Toutes années" },
-  ...Array.from({ length: 42 }, (_, i) => {
-    const y = String(2026 - i);
-    return { id: y, label: y };
-  }),
-];
+const INDIVIDUAL_YEARS: string[] = Array.from({ length: 47 }, (_, i) =>
+  String(2026 - i)
+);
 
 const ANIME_FORMATS: LuxurySelectOption[] = [
   { id: "ALL", label: "Tous formats", icon: Layers },
@@ -175,8 +177,25 @@ interface DiscoverClientProps {
 export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientProps) {
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
-  const { library } = useShiori();
+  const { library, contentLanguage } = useShiori();
   const { t, tGenre } = useTranslation();
+
+  const yearCopy = useMemo(() => getYearFilterCopy(contentLanguage), [contentLanguage]);
+  const yearEraOptions = useMemo(() => getYearEraOptions(contentLanguage), [contentLanguage]);
+  const yearSelectOptions = useMemo<LuxurySelectOption[]>(() => {
+    return [
+      { id: "ALL", label: yearCopy.allLabel },
+      { id: "__eras_header__", label: yearCopy.erasGroupLabel, groupHeader: true },
+      ...yearEraOptions.map((era) => ({
+        id: era.id,
+        label: era.label,
+        hint: era.hint,
+        colSpan: 2 as const,
+      })),
+      { id: "__years_header__", label: yearCopy.yearsGroupLabel, groupHeader: true },
+      ...INDIVIDUAL_YEARS.map((y) => ({ id: y, label: y })),
+    ];
+  }, [yearCopy, yearEraOptions]);
 
   // Compute initial state synchronously from URL params when present (Back button & deep links)
   const initialStateRef = useRef<PersistedDiscoverState | null>(null);
@@ -212,6 +231,14 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
   // Structured Luxury Dropdown Filters
   const [year, setYear] = useState(init.year);
+  const [customYearFrom, setCustomYearFrom] = useState(() => {
+    const p = parseYearFilter(init.year);
+    return p?.minYear ? String(p.minYear) : "";
+  });
+  const [customYearTo, setCustomYearTo] = useState(() => {
+    const p = parseYearFilter(init.year);
+    return p?.maxYear ? String(p.maxYear) : "";
+  });
   const [season, setSeason] = useState(init.season);
   const [format, setFormat] = useState(init.format);
   const [status, setStatus] = useState(init.status);
@@ -256,6 +283,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     setActiveCategory(next.activeCategory);
     setSituationGroup(next.situationGroup);
     setYear(next.year);
+    const parsedInitYear = parseYearFilter(next.year);
+    setCustomYearFrom(parsedInitYear?.minYear ? String(parsedInitYear.minYear) : "");
+    setCustomYearTo(parsedInitYear?.maxYear ? String(parsedInitYear.maxYear) : "");
     setSeason(next.season);
     setFormat(next.format);
     setStatus(next.status);
@@ -1004,6 +1034,42 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     if (mood.sort) setSort(mood.sort);
   };
 
+  const applyYearSelection = useCallback((nextYear: string) => {
+    setYear(nextYear);
+    const parsed = parseYearFilter(nextYear);
+    if (!parsed || parsed.exactYear !== undefined) {
+      setCustomYearFrom("");
+      setCustomYearTo("");
+    } else {
+      setCustomYearFrom(parsed.minYear ? String(parsed.minYear) : "");
+      setCustomYearTo(parsed.maxYear ? String(parsed.maxYear) : "");
+    }
+  }, []);
+
+  const handleCustomYearInput = useCallback((fromVal: string, toVal: string) => {
+    const cleanFrom = fromVal.replace(/[^\d]/g, "").slice(0, 4);
+    const cleanTo = toVal.replace(/[^\d]/g, "").slice(0, 4);
+    setCustomYearFrom(cleanFrom);
+    setCustomYearTo(cleanTo);
+
+    const fromValid = cleanFrom.length === 4 ? Number(cleanFrom) : null;
+    const toValid = cleanTo.length === 4 ? Number(cleanTo) : null;
+
+    if (!cleanFrom && !cleanTo) {
+      setYear("ALL");
+      return;
+    }
+    if (fromValid && toValid) {
+      const a = Math.min(fromValid, toValid);
+      const b = Math.max(fromValid, toValid);
+      setYear(a === b ? String(a) : `${a}-${b}`);
+    } else if (fromValid && !cleanTo) {
+      setYear(`${fromValid}+`);
+    } else if (toValid && !cleanFrom) {
+      setYear(`-${toValid}`);
+    }
+  }, []);
+
   const resetAll = () => {
     setSearch("");
     setDebouncedSearch("");
@@ -1014,6 +1080,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     setSelectedTags([]);
     setTagSearch("");
     setYear("ALL");
+    setCustomYearFrom("");
+    setCustomYearTo("");
     setSeason("ALL");
     setFormat("ALL");
     setStatus("ALL");
@@ -1274,7 +1342,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5">
           <button
             type="button"
             onClick={() => {
@@ -1459,10 +1527,10 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     icon={Layers}
                   />
                   <LuxurySelect
-                    label="Année"
+                    label={yearCopy.sectionTitle}
                     value={year}
-                    onChange={setYear}
-                    options={YEAR_OPTIONS}
+                    onChange={applyYearSelection}
+                    options={yearSelectOptions}
                     icon={Calendar}
                     columns={4}
                   />
@@ -1490,6 +1558,74 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     icon={Star}
                     align="right"
                   />
+                </div>
+
+                {/* Era & Year Range Category Pills (2020-2026, 2010-2019, 2000-2010, 90s, 80s, <1980 + custom range) */}
+                <div className="rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3.5 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-accent" />
+                      <span>{yearCopy.sectionTitle}</span>
+                    </span>
+
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={customYearFrom}
+                        onChange={(e) => handleCustomYearInput(e.target.value, customYearTo)}
+                        placeholder={yearCopy.fromPlaceholder}
+                        aria-label={yearCopy.fromPlaceholder}
+                        className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                      />
+                      <span className="text-[#656A7E]">{yearCopy.toConnector}</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={4}
+                        value={customYearTo}
+                        onChange={(e) => handleCustomYearInput(customYearFrom, e.target.value)}
+                        placeholder={yearCopy.toPlaceholder}
+                        aria-label={yearCopy.toPlaceholder}
+                        className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5 sm:flex-wrap sm:overflow-visible sm:pb-0">
+                    <button
+                      type="button"
+                      onClick={() => applyYearSelection("ALL")}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 transition-all cursor-pointer",
+                        year === "ALL"
+                          ? "bg-accent border-accent text-accent-fg shadow-accent"
+                          : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                      )}
+                    >
+                      {yearCopy.allShort}
+                    </button>
+                    {yearEraOptions.map((era) => {
+                      const active = year === era.id;
+                      return (
+                        <button
+                          key={era.id}
+                          type="button"
+                          title={era.hint}
+                          onClick={() => applyYearSelection(active ? "ALL" : era.id)}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 transition-all cursor-pointer",
+                            active
+                              ? "bg-accent border-accent text-accent-fg shadow-accent"
+                              : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                          )}
+                        >
+                          {era.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Quick Tactile Bar: Episode/Chapter Length + Score Filter */}
@@ -1613,7 +1749,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 <div className="rounded-2xl bg-[#090B12]/90 border border-white/[0.07] p-4 space-y-4">
                   {/* Category Tabs + Quick Tag Search */}
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    <div className="flex items-center gap-1 overflow-x-auto no-scrollbar p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <div className="flex items-center gap-1 overflow-x-auto touch-rail no-scrollbar p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                       {FILTER_CATEGORIES.map((cat) => {
                         const isActive = activeCategory === cat.id && !tagSearchTrimmed;
                         const count = categoryCounts[cat.id];
@@ -1681,7 +1817,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     </p>
 
                     {!tagSearchTrimmed && activeCategory === "situations" && (
-                      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                      <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5">
                         {SITUATION_GROUPS.map((grp) => {
                           const isGrpActive = situationGroup === grp.id;
                           const grpCount =
@@ -1894,8 +2030,13 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
               {year !== "ALL" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs font-mono text-white">
-                  <span>{year}</span>
-                  <button type="button" onClick={() => setYear("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
+                  <Calendar className="w-3 h-3 text-accent-soft" />
+                  <span>{getYearFilterLabel(year, contentLanguage)}</span>
+                  <button
+                    type="button"
+                    onClick={() => applyYearSelection("ALL")}
+                    className="text-[#9A9EAE] hover:text-white cursor-pointer"
+                  >
                     <X className="w-3 h-3" />
                   </button>
                 </span>

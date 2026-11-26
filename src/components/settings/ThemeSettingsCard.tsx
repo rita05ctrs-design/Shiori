@@ -14,6 +14,8 @@ import {
   Star,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
+import { getSettingsCopy, getThemePresetSubtitle } from "@/lib/settings-translations";
 import {
   CORNER_OPTIONS,
   CUSTOM_ACCENT_SWATCHES,
@@ -23,11 +25,12 @@ import {
   SURFACE_OPTIONS,
   THEME_PRESETS,
 } from "@/lib/theme";
-import { AMBIANCE_OPTIONS } from "@/components/settings/AmbianceSettingsCard";
 import { cn } from "@/lib/utils";
 
 export function ThemeSettingsCard() {
-  const { theme, updateTheme, applyThemePreset, resetTheme, toast } = useShiori();
+  const { theme, updateTheme, applyThemePreset, resetTheme, contentLanguage, toast } = useShiori();
+  const { t, tStatus } = useTranslation();
+  const copy = getSettingsCopy(contentLanguage).theme;
   const [hexDraft, setHexDraft] = useState(theme.accentColor);
 
   useEffect(() => {
@@ -38,14 +41,9 @@ export function ThemeSettingsCard() {
     const preset = THEME_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     applyThemePreset(presetId);
-    const particleLabel = AMBIANCE_OPTIONS.find(
-      (o) => o.id === preset.suggestedEffect
-    )?.label;
     toast({
-      title: `Thème « ${preset.name} » activé`,
-      description: theme.syncParticles && particleLabel
-        ? `Palette appliquée + ambiance « ${particleLabel} » accordée.`
-        : "Toute l'interface Shiori a été harmonisée en direct.",
+      title: `${copy.toastPresetActivated} · ${preset.name}`,
+      description: theme.syncParticles ? copy.toastPresetSynced : copy.toastPresetApplied,
     });
   };
 
@@ -60,8 +58,8 @@ export function ThemeSettingsCard() {
   const handleReset = () => {
     resetTheme();
     toast({
-      title: "Apparence réinitialisée",
-      description: "Retour au thème signature Akane Crimson sur Obsidienne.",
+      title: copy.toastResetTitle,
+      description: copy.toastResetDesc,
     });
   };
 
@@ -77,10 +75,10 @@ export function ThemeSettingsCard() {
         <div>
           <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
             <Palette className="w-4 h-4 text-accent" />
-            <span>Thème & Couleurs</span>
+            <span>{copy.title}</span>
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-0.5">
-            Choisissez un thème prêt à l&apos;emploi ou personnalisez les couleurs et le fond.
+            {copy.subtitle}
           </p>
         </div>
 
@@ -90,7 +88,7 @@ export function ThemeSettingsCard() {
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] text-xs font-medium text-[#C8CCE0] hover:text-white transition-colors cursor-pointer self-start sm:self-auto shrink-0"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span>Par défaut</span>
+          <span>{copy.defaultBtn}</span>
         </button>
       </div>
 
@@ -149,13 +147,13 @@ export function ThemeSettingsCard() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-white">
-                Aperçu actif :{" "}
+                {copy.activePreview}{" "}
                 <span className="text-accent-soft">
-                  {activePreset ? activePreset.name : `Personnalisé (${theme.accentColor})`}
+                  {activePreset ? activePreset.name : `${copy.customLabel} (${theme.accentColor})`}
                 </span>
               </span>
               <span className="px-2 py-0.5 rounded-md bg-accent/18 border border-accent/35 font-mono text-[10px] font-semibold text-accent-soft">
-                Ép. 12
+                {t("common.epShort")} 12
               </span>
               <span className="inline-flex items-center gap-1 font-mono text-[11px] text-kinpaku">
                 <Star className="w-3 h-3 fill-current" />
@@ -177,10 +175,10 @@ export function ThemeSettingsCard() {
         <div className="relative z-10 flex items-center gap-2 shrink-0">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-accent/16 border border-accent/35 text-accent-soft text-[11px] font-semibold">
             <Bookmark className="w-3.5 h-3.5" />
-            Watching
+            {tStatus("WATCHING", "ANIME")}
           </span>
           <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-accent text-accent-fg text-[11px] font-semibold shadow-accent">
-            Bouton principal
+            {copy.primaryBtn}
           </span>
         </div>
       </div>
@@ -189,12 +187,12 @@ export function ThemeSettingsCard() {
       <div className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <p className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE]">
-            1. Thèmes Signature (1 clic)
+            {copy.presetsHeading}
           </p>
           {/* Auto-sync particles toggle */}
           <label className="inline-flex items-center gap-2 text-xs text-[#B6BACB] cursor-pointer select-none">
             <Wand2 className="w-3.5 h-3.5 text-kinpaku" />
-            <span>Accorder les particules au thème</span>
+            <span>{copy.syncParticles}</span>
             <button
               type="button"
               role="switch"
@@ -264,7 +262,7 @@ export function ThemeSettingsCard() {
 
                 <p className="text-xs font-semibold text-white truncate">{preset.name}</p>
                 <p className="text-[11px] text-[#858A9E] mt-0.5 line-clamp-1">
-                  {preset.subtitle}
+                  {getThemePresetSubtitle(preset.id, contentLanguage, preset.subtitle)}
                 </p>
               </button>
             );
@@ -278,9 +276,9 @@ export function ThemeSettingsCard() {
         <div className="p-4 rounded-xl bg-obsidian/65 border border-white/[0.07] space-y-3.5">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="text-xs font-semibold text-white">Couleur d&apos;accent principale</p>
+              <p className="text-xs font-semibold text-white">{copy.primaryAccentTitle}</p>
               <p className="text-[11px] text-[#808599]">
-                Boutons, badges, logo 栞, liens actifs et sélection.
+                {copy.primaryAccentDesc}
               </p>
             </div>
             {/* Color wheel + hex input */}
@@ -343,10 +341,10 @@ export function ThemeSettingsCard() {
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-xs font-semibold text-white">
-                Teinte secondaire (Reflets & Étoiles)
+                {copy.secondaryTitle}
               </p>
               <p className="text-[11px] text-[#808599]">
-                Notes, halo d&apos;arrière-plan et dégradé de barre de défilement.
+                {copy.secondaryDesc}
               </p>
             </div>
             <label
@@ -398,7 +396,7 @@ export function ThemeSettingsCard() {
       <div className="pt-5 border-t border-white/[0.07] space-y-3">
         <p className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
           <Layers className="w-3.5 h-3.5 text-accent" />
-          <span>2. Ambiance de fond & Surfaces</span>
+          <span>{copy.surfacesHeading}</span>
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
@@ -441,9 +439,11 @@ export function ThemeSettingsCard() {
                 </div>
                 <div>
                   <p className="text-[11.5px] font-semibold text-white truncate">
-                    {surf.label}
+                    {copy.surfaces[surf.id].label}
                   </p>
-                  <p className="text-[10px] text-[#808599] truncate">{surf.desc}</p>
+                  <p className="text-[10px] text-[#808599] truncate">
+                    {copy.surfaces[surf.id].desc}
+                  </p>
                 </div>
               </button>
             );
@@ -457,7 +457,7 @@ export function ThemeSettingsCard() {
         <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-obsidian/65 border border-white/[0.07]">
           <span className="text-xs font-medium text-[#C6CAD8] flex items-center gap-2">
             <Square className="w-3.5 h-3.5 text-accent" />
-            <span>Arrondis</span>
+            <span>{copy.corners}</span>
           </span>
           <div className="inline-flex items-center p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07]">
             {CORNER_OPTIONS.map((c) => (
@@ -472,7 +472,7 @@ export function ThemeSettingsCard() {
                     : "text-[#8E93A6] hover:text-white"
                 )}
               >
-                {c.label}
+                {copy.cornersMap[c.id]}
               </button>
             ))}
           </div>
@@ -482,7 +482,7 @@ export function ThemeSettingsCard() {
         <div className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-obsidian/65 border border-white/[0.07]">
           <span className="text-xs font-medium text-[#C6CAD8] flex items-center gap-2">
             <SunMedium className="w-3.5 h-3.5 text-kinpaku" />
-            <span>Halo lumineux</span>
+            <span>{copy.glow}</span>
           </span>
           <div className="inline-flex items-center p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07]">
             {GLOW_OPTIONS.map((g) => (
@@ -497,7 +497,7 @@ export function ThemeSettingsCard() {
                     : "text-[#8E93A6] hover:text-white"
                 )}
               >
-                {g.label}
+                {copy.glowMap[g.id]}
               </button>
             ))}
           </div>
@@ -508,8 +508,9 @@ export function ThemeSettingsCard() {
       <p className="text-[11px] text-[#7D8296] flex items-center gap-1.5">
         <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
         <span>
-          Astuce : vous pouvez aussi changer de thème à tout moment depuis l&apos;icône{" "}
-          <strong className="text-[#C8CCE0]">Palette</strong> dans la barre de navigation.
+          {copy.tipPrefix}{" "}
+          <strong className="text-[#C8CCE0]">{copy.tipPalette}</strong>{" "}
+          {copy.tipSuffix}
         </span>
       </p>
     </section>

@@ -142,12 +142,12 @@ export default function RootLayout({
     <html
       lang="fr"
       suppressHydrationWarning
-      className={`${plusJakarta.variable} ${cormorant.variable} ${jetbrainsMono.variable} dark overflow-x-hidden`}
+      className={`${plusJakarta.variable} ${cormorant.variable} ${jetbrainsMono.variable} dark overflow-x-clip`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
-      <body className="font-sans antialiased bg-obsidian text-[#F4F3EE] min-h-screen flex flex-col overflow-x-hidden">
+      <body className="font-sans antialiased bg-obsidian text-[#F4F3EE] min-h-screen flex flex-col overflow-x-clip">
         <ShioriProvider>
           <MotionRoot>
             <Navbar />

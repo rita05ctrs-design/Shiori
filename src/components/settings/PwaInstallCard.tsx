@@ -4,10 +4,12 @@ import React, { useState } from "react";
 import { CheckCircle2, Download, Laptop, Share, Smartphone } from "lucide-react";
 import { usePwaInstall } from "@/components/pwa/PwaRegistrar";
 import { useShiori } from "@/context/ShioriContext";
+import { getSettingsCopy } from "@/lib/settings-translations";
 
 export function PwaInstallCard() {
   const { canInstall, isStandalone, isIos, triggerInstall } = usePwaInstall();
-  const { toast } = useShiori();
+  const { contentLanguage, toast } = useShiori();
+  const copy = getSettingsCopy(contentLanguage).pwa;
   const [installing, setInstalling] = useState(false);
 
   const handleInstall = async () => {
@@ -16,8 +18,8 @@ export function PwaInstallCard() {
       const outcome = await triggerInstall();
       if (outcome === "accepted") {
         toast({
-          title: "Shiori installé !",
-          description: "Vous pouvez désormais lancer Shiori depuis votre écran d'accueil ou bureau.",
+          title: copy.installed,
+          description: copy.subtitle,
           variant: "success",
           celebrate: true,
         });
@@ -39,10 +41,10 @@ export function PwaInstallCard() {
           </div>
           <div>
             <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <span>Installer Shiori sur votre appareil</span>
+              <span>{copy.title}</span>
             </h2>
             <p className="text-xs text-[#858A9E] mt-0.5 max-w-xl">
-              Ajoutez Shiori à votre écran d&apos;accueil ou bureau pour un accès direct en plein écran.
+              {copy.subtitle}
             </p>
           </div>
         </div>
@@ -50,7 +52,7 @@ export function PwaInstallCard() {
         {isStandalone ? (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-xs font-semibold text-emerald-300 shrink-0 self-start sm:self-auto">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Installée</span>
+            <span>{copy.installed}</span>
           </span>
         ) : canInstall ? (
           <button
@@ -60,12 +62,12 @@ export function PwaInstallCard() {
             className="h-9 px-4 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{installing ? "Installation..." : "Installer Shiori"}</span>
+            <span>{installing ? copy.installing : copy.installBtn}</span>
           </button>
         ) : (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] border border-white/[0.1] text-xs text-[#B8BCCB] shrink-0 self-start sm:self-auto">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Disponible</span>
+            <span>{copy.available}</span>
           </span>
         )}
       </div>
@@ -74,9 +76,9 @@ export function PwaInstallCard() {
         <div className="p-3.5 rounded-xl bg-obsidian/70 border border-white/[0.07] flex items-start gap-2.5">
           <Laptop className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-white">Desktop (Chrome, Edge, Brave)</p>
+            <p className="font-semibold text-white">{copy.desktopTitle}</p>
             <p className="text-[#8E93A6] mt-0.5 leading-relaxed">
-              Cliquez sur « Installer Shiori » ci-dessus ou sur l&apos;icône d&apos;installation dans la barre d&apos;adresse de votre navigateur.
+              {copy.desktopDesc}
             </p>
           </div>
         </div>
@@ -87,11 +89,9 @@ export function PwaInstallCard() {
             <Smartphone className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
           )}
           <div>
-            <p className="font-semibold text-white">Mobile (iOS Safari & Android)</p>
+            <p className="font-semibold text-white">{copy.mobileTitle}</p>
             <p className="text-[#8E93A6] mt-0.5 leading-relaxed">
-              Sur iOS Safari : touchez <strong>Partager</strong> puis{" "}
-              <strong>Sur l&apos;écran d&apos;accueil</strong>. Sur Android : menu{" "}
-              <strong>⋮ → Installer l&apos;application</strong>.
+              {copy.mobileDesc}
             </p>
           </div>
         </div>

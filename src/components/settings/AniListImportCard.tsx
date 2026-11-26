@@ -23,6 +23,8 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
+import { getSettingsCopy } from "@/lib/settings-translations";
 import { cn } from "@/lib/utils";
 import type { AniListImportResponse } from "@/types/media";
 
@@ -37,8 +39,11 @@ export function AniListImportCard() {
     refreshAniListStatus,
     disconnectAniList,
     profile,
+    contentLanguage,
     toast,
   } = useShiori();
+  const { t, locale } = useTranslation();
+  const copy = getSettingsCopy(contentLanguage).anilist;
 
   const [username, setUsername] = useState(
     anilistConnection.user?.name ?? anilistStats?.anilistUsername ?? ""
@@ -176,10 +181,10 @@ export function AniListImportCard() {
           <div>
             <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
               <ArrowLeftRight className="w-4 h-4 text-sky-400" />
-              <span>Synchronisation automatique AniList</span>
+              <span>{copy.syncTitle}</span>
             </h2>
             <p className="text-xs text-[#8A8FA4] mt-1 leading-relaxed max-w-2xl">
-              Reliez votre compte AniList pour synchroniser automatiquement vos ajouts, statuts, épisodes, chapitres, notes et favoris.
+              {copy.syncSub}
             </p>
           </div>
 
@@ -204,10 +209,10 @@ export function AniListImportCard() {
               )}
             />
             {anilistConnection.connected
-              ? "Connecté"
+              ? copy.connected
               : anilistConnection.configured
-                ? "Prêt à connecter"
-                : "Non configuré"}
+                ? copy.ready
+                : copy.notConfigured}
           </span>
         </div>
 
@@ -268,7 +273,7 @@ export function AniListImportCard() {
                     </span>
                   </div>
                   <div className="flex items-center gap-3 mt-0.5 text-[11px] text-[#8E93A6]">
-                    <span>ID AniList #{anilistConnection.user.id}</span>
+                    <span>AniList #{anilistConnection.user.id}</span>
                     {anilistConnection.user.siteUrl && (
                       <a
                         href={anilistConnection.user.siteUrl}
@@ -276,7 +281,7 @@ export function AniListImportCard() {
                         rel="noreferrer"
                         className="text-sky-400 hover:text-sky-300 inline-flex items-center gap-1"
                       >
-                        <span>Voir sur AniList</span>
+                        <span>{copy.viewOnAniList}</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
@@ -292,7 +297,7 @@ export function AniListImportCard() {
                   className="h-9 px-3.5 rounded-xl bg-sky-500/18 hover:bg-sky-500/28 border border-sky-400/40 text-sky-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-                  <span>Importer sa liste</span>
+                  <span>{copy.importListBtn}</span>
                 </button>
                 <button
                   type="button"
@@ -301,7 +306,7 @@ export function AniListImportCard() {
                   className="h-9 px-3.5 rounded-xl bg-rose-500/12 hover:bg-rose-500/22 border border-rose-500/30 text-rose-300 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <Unlink className="w-3.5 h-3.5" />
-                  <span>Dissocier</span>
+                  <span>{copy.disconnectBtn}</span>
                 </button>
               </div>
             </div>
@@ -310,10 +315,10 @@ export function AniListImportCard() {
             <div className="pt-3 border-t border-white/[0.07] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold text-white">
-                  Envoi automatique vers AniList
+                  {copy.autoSyncTitle}
                 </p>
                 <p className="text-[11px] text-[#858A9E]">
-                  Synchronise automatiquement vos ajouts, statuts, épisodes/chapitres (+1), notes et favoris.
+                  {copy.autoSyncDesc}
                 </p>
               </div>
               <button
@@ -346,12 +351,12 @@ export function AniListImportCard() {
                 )}
               >
                 <span className="truncate">
-                  {lastAniListSync.ok ? "✓ Envoyé sur AniList : " : "⚠ Erreur AniList : "}
+                  {lastAniListSync.ok ? "✓ AniList: " : "⚠ AniList: "}
                   <strong className="text-white">{lastAniListSync.title}</strong> —{" "}
                   {lastAniListSync.detail}
                 </span>
                 <span className="font-mono text-[10px] opacity-75 shrink-0">
-                  {new Date(lastAniListSync.at).toLocaleTimeString("fr-FR", {
+                  {new Date(lastAniListSync.at).toLocaleTimeString(locale, {
                     hour: "2-digit",
                     minute: "2-digit",
                     second: "2-digit",
@@ -364,13 +369,7 @@ export function AniListImportCard() {
           <div className="rounded-xl bg-obsidian/70 border border-white/[0.08] p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                {[
-                  "Ajout anime & manga",
-                  "Statut",
-                  "Épisodes / Chapitres",
-                  "Notes (/10)",
-                  "Favoris",
-                ].map((tag) => (
+                {copy.tags.map((tag) => (
                   <span
                     key={tag}
                     className="px-2 py-0.5 rounded-md bg-sky-500/12 border border-sky-400/25 text-sky-200 font-medium"
@@ -381,9 +380,7 @@ export function AniListImportCard() {
               </div>
               <p className="text-[11px] text-[#858A9E] flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>
-                  Connexion sécurisée et chiffrée côté serveur. Vous pouvez dissocier votre compte à tout moment.
-                </span>
+                <span>{copy.secureHint}</span>
               </p>
             </div>
 
@@ -392,7 +389,7 @@ export function AniListImportCard() {
               className="h-11 px-5 rounded-xl bg-gradient-to-r from-[#02A9FF] to-indigo-500 hover:from-[#29B8FF] hover:to-indigo-400 text-white text-xs font-semibold shadow-[0_10px_26px_rgba(2,169,255,0.32)] inline-flex items-center justify-center gap-2 transition-all shrink-0"
             >
               <Link2 className="w-4 h-4" />
-              <span>Connecter mon compte AniList</span>
+              <span>{copy.connectBtn}</span>
             </a>
           </div>
         )}
@@ -403,10 +400,10 @@ export function AniListImportCard() {
         <div>
           <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-            <span>Importer une liste AniList par pseudo</span>
+            <span>{copy.usernameImportTitle}</span>
           </h3>
           <p className="text-xs text-[#8A8FA4] mt-1 leading-relaxed">
-            Récupérez rapidement vos animés, mangas, notes et favoris depuis votre profil public AniList.
+            {copy.usernameImportSub}
           </p>
         </div>
 
@@ -419,7 +416,7 @@ export function AniListImportCard() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Nom d'utilisateur AniList (ex: hoh)"
+                placeholder={copy.usernamePlaceholder}
                 className="w-full h-11 pl-10 pr-4 rounded-xl bg-obsidian/80 border border-white/[0.1] text-sm text-white placeholder:text-[#63687D] focus:outline-none focus:border-sky-400/70"
               />
             </div>
@@ -434,12 +431,12 @@ export function AniListImportCard() {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Importation...</span>
+                  <span>{copy.importingBtn}</span>
                 </>
               ) : (
                 <>
                   <Download className="w-4 h-4 text-sky-400" />
-                  <span>Importer ce pseudo</span>
+                  <span>{copy.importUsernameBtn}</span>
                 </>
               )}
             </motion.button>
@@ -459,7 +456,7 @@ export function AniListImportCard() {
                 )}
               >
                 <Tv className="w-3.5 h-3.5" />
-                <span>Animes</span>
+                <span>{t("common.anime")}</span>
               </button>
               <button
                 type="button"
@@ -472,7 +469,7 @@ export function AniListImportCard() {
                 )}
               >
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Mangas</span>
+                <span>{t("common.manga")}</span>
               </button>
             </div>
 
@@ -488,7 +485,7 @@ export function AniListImportCard() {
                     : "text-[#8C91A6] hover:text-white"
                 )}
               >
-                Fusionner
+                {copy.merge}
               </button>
               <button
                 type="button"
@@ -500,7 +497,7 @@ export function AniListImportCard() {
                     : "text-[#8C91A6] hover:text-white"
                 )}
               >
-                Remplacer la liste
+                {copy.replaceList}
               </button>
             </div>
           </div>
@@ -570,7 +567,7 @@ export function AniListImportCard() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
                   <p className="text-[10px] font-mono uppercase text-[#7D8296] flex items-center gap-1">
-                    <Tv className="w-3 h-3 text-sky-400" /> Animes
+                    <Tv className="w-3 h-3 text-sky-400" /> {t("common.anime")}
                   </p>
                   <p className="text-base font-bold font-mono text-white mt-0.5">
                     {result.counts.anime}
@@ -578,7 +575,7 @@ export function AniListImportCard() {
                 </div>
                 <div className="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
                   <p className="text-[10px] font-mono uppercase text-[#7D8296] flex items-center gap-1">
-                    <BookOpen className="w-3 h-3 text-violet-400" /> Mangas
+                    <BookOpen className="w-3 h-3 text-violet-400" /> {t("common.manga")}
                   </p>
                   <p className="text-base font-bold font-mono text-white mt-0.5">
                     {result.counts.manga}
@@ -586,7 +583,7 @@ export function AniListImportCard() {
                 </div>
                 <div className="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
                   <p className="text-[10px] font-mono uppercase text-[#7D8296] flex items-center gap-1">
-                    <Heart className="w-3 h-3 text-accent-hover" /> Favoris
+                    <Heart className="w-3 h-3 text-accent-hover" /> {t("nav.favorites")}
                   </p>
                   <p className="text-base font-bold font-mono text-white mt-0.5">
                     {result.counts.favorites}
@@ -594,11 +591,11 @@ export function AniListImportCard() {
                 </div>
                 <div className="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
                   <p className="text-[10px] font-mono uppercase text-[#7D8296] flex items-center gap-1">
-                    <BarChart3 className="w-3 h-3 text-kinpaku" /> Ép. / Ch.
+                    <BarChart3 className="w-3 h-3 text-kinpaku" /> {t("common.epShort")} / {t("common.chShort")}
                   </p>
                   <p className="text-xs font-bold font-mono text-white mt-1 truncate">
-                    {result.statistics.anime.episodesWatched.toLocaleString("fr-FR")} /{" "}
-                    {result.statistics.manga.chaptersRead.toLocaleString("fr-FR")}
+                    {result.statistics.anime.episodesWatched.toLocaleString(locale)} /{" "}
+                    {result.statistics.manga.chaptersRead.toLocaleString(locale)}
                   </p>
                 </div>
               </div>
@@ -617,12 +614,12 @@ export function AniListImportCard() {
                 <Cloud className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>
                   {result.supabaseSync.authenticated && result.supabaseSync.statsSaved
-                    ? `Synchronisé dans Supabase : ${result.supabaseSync.entriesSaved} titres enregistrés dans library_entries + statistiques dans user_anilist_stats.`
+                    ? `Supabase: ${result.supabaseSync.entriesSaved} ${t("common.titles")}`
                     : result.supabaseSync.error
-                      ? `Importé dans Shiori, mais Supabase a renvoyé : ${result.supabaseSync.error} (vérifiez que supabase/schema.sql a bien été exécuté).`
+                      ? `Supabase: ${result.supabaseSync.error}`
                       : profile.mode === "supabase"
-                        ? "Synchronisation Supabase effectuée."
-                        : "Importé dans votre session locale. Connectez-vous à votre compte Supabase pour enregistrer automatiquement dans le cloud."}
+                        ? "Supabase synced."
+                        : t("nav.localMode")}
                 </span>
               </div>
 
@@ -631,13 +628,13 @@ export function AniListImportCard() {
                   href="/library"
                   className="font-semibold text-white hover:text-accent-soft transition-colors"
                 >
-                  Ouvrir ma bibliothèque →
+                  {copy.openLibrary}
                 </Link>
                 <Link
                   href="/stats"
                   className="font-semibold text-sky-400 hover:text-sky-300 transition-colors"
                 >
-                  Voir mes statistiques →
+                  {copy.viewStats}
                 </Link>
               </div>
             </motion.div>
@@ -656,13 +653,14 @@ export function AniListImportCard() {
                 />
               )}
               <span className="text-[#C6CAD8] truncate">
-                Dernier import :{" "}
+                {copy.lastImport}{" "}
                 <strong className="text-white">@{anilistStats.anilistUsername}</strong> (
-                {anilistStats.anime.count} animes · {anilistStats.manga.count} mangas)
+                {anilistStats.anime.count} {t("common.anime").toLowerCase()} ·{" "}
+                {anilistStats.manga.count} {t("common.manga").toLowerCase()})
               </span>
             </div>
             <Link href="/stats" className="text-sky-400 hover:text-sky-300 shrink-0 font-medium">
-              Stats →
+              {t("nav.stats")} →
             </Link>
           </div>
         )}

@@ -75,6 +75,12 @@ import {
   type PersistedLibraryState,
 } from "@/lib/filter-persistence";
 import { cn, formatFormat, getStatusLabel, STATUS_CONFIG } from "@/lib/utils";
+import {
+  getYearEraOptions,
+  getYearFilterCopy,
+  getYearFilterLabel,
+  matchesYearFilter,
+} from "@/lib/year-eras";
 import type { LibraryStatus, MediaType } from "@/types/media";
 
 type FilterTab = "ALL" | LibraryStatus;
@@ -167,9 +173,12 @@ function LibraryPageInner() {
     removeEntry,
     exportLibraryJson,
     setCommandOpen,
+    contentLanguage,
     toast,
   } = useShiori();
   const { t, tStatus, locale } = useTranslation();
+  const yearCopy = useMemo(() => getYearFilterCopy(contentLanguage), [contentLanguage]);
+  const yearEraOptions = useMemo(() => getYearEraOptions(contentLanguage), [contentLanguage]);
 
   const [filters, setFilters] = useState<LibraryFilterState>(DEFAULT_LIBRARY_FILTERS);
   const [sortBy, setSortBy] = useState<LibrarySortKey>("UPDATED");
@@ -408,8 +417,21 @@ function LibraryPageInner() {
         .map(([g, count]) => ({ id: g, label: g, count, icon: Tag })),
     ];
 
+    const eraDropdownOptions: LuxurySelectOption[] = yearEraOptions.map((era) => ({
+      id: era.id,
+      label: era.label,
+      hint: era.hint,
+      count: library.filter((e) => matchesYearFilter(e.seasonYear, era.id)).length,
+      colSpan: 2 as const,
+    }));
+
     const yearOptions: LuxurySelectOption[] = [
-      { id: "ALL", label: "Toutes les années" },
+      { id: "ALL", label: yearCopy.allLabel },
+      { id: "__eras_header__", label: yearCopy.erasGroupLabel, groupHeader: true },
+      ...eraDropdownOptions,
+      ...(years.size > 0
+        ? [{ id: "__years_header__", label: yearCopy.yearsGroupLabel, groupHeader: true }]
+        : []),
       ...Array.from(years)
         .sort((a, b) => b - a)
         .map((y) => ({ id: String(y), label: String(y) })),
@@ -456,7 +478,7 @@ function LibraryPageInner() {
       formatOptions,
       collectionOptions,
     };
-  }, [library, collections]);
+  }, [library, collections, yearCopy, yearEraOptions]);
 
   const activeAdvancedCount = useMemo(() => {
     let count = 0;
@@ -954,6 +976,47 @@ function LibraryPageInner() {
               </div>
             </div>
 
+            {/* Era & Year Categories Quick Pills */}
+            <div className="rounded-xl bg-obsidian/70 border border-white/[0.07] p-3.5 space-y-2.5">
+              <span className="text-[11px] font-medium text-[#9A9EAE] flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-accent" />
+                <span>{yearCopy.sectionTitle}</span>
+              </span>
+              <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5 sm:flex-wrap sm:overflow-visible sm:pb-0">
+                <button
+                  type="button"
+                  onClick={() => updateFilters({ year: "ALL" })}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 transition-all cursor-pointer",
+                    filters.year === "ALL"
+                      ? "bg-accent text-accent-fg border-accent shadow-accent"
+                      : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                  )}
+                >
+                  {yearCopy.allShort}
+                </button>
+                {yearEraOptions.map((era) => {
+                  const active = filters.year === era.id;
+                  return (
+                    <button
+                      key={era.id}
+                      type="button"
+                      title={era.hint}
+                      onClick={() => updateFilters({ year: active ? "ALL" : era.id })}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 transition-all cursor-pointer",
+                        active
+                          ? "bg-accent text-accent-fg border-accent shadow-accent"
+                          : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
+                      )}
+                    >
+                      {era.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Row 2: Custom Frosted Glass LuxurySelect Dropdowns (with counts, icons & search!) */}
             <div
               className={cn(
@@ -971,7 +1034,7 @@ function LibraryPageInner() {
               />
 
               <LuxurySelect
-                label="Année"
+                label={yearCopy.sectionTitle}
                 value={filters.year}
                 onChange={(val) => updateFilters({ year: val })}
                 options={filterOptions.yearOptions}
@@ -1048,7 +1111,8 @@ function LibraryPageInner() {
 
             {filters.year !== "ALL" && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.15] text-xs font-mono text-white">
-                <span>{filters.year}</span>
+                <Calendar className="w-3 h-3 text-accent-soft" />
+                <span>{getYearFilterLabel(filters.year, contentLanguage)}</span>
                 <button
                   type="button"
                   onClick={() => updateFilters({ year: "ALL" })}

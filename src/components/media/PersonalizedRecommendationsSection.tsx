@@ -210,7 +210,7 @@ export function PersonalizedRecommendationsSection() {
             ref={scrollRef}
             {...dragHandlers}
             className={cn(
-              "flex gap-4 sm:gap-5 overflow-x-auto overflow-y-hidden overscroll-x-contain no-scrollbar py-4 -my-3 -mx-1 px-1 select-none",
+              "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-4 -my-3 -mx-1 px-1 select-none",
               isDragging ? "cursor-grabbing" : "cursor-grab"
             )}
           >

@@ -13,6 +13,10 @@ export interface LuxurySelectOption {
   count?: number;
   icon?: React.ComponentType<{ className?: string }>;
   accent?: string;
+  /** Optional column span when rendering in a multi-column grid (e.g. Era ranges inside Year selector) */
+  colSpan?: 2 | 4;
+  /** Optional non-clickable section divider label inside a multi-column grid */
+  groupHeader?: boolean;
 }
 
 interface LuxurySelectProps {
@@ -49,7 +53,9 @@ export function LuxurySelect({
   const rootRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const selected = options.find((o) => o.id === value) ?? options[0];
+  const selected =
+    options.find((o) => !o.groupHeader && o.id === value) ??
+    (value === defaultValue ? options[0] : undefined);
   const isActive = value !== defaultValue;
   const SelectedOptionIcon = selected?.icon ?? TriggerIcon;
   const showSearch = searchable ?? (columns === 1 && options.length > 9);
@@ -216,26 +222,49 @@ export function LuxurySelect({
                     const OptIcon = opt.icon;
 
                     if (columns > 1) {
+                      if (opt.groupHeader) {
+                        return (
+                          <div
+                            key={opt.id}
+                            className="col-span-full pt-1.5 pb-0.5 px-1 text-[10px] font-mono uppercase tracking-[0.14em] text-[#7D8296]"
+                          >
+                            {opt.label}
+                          </div>
+                        );
+                      }
                       const isResetOpt = opt.id === defaultValue;
                       return (
                         <motion.button
                           key={opt.id}
                           type="button"
-                          whileHover={{ scale: 1.04 }}
+                          title={opt.hint}
+                          whileHover={{ scale: 1.03 }}
                           whileTap={{ scale: 0.94 }}
                           onClick={() => {
                             onChange(opt.id);
                             setOpen(false);
                           }}
                           className={cn(
-                            "h-8 px-2 rounded-lg font-mono text-xs font-medium border transition-colors cursor-pointer flex items-center justify-center",
-                            isResetOpt && "col-span-full mb-1 font-sans",
+                            "h-8 px-2 rounded-lg font-mono text-xs font-medium border transition-colors cursor-pointer flex items-center justify-center gap-1.5 truncate",
+                            isResetOpt && "col-span-full mb-0.5 font-sans",
+                            opt.colSpan === 2 && "col-span-2 text-[11px]",
+                            opt.colSpan === 4 && "col-span-full text-[11px]",
                             isSelected
                               ? "bg-accent border-accent-hover text-accent-fg shadow-[0_4px_14px_rgb(var(--shiori-accent-rgb)/0.4)]"
                               : "bg-white/[0.03] border-white/[0.06] text-[#C6CAD8] hover:bg-white/[0.09] hover:text-white"
                           )}
                         >
-                          {opt.label}
+                          <span className="truncate">{opt.label}</span>
+                          {typeof opt.count === "number" && (
+                            <span
+                              className={cn(
+                                "text-[10px] font-mono shrink-0",
+                                isSelected ? "opacity-85" : "text-[#7D8296]"
+                              )}
+                            >
+                              {opt.count}
+                            </span>
+                          )}
                         </motion.button>
                       );
                     }

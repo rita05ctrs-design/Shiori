@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowDown,
@@ -21,6 +20,7 @@ import {
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { HeroShowcase } from "@/components/media/HeroShowcase";
+import { HomeWeeklyCheckStrip } from "@/components/episodes/HomeWeeklyCheckStrip";
 import { PersonalizedRecommendationsSection } from "@/components/media/PersonalizedRecommendationsSection";
 import { HomeMoodAndRouletteSection } from "@/components/home/HomeMoodAndRouletteSection";
 import { HomeCommunityPulseSection } from "@/components/home/HomeCommunityPulseSection";
@@ -71,15 +71,12 @@ const SECTION_LABELS: Record<HomeSectionId, { title: string; hint: string }> = {
   },
 };
 
-const MOBILE_ENTRY_FLAG = "shiori_mobile_default_week_v1";
-
 interface HomeDashboardClientProps {
   data: HomeData;
   surprisePool: MediaItem[];
 }
 
 export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientProps) {
-  const router = useRouter();
   const { t, locale } = useTranslation();
   const {
     library,
@@ -91,29 +88,6 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
     resetHomeSections,
   } = useShiori();
   const [customizing, setCustomizing] = useState(false);
-
-  // Mobile-first default view (< 768px): land directly on "Semaine" (/episodes) on initial session open,
-  // while still letting mobile users intentionally view Home via /?home=1 or brand logo tap.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.innerWidth >= 768) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("home") === "1") {
-      try {
-        sessionStorage.setItem(MOBILE_ENTRY_FLAG, "1");
-      } catch {
-        // ignore storage restrictions
-      }
-      return;
-    }
-    try {
-      if (sessionStorage.getItem(MOBILE_ENTRY_FLAG)) return;
-      sessionStorage.setItem(MOBILE_ENTRY_FLAG, "1");
-      router.replace("/episodes");
-    } catch {
-      // ignore
-    }
-  }, [router]);
 
   const stats = useMemo(
     () => computeLibraryAnalytics(library, activity),
@@ -372,8 +346,11 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
         <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24" />
       )}
 
-      {/* Immersive Horizontal 2:3 Poster Carousels directly beneath Hero */}
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-10 sm:space-y-12 mt-6">
+      {/* Immersive Daily/Weekly Check-In + Horizontal 2:3 Poster Carousels directly beneath Hero */}
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-9 sm:space-y-12 mt-5 sm:mt-6">
+        {/* Instant 1-tap Today & Week Episode Tracker right on Home (Mobile & Desktop) */}
+        <HomeWeeklyCheckStrip airingSlots={data.airingToday} />
+
         {nonHeroSections
           .filter((s) => s.visible)
           .map((s) => renderSection(s.id))}

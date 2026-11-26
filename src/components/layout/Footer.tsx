@@ -2,15 +2,24 @@
 
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import { cn } from "@/lib/utils";
 
 export function Footer() {
+  const pathname = usePathname();
   const { setCommandOpen, isAuthenticated, openAuthModal } = useShiori();
   const { t } = useTranslation();
+  const hideOnMobile = pathname.startsWith("/messages");
 
   return (
-    <footer className="mt-16 sm:mt-20 border-t border-white/[0.06] bg-obsidian pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10">
+    <footer
+      className={cn(
+        "mt-16 sm:mt-20 border-t border-white/[0.06] bg-obsidian pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-10",
+        hideOnMobile && "hidden md:block"
+      )}
+    >
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
           <div className="md:col-span-5">

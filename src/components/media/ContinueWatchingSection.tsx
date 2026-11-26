@@ -126,7 +126,7 @@ export function ContinueWatchingSection({
         <div
           className={
             embeddedInLibrary
-              ? "flex gap-3 overflow-x-auto no-scrollbar snap-x pb-1 -mx-1 px-1 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-4 sm:overflow-visible sm:mx-0 sm:px-0 sm:pb-0"
+              ? "flex gap-3 overflow-x-auto touch-rail no-scrollbar snap-x snap-proximity pb-1 -mx-1 px-1 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-4 sm:overflow-visible sm:mx-0 sm:px-0 sm:pb-0"
               : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
           }
         >

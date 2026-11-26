@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { LibraryStatus, MediaItem, MediaType } from "@/types/media";
+import type { ContentLanguage, LibraryStatus, MediaItem, MediaType } from "@/types/media";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -141,21 +141,95 @@ export function getStatusLabel(status: LibraryStatus, type?: MediaType): string 
   return cfg.label;
 }
 
-export function formatCountdown(airingAt: number, nowSec?: number): string {
+const COUNTDOWN_LABELS: Record<
+  ContentLanguage,
+  {
+    airedMin: (m: number) => string;
+    airedHour: (h: number) => string;
+    airedDay: (d: number) => string;
+    inDayHour: (d: number, h: number) => string;
+    inHourMin: (h: number, m: number) => string;
+    inMin: (m: number) => string;
+  }
+> = {
+  fr: {
+    airedMin: (m) => `Diffusé il y a ${m} min`,
+    airedHour: (h) => `Diffusé il y a ${h}h`,
+    airedDay: (d) => `Diffusé il y a ${d}j`,
+    inDayHour: (d, h) => `Dans ${d}j ${h}h`,
+    inHourMin: (h, m) => `Dans ${h}h ${m}m`,
+    inMin: (m) => `Dans ${m} min`,
+  },
+  en: {
+    airedMin: (m) => `Aired ${m}m ago`,
+    airedHour: (h) => `Aired ${h}h ago`,
+    airedDay: (d) => `Aired ${d}d ago`,
+    inDayHour: (d, h) => `In ${d}d ${h}h`,
+    inHourMin: (h, m) => `In ${h}h ${m}m`,
+    inMin: (m) => `In ${m} min`,
+  },
+  es: {
+    airedMin: (m) => `Emitido hace ${m} min`,
+    airedHour: (h) => `Emitido hace ${h}h`,
+    airedDay: (d) => `Emitido hace ${d}d`,
+    inDayHour: (d, h) => `En ${d}d ${h}h`,
+    inHourMin: (h, m) => `En ${h}h ${m}m`,
+    inMin: (m) => `En ${m} min`,
+  },
+  de: {
+    airedMin: (m) => `Vor ${m} Min. ausgestrahlt`,
+    airedHour: (h) => `Vor ${h} Std. ausgestrahlt`,
+    airedDay: (d) => `Vor ${d} T. ausgestrahlt`,
+    inDayHour: (d, h) => `In ${d}T ${h}Std`,
+    inHourMin: (h, m) => `In ${h}Std ${m}m`,
+    inMin: (m) => `In ${m} Min.`,
+  },
+  it: {
+    airedMin: (m) => `Trasmesso ${m} min fa`,
+    airedHour: (h) => `Trasmesso ${h}h fa`,
+    airedDay: (d) => `Trasmesso ${d}g fa`,
+    inDayHour: (d, h) => `Tra ${d}g ${h}h`,
+    inHourMin: (h, m) => `Tra ${h}h ${m}m`,
+    inMin: (m) => `Tra ${m} min`,
+  },
+  pt: {
+    airedMin: (m) => `Exibido há ${m} min`,
+    airedHour: (h) => `Exibido há ${h}h`,
+    airedDay: (d) => `Exibido há ${d}d`,
+    inDayHour: (d, h) => `Em ${d}d ${h}h`,
+    inHourMin: (h, m) => `Em ${h}h ${m}m`,
+    inMin: (m) => `Em ${m} min`,
+  },
+  ja: {
+    airedMin: (m) => `${m}分前に放送`,
+    airedHour: (h) => `${h}時間前に放送`,
+    airedDay: (d) => `${d}日前に放送`,
+    inDayHour: (d, h) => `あと${d}日${h}時間`,
+    inHourMin: (h, m) => `あと${h}時間${m}分`,
+    inMin: (m) => `あと${m}分`,
+  },
+};
+
+export function formatCountdown(
+  airingAt: number,
+  nowSec?: number,
+  lang: ContentLanguage = "fr"
+): string {
   const now = nowSec ?? Math.floor(Date.now() / 1000);
   const diff = airingAt - now;
+  const fmt = COUNTDOWN_LABELS[lang] ?? COUNTDOWN_LABELS.fr;
   if (diff <= 0) {
     const ago = Math.abs(diff);
-    if (ago < 3600) return `Diffusé il y a ${Math.max(1, Math.floor(ago / 60))} min`;
-    if (ago < 86400) return `Diffusé il y a ${Math.floor(ago / 3600)}h`;
-    return `Diffusé il y a ${Math.floor(ago / 86400)}j`;
+    if (ago < 3600) return fmt.airedMin(Math.max(1, Math.floor(ago / 60)));
+    if (ago < 86400) return fmt.airedHour(Math.floor(ago / 3600));
+    return fmt.airedDay(Math.floor(ago / 86400));
   }
   const days = Math.floor(diff / 86400);
   const hours = Math.floor((diff % 86400) / 3600);
   const mins = Math.floor((diff % 3600) / 60);
-  if (days > 0) return `Dans ${days}j ${hours}h`;
-  if (hours > 0) return `Dans ${hours}h ${mins}m`;
-  return `Dans ${Math.max(1, mins)} min`;
+  if (days > 0) return fmt.inDayHour(days, hours);
+  if (hours > 0) return fmt.inHourMin(hours, mins);
+  return fmt.inMin(Math.max(1, mins));
 }
 
 export function formatRelativeTime(iso: string): string {

@@ -79,7 +79,10 @@ export async function PUT(request: NextRequest) {
         body.profile.preferredLanguage === "fr" ||
         body.profile.preferredLanguage === "en" ||
         body.profile.preferredLanguage === "es" ||
-        body.profile.preferredLanguage === "it"
+        body.profile.preferredLanguage === "de" ||
+        body.profile.preferredLanguage === "it" ||
+        body.profile.preferredLanguage === "pt" ||
+        body.profile.preferredLanguage === "ja"
       ) {
         current.preferredLanguage = body.profile.preferredLanguage;
       }

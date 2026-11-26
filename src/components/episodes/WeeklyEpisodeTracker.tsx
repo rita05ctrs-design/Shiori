@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import { getSettingsCopy } from "@/lib/settings-translations";
 import {
   cn,
   formatCountdown,
@@ -182,8 +183,10 @@ export function WeeklyEpisodeTracker({
     incrementProgress,
     anilistConnection,
     anilistAutoSync,
+    contentLanguage,
     toast,
   } = useShiori();
+  const quickCopy = getSettingsCopy(contentLanguage).quickEp;
   const { t } = useTranslation();
 
   const [watchingLive, setWatchingLive] = useState<WatchingAiringItem[]>([]);
@@ -705,10 +708,10 @@ export function WeeklyEpisodeTracker({
 
         {/* Filter Pills + Search */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5">
             {[
-              { id: "all" as const, label: t("nav.week"), count: stats.totalCount },
               { id: "today" as const, label: t("episodes.today"), count: stats.todayCount },
+              { id: "all" as const, label: t("nav.week"), count: stats.totalCount },
               { id: "unwatched" as const, label: t("nav.toWatch"), count: stats.unwatchedCount },
               { id: "watched" as const, label: `${t("common.saved")} ✓`, count: stats.watchedCount },
               { id: "upcoming" as const, label: t("nav.releases"), count: stats.upcomingCount },
@@ -720,16 +723,23 @@ export function WeeklyEpisodeTracker({
                   type="button"
                   onClick={() => setFilterTab(tab.id)}
                   className={cn(
-                    "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                    "relative px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95",
                     active
-                      ? "bg-white text-[#090A0F] border-white"
+                      ? "text-[#090A0F] border-white"
                       : "bg-obsidian/70 border-white/[0.08] text-[#A2A6B8] hover:text-white hover:border-white/[0.16]"
                   )}
                 >
-                  <span>{tab.label}</span>
+                  {active && (
+                    <motion.span
+                      layoutId="weekly-filter-pill"
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-full bg-white shadow-[0_4px_14px_rgba(255,255,255,0.25)]"
+                    />
+                  )}
+                  <span className="relative z-10">{tab.label}</span>
                   <span
                     className={cn(
-                      "font-mono text-[10.5px] px-1.5 py-0.2 rounded-full",
+                      "relative z-10 font-mono text-[10.5px] px-1.5 py-0.2 rounded-full",
                       active ? "bg-black/15 text-[#090A0F]" : "bg-white/[0.08] text-[#B8BCCB]"
                     )}
                   >
@@ -941,8 +951,8 @@ export function WeeklyEpisodeTracker({
                               <span className="text-white/20">·</span>
                               <span suppressHydrationWarning className="inline-flex items-center gap-1 font-mono text-kinpaku/90">
                                 <Clock className="w-3 h-3" />
-                                Ép. {row.nextEpisode.episode} ·{" "}
-                                {formatCountdown(row.nextEpisode.airingAt)}
+                                {t("common.epShort")} {row.nextEpisode.episode} ·{" "}
+                                {formatCountdown(row.nextEpisode.airingAt, nowSec, contentLanguage)}
                               </span>
                             </>
                           )}
@@ -954,20 +964,22 @@ export function WeeklyEpisodeTracker({
                         {hasAired ? (
                           row.isWatched ? (
                             <div className="flex items-center gap-1.5">
-                              <span className="h-11 px-3.5 rounded-xl bg-emerald-500/18 border border-emerald-400/40 text-emerald-300 text-xs font-bold inline-flex items-center gap-1.5">
+                              <span className="h-10 sm:h-11 px-3 sm:px-3.5 rounded-xl bg-emerald-500/18 border border-emerald-400/40 text-emerald-300 text-xs font-bold inline-flex items-center gap-1.5 shadow-[0_4px_14px_rgba(16,185,129,0.2)]">
                                 <Check className="w-4 h-4 stroke-[2.8]" />
-                                <span>À jour</span>
+                                <span>{quickCopy.watched}</span>
                               </span>
                               {row.userProgress > 0 && (
-                                <button
+                                <motion.button
                                   type="button"
+                                  whileTap={{ scale: 0.9 }}
                                   onClick={() => handleDecrementOne(row)}
-                                  title="Retirer 1 épisode vu (-1)"
-                                  aria-label={`Retirer 1 épisode vu sur ${title}`}
-                                  className="w-9 h-11 rounded-xl bg-white/[0.04] hover:bg-white/[0.12] border border-white/[0.09] flex items-center justify-center text-[#9A9EAE] hover:text-white transition-colors cursor-pointer"
+                                  title={`${quickCopy.notWatched} (-1)`}
+                                  aria-label={`${quickCopy.notWatched} · ${title}`}
+                                  className="h-10 sm:h-11 px-2.5 rounded-xl bg-white/[0.045] hover:bg-rose-500/18 border border-white/[0.09] hover:border-rose-400/40 flex items-center justify-center gap-1 text-[11px] font-semibold text-[#9A9EAE] hover:text-rose-200 transition-colors cursor-pointer"
                                 >
                                   <RotateCcw className="w-3.5 h-3.5" />
-                                </button>
+                                  <span className="hidden sm:inline">{quickCopy.notWatched}</span>
+                                </motion.button>
                               )}
                             </div>
                           ) : (

@@ -33,10 +33,10 @@ export const MediaCard = React.memo(function MediaCard({
   const statusCfg = entry ? STATUS_CONFIG[entry.status] : null;
 
   return (
-    /* Non-moving outer hit-area wrapper eliminates hover edge jitter completely */
-    <div className={cn("group relative flex flex-col touch-pan-y", className)}>
+    /* Non-moving outer hit-area wrapper eliminates hover edge jitter while preserving native horizontal touch swiping */
+    <div className={cn("group relative flex flex-col", className)}>
       {/* GPU-composited elevating Poster Container (zero per-card backdrop-blur/springs) */}
-      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden isolate [transform:translateZ(0)] bg-[#121520] border border-white/[0.08] group-hover:border-white/[0.24] shadow-[0_12px_28px_rgba(0,0,0,0.48)] group-hover:shadow-[0_20px_42px_rgba(0,0,0,0.72)] group-hover:-translate-y-1.5 transition-[transform,border-color,box-shadow] duration-250 ease-out will-change-transform">
+      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden isolate [transform:translateZ(0)] bg-[#121520] border border-white/[0.09] group-hover:border-accent/45 shadow-[0_12px_28px_rgba(0,0,0,0.48)] group-hover:shadow-[0_22px_46px_rgba(0,0,0,0.75),0_0_24px_rgb(var(--shiori-accent-rgb)/0.16)] group-hover:-translate-y-1.5 active:scale-[0.985] transition-[transform,border-color,box-shadow] duration-250 ease-out will-change-transform">
         <Link
           href={`/media/${media.id}`}
           draggable={false}

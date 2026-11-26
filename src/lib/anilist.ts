@@ -11,6 +11,11 @@ import {
   buildSeasonChronology,
   type RawRelationMediaNode,
 } from "@/lib/season-timeline";
+import {
+  matchesYearFilter,
+  parseYearFilter,
+  toAniListFuzzyDateBounds,
+} from "@/lib/year-eras";
 import type {
   AiringScheduleItem,
   CharacterEdge,
@@ -520,7 +525,9 @@ export interface DiscoverParams {
   minChapters?: number;
   maxChapters?: number;
   season?: string;
-  year?: number;
+  year?: number | string;
+  minYear?: number;
+  maxYear?: number;
   format?: string;
   status?: string;
   sort?: string;
@@ -556,12 +563,22 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     maxChapters,
     season,
     year,
+    minYear,
+    maxYear,
     format,
     status,
     sort = "TRENDING_DESC",
     page = 1,
     perPage = 24,
   } = params;
+
+  const parsedYearFilter =
+    minYear || maxYear
+      ? {
+          minYear: minYear && Number.isFinite(minYear) ? Math.trunc(minYear) : undefined,
+          maxYear: maxYear && Number.isFinite(maxYear) ? Math.trunc(maxYear) : undefined,
+        }
+      : parseYearFilter(year);
 
   const genreList = Array.from(
     new Set([
@@ -610,6 +627,8 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
         $chaptersLesser: Int,
         $season: MediaSeason,
         $seasonYear: Int,
+        $startDateGreater: FuzzyDateInt,
+        $startDateLesser: FuzzyDateInt,
         $format: MediaFormat,
         $status: MediaStatus,
         $sort: [MediaSort]
@@ -629,6 +648,8 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
             chapters_lesser: $chaptersLesser,
             season: $season,
             seasonYear: $seasonYear,
+            startDate_greater: $startDateGreater,
+            startDate_lesser: $startDateLesser,
             format: $format,
             status: $status,
             sort: $sort,
@@ -684,7 +705,19 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     }
 
     if (season && season !== "ALL" && type === "ANIME") variables.season = season;
-    if (year && !Number.isNaN(year)) variables.seasonYear = year;
+    if (parsedYearFilter) {
+      if (parsedYearFilter.exactYear !== undefined && type === "ANIME") {
+        variables.seasonYear = parsedYearFilter.exactYear;
+      } else {
+        const fuzzy = toAniListFuzzyDateBounds(parsedYearFilter);
+        if (fuzzy.startDateGreater !== undefined) {
+          variables.startDateGreater = fuzzy.startDateGreater;
+        }
+        if (fuzzy.startDateLesser !== undefined) {
+          variables.startDateLesser = fuzzy.startDateLesser;
+        }
+      }
+    }
     if (format && format !== "ALL") variables.format = format;
     if (status && status !== "ALL") variables.status = status;
 
@@ -786,8 +819,14 @@ export async function fetchDiscover(params: DiscoverParams): Promise<DiscoverRes
     if (status && status !== "ALL") {
       filtered = filtered.filter((m) => m.status === status);
     }
-    if (year) {
-      filtered = filtered.filter((m) => m.seasonYear === year || m.startYear === year);
+    if (parsedYearFilter) {
+      const yearExpr =
+        parsedYearFilter.exactYear !== undefined
+          ? String(parsedYearFilter.exactYear)
+          : `${parsedYearFilter.minYear ?? ""}-${parsedYearFilter.maxYear ?? ""}`;
+      filtered = filtered.filter((m) =>
+        matchesYearFilter(m.seasonYear ?? m.startYear, yearExpr)
+      );
     }
     if (!rawSearch) {
       if (sort === "SCORE_DESC") {

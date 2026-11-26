@@ -34,6 +34,7 @@ import {
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { CONTENT_LANGUAGES } from "@/lib/i18n";
+import { getSettingsCopy } from "@/lib/settings-translations";
 import { AniListImportCard } from "@/components/settings/AniListImportCard";
 import { MalImportCard } from "@/components/settings/MalImportCard";
 import { AmbianceSettingsCard } from "@/components/settings/AmbianceSettingsCard";
@@ -57,15 +58,13 @@ type SettingsTab = "appearance" | "profile" | "account" | "anilist" | "data";
 
 const SETTINGS_CATEGORIES: {
   id: SettingsTab;
-  label: string;
-  desc: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { id: "appearance", label: "Apparence", desc: "Thème, affichage, langue", icon: Palette },
-  { id: "profile", label: "Profil", desc: "Avatar, bio, confidentialité", icon: User },
-  { id: "account", label: "Compte & Alertes", desc: "Connexion, notifications, app", icon: Bell },
-  { id: "anilist", label: "AniList & MAL", desc: "Synchro AniList et import MAL XML", icon: ArrowLeftRight },
-  { id: "data", label: "Données", desc: "Exports, sauvegarde, suppression", icon: Database },
+  { id: "appearance", icon: Palette },
+  { id: "profile", icon: User },
+  { id: "account", icon: Bell },
+  { id: "anilist", icon: ArrowLeftRight },
+  { id: "data", icon: Database },
 ];
 
 const ACCENT_SWATCHES = [
@@ -116,6 +115,13 @@ export default function SettingsPage() {
   } = useShiori();
 
   const { t } = useTranslation();
+  const copy = getSettingsCopy(contentLanguage);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.title = `${t("settings.title")} | Shiori`;
+    }
+  }, [t]);
   const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [username, setUsername] = useState(profile.username);
@@ -345,11 +351,12 @@ export default function SettingsPage() {
       </div>
 
       {/* Mobile Horizontal Category Bar */}
-      <div className="lg:hidden overflow-x-auto no-scrollbar pb-1">
+      <div className="lg:hidden overflow-x-auto no-scrollbar touch-rail pb-1">
         <div className="inline-flex items-center gap-1.5 p-1 rounded-2xl bg-surface border border-white/[0.08]">
           {SETTINGS_CATEGORIES.map((cat) => {
             const Icon = cat.icon;
             const active = activeTab === cat.id;
+            const tabCopy = copy.tabs[cat.id];
             return (
               <button
                 key={cat.id}
@@ -363,7 +370,7 @@ export default function SettingsPage() {
                 )}
               >
                 <Icon className="w-3.5 h-3.5 shrink-0" />
-                <span>{cat.label}</span>
+                <span>{tabCopy.label}</span>
               </button>
             );
           })}
@@ -377,6 +384,7 @@ export default function SettingsPage() {
           {SETTINGS_CATEGORIES.map((cat) => {
             const Icon = cat.icon;
             const active = activeTab === cat.id;
+            const tabCopy = copy.tabs[cat.id];
             return (
               <button
                 key={cat.id}
@@ -396,8 +404,8 @@ export default function SettingsPage() {
                   )}
                 />
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold truncate">{cat.label}</p>
-                  <p className="text-[11px] text-[#7D8296] truncate">{cat.desc}</p>
+                  <p className="text-sm font-semibold truncate">{tabCopy.label}</p>
+                  <p className="text-[11px] text-[#7D8296] truncate">{tabCopy.desc}</p>
                 </div>
               </button>
             );
@@ -495,10 +503,10 @@ export default function SettingsPage() {
                     />
                     <div>
                       <h2 className="text-base font-semibold text-white">
-                        Profil public & Avatar
+                        {copy.profile.title}
                       </h2>
                       <p className="text-xs text-[#858A9E]">
-                        Nom, identifiant, bio et photo visibles sur votre page de profil.
+                        {copy.profile.subtitle}
                       </p>
                     </div>
                   </div>
@@ -507,7 +515,7 @@ export default function SettingsPage() {
                     href={`/profile/${encodeURIComponent(username.trim() || profile.username)}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-white transition-colors self-start sm:self-auto shrink-0"
                   >
-                    <span>Voir mon profil</span>
+                    <span>{copy.profile.viewProfile}</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </Link>
                 </div>
@@ -516,7 +524,7 @@ export default function SettingsPage() {
                 <div className="p-3.5 rounded-xl bg-obsidian/70 border border-white/[0.08] space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <label className="text-xs font-medium text-[#C8CCE0]">
-                      Photo de profil
+                      {copy.profile.photoLabel}
                     </label>
                     <div className="flex items-center gap-2">
                       <input
@@ -537,7 +545,7 @@ export default function SettingsPage() {
                         ) : (
                           <Camera className="w-3.5 h-3.5" />
                         )}
-                        <span>Importer une image</span>
+                        <span>{copy.profile.uploadImage}</span>
                       </button>
                       {avatarUrl && (
                         <button
@@ -549,7 +557,7 @@ export default function SettingsPage() {
                           className="h-8 px-2.5 rounded-lg bg-white/[0.05] hover:bg-rose-500/20 border border-white/[0.09] text-[#9A9EAE] hover:text-rose-300 text-xs inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          <span>Retirer</span>
+                          <span>{copy.profile.remove}</span>
                         </button>
                       )}
                     </div>
@@ -558,7 +566,7 @@ export default function SettingsPage() {
                     type="url"
                     value={avatarUrl}
                     onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="Ou collez le lien d'une image (https://...)"
+                    placeholder={copy.profile.avatarPlaceholder}
                     className="w-full h-9 px-3 rounded-lg bg-surface border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                   />
                 </div>
@@ -567,7 +575,7 @@ export default function SettingsPage() {
                 <div className="p-3.5 rounded-xl bg-obsidian/70 border border-white/[0.08] space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <label className="text-xs font-medium text-[#C8CCE0]">
-                      Bannière du profil
+                      {copy.profile.bannerLabel}
                     </label>
                     {bannerUrl && (
                       <button
@@ -578,7 +586,7 @@ export default function SettingsPage() {
                         }}
                         className="text-xs text-[#9A9EAE] hover:text-rose-300 cursor-pointer"
                       >
-                        Retirer
+                        {copy.profile.remove}
                       </button>
                     )}
                   </div>
@@ -586,12 +594,12 @@ export default function SettingsPage() {
                     type="url"
                     value={bannerUrl}
                     onChange={(e) => setBannerUrl(e.target.value)}
-                    placeholder="Lien d'image panoramique (https://...)"
+                    placeholder={copy.profile.bannerPlaceholder}
                     className="w-full h-9 px-3 rounded-lg bg-surface border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                   />
                   {bannerUrl && (
                     <div className="h-20 rounded-lg overflow-hidden border border-white/10">
-                      <img src={bannerUrl} alt="Aperçu bannière" className="w-full h-full object-cover" />
+                      <img src={bannerUrl} alt="Banner preview" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
@@ -599,7 +607,7 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-[#9EA3B5] mb-1.5">
-                      Nom affiché
+                      {copy.profile.displayName}
                     </label>
                     <input
                       type="text"
@@ -610,7 +618,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-[#9EA3B5] mb-1.5">
-                      Pseudo (@)
+                      {copy.profile.username}
                     </label>
                     <input
                       type="text"
@@ -623,7 +631,7 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-[#9EA3B5] mb-1.5">
-                    Présentation (bio)
+                    {copy.profile.bio}
                   </label>
                   <textarea
                     rows={2}
@@ -635,7 +643,7 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-[#9EA3B5] mb-2">
-                    Couleur d&apos;avatar
+                    {copy.profile.avatarColor}
                   </label>
                   <div className="flex items-center gap-2.5">
                     {ACCENT_SWATCHES.map((s) => (
@@ -668,12 +676,14 @@ export default function SettingsPage() {
                     )}
                     <div>
                       <p className="text-xs font-semibold text-white">
-                        Profil et activité {isActivityPublic ? "publics" : "privés"}
+                        {isActivityPublic
+                          ? copy.profile.visibilityPublic
+                          : copy.profile.visibilityPrivate}
                       </p>
                       <p className="text-[11.5px] text-[#858A9E] mt-0.5">
                         {isActivityPublic
-                          ? "Les membres peuvent voir votre activité et vos favoris."
-                          : "Votre bibliothèque, vos favoris et vos activités restent strictement privés."}
+                          ? copy.profile.visibilityPublicDesc
+                          : copy.profile.visibilityPrivateDesc}
                       </p>
                     </div>
                   </div>
@@ -705,7 +715,7 @@ export default function SettingsPage() {
                     type="submit"
                     className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent transition-all cursor-pointer"
                   >
-                    Enregistrer le profil
+                    {copy.profile.saveProfile}
                   </button>
                 </div>
               </form>
@@ -717,11 +727,13 @@ export default function SettingsPage() {
               >
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
                   <ShieldBan className="w-4 h-4 text-rose-400" />
-                  <span>Comptes bloqués ({blockedUsers.length})</span>
+                  <span>
+                    {copy.profile.blockedTitle} ({blockedUsers.length})
+                  </span>
                 </h2>
                 {blockedUsers.length === 0 ? (
                   <p className="text-xs text-[#858A9E]">
-                    Aucun compte bloqué. Vous pouvez bloquer un membre depuis son profil public.
+                    {copy.profile.blockedEmpty}
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -752,7 +764,7 @@ export default function SettingsPage() {
                           className="h-8 px-2.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.14] border border-white/[0.1] text-[11px] font-semibold text-white inline-flex items-center gap-1 cursor-pointer shrink-0"
                         >
                           <Unlock className="w-3 h-3" />
-                          <span>Débloquer</span>
+                          <span>{copy.profile.unblock}</span>
                         </button>
                       </div>
                     ))}
@@ -770,9 +782,11 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-3">
                     <Award className="w-4 h-4 text-kinpaku shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-white">Badges & Trophées épinglés</p>
+                      <p className="text-sm font-semibold text-white">
+                        {copy.profile.badgesTitle}
+                      </p>
                       <p className="text-xs text-[#858A9E]">
-                        Choisissez jusqu&apos;à 3 badges à afficher sur votre profil
+                        {copy.profile.badgesSub}
                       </p>
                     </div>
                   </div>
@@ -802,9 +816,11 @@ export default function SettingsPage() {
                   <div className="flex items-center gap-3">
                     <Mic2 className="w-4 h-4 text-accent shrink-0" />
                     <div>
-                      <p className="text-sm font-semibold text-white">Doubleurs favoris (Seiyuu)</p>
+                      <p className="text-sm font-semibold text-white">
+                        {copy.profile.seiyuuTitle}
+                      </p>
                       <p className="text-xs text-[#858A9E]">
-                        Mettez en avant vos comédiens de doublage préférés sur votre profil
+                        {copy.profile.seiyuuSub}
                       </p>
                     </div>
                   </div>
@@ -830,10 +846,10 @@ export default function SettingsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-base font-semibold text-white">
-                      Mon compte Shiori
+                      {copy.account.title}
                     </h2>
                     <p className="text-xs text-[#858A9E] mt-0.5">
-                      Connectez-vous pour retrouver votre bibliothèque sur tous vos appareils.
+                      {copy.account.subtitle}
                     </p>
                   </div>
                   <span
@@ -844,7 +860,7 @@ export default function SettingsPage() {
                         : "bg-white/[0.06] border-white/[0.1] text-[#C8CCE0]"
                     )}
                   >
-                    {isAuthenticated ? "Connecté" : "Mode invité"}
+                    {isAuthenticated ? copy.account.connectedBadge : copy.account.guestBadge}
                   </span>
                 </div>
 
@@ -853,16 +869,16 @@ export default function SettingsPage() {
                     <>
                       <Cloud className="w-4 h-4 text-emerald-400 shrink-0" />
                       <span>
-                        Connecté en tant que <strong className="text-white">{profile.displayName}</strong> (@{profile.username})
-                        {profile.email ? ` · ${profile.email}` : ""}. Vos données sont sauvegardées automatiquement.
+                        {copy.account.connectedInfoPrefix}{" "}
+                        <strong className="text-white">{profile.displayName}</strong> (@{profile.username})
+                        {profile.email ? ` · ${profile.email}` : ""}.{" "}
+                        {copy.account.connectedInfoSuffix}
                       </span>
                     </>
                   ) : (
                     <>
                       <HardDrive className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span>
-                        Vos titres sont enregistrés sur cet appareil. Créez un compte gratuit pour les synchroniser partout.
-                      </span>
+                      <span>{copy.account.guestInfo}</span>
                     </>
                   )}
                 </div>
@@ -875,14 +891,14 @@ export default function SettingsPage() {
                         onClick={() => openAuthModal("signup")}
                         className="h-10 px-5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold transition-colors cursor-pointer"
                       >
-                        Créer un compte gratuit
+                        {copy.account.createFreeAccount}
                       </button>
                       <button
                         type="button"
                         onClick={() => openAuthModal("signin")}
                         className="h-10 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.12] text-white text-xs font-semibold transition-colors cursor-pointer"
                       >
-                        Se connecter
+                        {copy.account.signIn}
                       </button>
                     </>
                   ) : (
@@ -892,14 +908,14 @@ export default function SettingsPage() {
                         onClick={() => openAuthModal("signin")}
                         className="h-10 px-4 rounded-xl bg-white text-[#090A0F] hover:bg-[#ECEBE6] text-xs font-semibold transition-colors cursor-pointer"
                       >
-                        Changer de compte
+                        {copy.account.switchAccount}
                       </button>
                       <button
                         type="button"
                         onClick={() => void signOutSupabase()}
                         className="h-10 px-4 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-semibold cursor-pointer"
                       >
-                        Déconnexion
+                        {copy.account.signOut}
                       </button>
                     </>
                   )}
@@ -915,10 +931,10 @@ export default function SettingsPage() {
                   <div>
                     <h2 className="text-base font-semibold text-white flex items-center gap-2">
                       <Bell className="w-4 h-4 text-[#F0B95B]" />
-                      <span>Notifications</span>
+                      <span>{copy.account.notifTitle}</span>
                     </h2>
                     <p className="text-xs text-[#858A9E] mt-0.5">
-                      Choisissez les alertes que vous souhaitez recevoir dans Shiori.
+                      {copy.account.notifSub}
                     </p>
                   </div>
                   <button
@@ -927,33 +943,19 @@ export default function SettingsPage() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-white transition-colors cursor-pointer shrink-0"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-[#F0B95B]" />
-                    <span>Tester</span>
+                    <span>{copy.account.testBtn}</span>
                   </button>
                 </div>
 
                 <div className="divide-y divide-white/[0.06]">
-                  {[
-                    {
-                      key: "airingAlerts" as const,
-                      title: "Sorties d'épisodes suivis",
-                      desc: "Alerte lorsqu'un nouvel épisode de votre liste « En cours » est disponible.",
-                    },
-                    {
-                      key: "weeklyDigest" as const,
-                      title: "Récapitulatif hebdomadaire",
-                      desc: "Résumé chaque dimanche des sorties de la semaine à venir.",
-                    },
-                    {
-                      key: "milestones" as const,
-                      title: "Séries terminées & paliers",
-                      desc: "Célébrez vos séries complétées et nouveaux paliers atteints.",
-                    },
-                    {
-                      key: "recommendations" as const,
-                      title: "Suggestions personnalisées",
-                      desc: "Nouvelles recommandations basées sur vos coups de cœur.",
-                    },
-                  ].map((item) => {
+                  {(
+                    [
+                      { key: "airingAlerts", ...copy.account.notifs.airingAlerts },
+                      { key: "weeklyDigest", ...copy.account.notifs.weeklyDigest },
+                      { key: "milestones", ...copy.account.notifs.milestones },
+                      { key: "recommendations", ...copy.account.notifs.recommendations },
+                    ] as const
+                  ).map((item) => {
                     const enabled = profile.notificationPrefs[item.key];
                     return (
                       <div
@@ -990,7 +992,7 @@ export default function SettingsPage() {
                 <div className="pt-4 border-t border-white/[0.07] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-white flex items-center gap-2">
-                      <span>Notifications système &amp; PWA (appareil)</span>
+                      <span>{copy.account.osNotifTitle}</span>
                       <span
                         className={cn(
                           "px-2 py-0.5 rounded-full text-[10px] font-mono border",
@@ -1002,16 +1004,16 @@ export default function SettingsPage() {
                         )}
                       >
                         {browserNotifPerm === "unsupported"
-                          ? "Non supporté"
+                          ? copy.account.statusUnsupported
                           : browserNotifPerm === "denied"
-                            ? "Bloqué"
+                            ? copy.account.statusDenied
                             : browserAlertsOn && browserNotifPerm === "granted"
-                              ? "Actif"
-                              : "Inactif"}
+                              ? copy.account.statusActive
+                              : copy.account.statusInactive}
                       </span>
                     </p>
                     <p className="text-xs text-[#808599] mt-0.5">
-                      Recevez une notification native sur ordinateur ou mobile (PWA) lorsqu&apos;un épisode de votre liste « En cours » sort.
+                      {copy.account.osNotifDesc}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -1020,15 +1022,15 @@ export default function SettingsPage() {
                         type="button"
                         onClick={() =>
                           void sendShioriSystemNotification({
-                            title: "Test Shiori · Nouvel épisode",
-                            body: "Les alertes système fonctionnent parfaitement sur cet appareil !",
+                            title: "Shiori · Test",
+                            body: copy.account.osNotifDesc,
                             url: "/episodes",
                             tag: `shiori-test-${Date.now()}`,
                           })
                         }
                         className="h-9 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-[#D6D9E6] hover:text-white transition-colors cursor-pointer"
                       >
-                        Test OS
+                        {copy.account.testOsBtn}
                       </button>
                     )}
                     <button
@@ -1043,8 +1045,8 @@ export default function SettingsPage() {
                       )}
                     >
                       {browserAlertsOn && browserNotifPerm === "granted"
-                        ? "Désactiver"
-                        : "Activer les alertes"}
+                        ? copy.account.disableAlerts
+                        : copy.account.enableAlerts}
                     </button>
                   </div>
                 </div>
@@ -1062,9 +1064,7 @@ export default function SettingsPage() {
               {!anilistConnection.connected && (
                 <div className="text-xs text-[#858A9E] flex items-center gap-2 px-1">
                   <Link2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span>
-                    La connexion AniList est entièrement optionnelle : Shiori fonctionne de façon autonome sans compte externe.
-                  </span>
+                  <span>{copy.anilist.optionalNote}</span>
                 </div>
               )}
             </>
@@ -1079,10 +1079,10 @@ export default function SettingsPage() {
               >
                 <div>
                   <h2 className="text-base font-semibold text-white">
-                    Sauvegarde & Import / Export
+                    {copy.data.title}
                   </h2>
                   <p className="text-xs text-[#858A9E] mt-0.5">
-                    {library.length} œuvres actuellement enregistrées dans votre bibliothèque.
+                    {library.length} {copy.data.savedCountSuffix}
                   </p>
                 </div>
 
@@ -1094,9 +1094,11 @@ export default function SettingsPage() {
                   >
                     <span className="flex items-center gap-2">
                       <Download className="w-4 h-4 text-sky-400" />
-                      Exporter ma bibliothèque (JSON)
+                      {copy.data.exportLibrary}
                     </span>
-                    <span className="font-mono text-[#858A9E]">{library.length} titres</span>
+                    <span className="font-mono text-[#858A9E]">
+                      {library.length} {t("common.titles")}
+                    </span>
                   </button>
 
                   <button
@@ -1111,7 +1113,7 @@ export default function SettingsPage() {
                       ) : (
                         <FileDown className="w-4 h-4 text-violet-400" />
                       )}
-                      Export complet de mes données (RGPD)
+                      {copy.data.exportGdpr}
                     </span>
                     <span className="font-mono text-[#858A9E]">JSON</span>
                   </button>
@@ -1129,7 +1131,7 @@ export default function SettingsPage() {
                     className="w-full h-10 px-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] text-xs font-medium text-white flex items-center gap-2 transition-colors cursor-pointer"
                   >
                     <Upload className="w-4 h-4 text-emerald-400" />
-                    <span>Importer une sauvegarde JSON</span>
+                    <span>{copy.data.importJson}</span>
                   </button>
 
                   {!confirmResetOpen ? (
@@ -1139,12 +1141,13 @@ export default function SettingsPage() {
                       className="w-full h-10 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/18 border border-rose-500/25 text-xs font-medium text-rose-300 flex items-center gap-2 transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-4 h-4" />
-                      <span>Restaurer la bibliothèque de démonstration</span>
+                      <span>{copy.data.resetDemo}</span>
                     </button>
                   ) : (
                     <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3.5 space-y-2.5">
                       <p className="text-xs text-rose-200 leading-relaxed">
-                        Attention : cette action remplacera vos {library.length} œuvres actuelles par le jeu de démonstration. Exportez une sauvegarde JSON avant de continuer.
+                        {copy.data.resetWarningPrefix} {library.length}{" "}
+                        {copy.data.resetWarningSuffix}
                       </p>
                       <div className="flex items-center gap-2">
                         <button
@@ -1155,14 +1158,14 @@ export default function SettingsPage() {
                           }}
                           className="flex-1 h-8 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold cursor-pointer"
                         >
-                          Confirmer la réinitialisation
+                          {copy.data.confirmReset}
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmResetOpen(false)}
                           className="h-8 px-3 rounded-lg bg-white/[0.08] hover:bg-white/[0.14] text-xs text-white cursor-pointer"
                         >
-                          Annuler
+                          {t("common.cancel")}
                         </button>
                       </div>
                     </div>
@@ -1178,10 +1181,10 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <h2 className="text-base font-semibold text-white">
-                        Supprimer définitivement mon compte
+                        {copy.data.deleteTitle}
                       </h2>
                       <p className="text-xs text-[#858A9E] mt-0.5 leading-relaxed">
-                        Efface votre profil, votre bibliothèque, vos collections, vos messages et votre historique associés sur Shiori.
+                        {copy.data.deleteSub}
                       </p>
                     </div>
                   </div>
@@ -1193,22 +1196,25 @@ export default function SettingsPage() {
                       className="h-10 px-4 rounded-xl bg-rose-500/12 hover:bg-rose-500/20 border border-rose-500/30 text-xs font-semibold text-rose-300 inline-flex items-center gap-2 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
-                      <span>Supprimer mon compte</span>
+                      <span>{copy.data.deleteBtn}</span>
                     </button>
                   ) : (
                     <div className="rounded-xl bg-rose-950/30 border border-rose-500/35 p-4 space-y-3">
                       <p className="text-xs text-rose-200 leading-relaxed">
-                        Cette action est <strong className="text-white">irréversible</strong>. Saisissez{" "}
+                        {copy.data.deleteIrreversiblePrefix}{" "}
+                        <strong className="text-white">
+                          {copy.data.deleteIrreversibleWord}
+                        </strong>
+                        {copy.data.deleteIrreversibleSuffix}{" "}
                         <code className="px-1.5 py-0.5 rounded bg-black/40 text-rose-300 font-mono">
                           SUPPRIMER
-                        </code>{" "}
-                        ci-dessous pour confirmer :
+                        </code>
                       </p>
                       <input
                         type="text"
                         value={deleteConfirmText}
                         onChange={(e) => setDeleteConfirmText(e.target.value)}
-                        placeholder="Tapez SUPPRIMER"
+                        placeholder={copy.data.deletePlaceholder}
                         autoComplete="off"
                         className="w-full h-9 px-3 rounded-lg bg-obsidian border border-rose-500/35 text-xs font-mono text-white focus:outline-none focus:border-rose-400"
                       />
@@ -1227,7 +1233,7 @@ export default function SettingsPage() {
                           ) : (
                             <Trash2 className="w-3.5 h-3.5" />
                           )}
-                          <span>Confirmer la suppression</span>
+                          <span>{copy.data.confirmDelete}</span>
                         </button>
                         <button
                           type="button"
@@ -1238,7 +1244,7 @@ export default function SettingsPage() {
                           }}
                           className="h-9 px-3.5 rounded-lg bg-white/[0.08] hover:bg-white/[0.14] text-xs text-white cursor-pointer"
                         >
-                          Annuler
+                          {t("common.cancel")}
                         </button>
                       </div>
                     </div>

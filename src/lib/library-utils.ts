@@ -4,6 +4,7 @@ import type {
   LibraryStatus,
   MediaType,
 } from "@/types/media";
+import { matchesYearFilter } from "@/lib/year-eras";
 
 export type ProgressFilter =
   | "ALL"
@@ -160,9 +161,7 @@ export function filterAndSortLibrary(
     .filter((e) => (filters.favoritesOnly ? e.isFavorite : true))
     .filter((e) => (collectionSet ? collectionSet.has(e.mediaId) : true))
     .filter((e) => (filters.genre === "ALL" ? true : e.genres.includes(filters.genre)))
-    .filter((e) =>
-      filters.year === "ALL" ? true : String(e.seasonYear ?? "") === filters.year
-    )
+    .filter((e) => matchesYearFilter(e.seasonYear, filters.year))
     .filter((e) =>
       filters.season === "ALL"
         ? true

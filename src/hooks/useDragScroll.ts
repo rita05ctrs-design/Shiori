@@ -35,6 +35,7 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     velocity: 0,
     rafId: 0,
     suppressClickUntil: 0,
+    lastTouchAt: 0,
   });
 
   const updateScrollBounds = useCallback(() => {
@@ -90,8 +91,18 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     }
   }, []);
 
+  const onTouchStart = useCallback(() => {
+    // Let mobile browsers handle horizontal swipe natively at 120fps without mouse-drag interference
+    stateRef.current.lastTouchAt = performance.now();
+    stateRef.current.pointerDown = false;
+    stateRef.current.hasDragged = false;
+    stopInertia();
+  }, [stopInertia]);
+
   const onMouseDown = useCallback(
     (e: React.MouseEvent<T>) => {
+      // Ignore simulated mouse events emitted right after touch gestures
+      if (performance.now() - stateRef.current.lastTouchAt < 750) return;
       if (e.button !== 0) return;
       const el = ref.current;
       if (!el) return;
@@ -199,6 +210,7 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     canScrollRight,
     scrollByAmount,
     dragHandlers: {
+      onTouchStart,
       onMouseDown,
       onClickCapture,
       onDragStart,

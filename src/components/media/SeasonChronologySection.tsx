@@ -217,7 +217,7 @@ export function SeasonChronologySection({
           ref={scrollRef}
           {...dragHandlers}
           className={cn(
-            "flex gap-2.5 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x no-scrollbar pb-1.5 -mx-1 px-1 select-none",
+            "flex gap-2.5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar pb-1.5 -mx-1 px-1 select-none",
             hasOverflow
               ? isDragging
                 ? "cursor-grabbing"

@@ -10,6 +10,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
+import { getSettingsCopy } from "@/lib/settings-translations";
 import {
   parseMalXml,
   readMalFileAsXml,
@@ -19,7 +21,9 @@ import { cn } from "@/lib/utils";
 import type { LibraryEntry } from "@/types/media";
 
 export function MalImportCard() {
-  const { importEntriesBulk } = useShiori();
+  const { importEntriesBulk, contentLanguage } = useShiori();
+  const { t } = useTranslation();
+  const copy = getSettingsCopy(contentLanguage).mal;
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [parsed, setParsed] = useState<MalParseResult | null>(null);
@@ -110,14 +114,13 @@ export function MalImportCard() {
           </div>
           <div>
             <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <span>Importer depuis MyAnimeList (XML)</span>
+              <span>{copy.title}</span>
               <span className="px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/30 font-mono text-[10px] text-sky-300">
                 .xml / .xml.gz
               </span>
             </h2>
             <p className="text-xs text-[#858A9E] mt-0.5">
-              Importez votre export officiel MyAnimeList (animes ou mangas, avec notes,
-              chapitres et tomes). Les couvertures et fiches sont enrichies automatiquement.
+              {copy.subtitle}
             </p>
           </div>
         </div>
@@ -142,12 +145,10 @@ export function MalImportCard() {
       >
         <Upload className="w-5 h-5 text-accent-soft mx-auto mb-2 group-hover:-translate-y-0.5 transition-transform" />
         <p className="text-xs font-semibold text-white">
-          {fileName
-            ? `Fichier chargé : ${fileName}`
-            : "Choisir un export MyAnimeList (.xml ou .xml.gz)"}
+          {fileName ? `${copy.fileLoaded} ${fileName}` : copy.chooseFile}
         </p>
         <p className="text-[11px] text-[#7F8499] mt-1">
-          Sur MAL : Profil → Export → Anime List / Manga List
+          {copy.exportHint}
         </p>
       </button>
 
@@ -163,23 +164,22 @@ export function MalImportCard() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-xs font-semibold text-white">
-                {parsed.items.length} titre{parsed.items.length > 1 ? "s" : ""} détecté
-                {parsed.items.length > 1 ? "s" : ""}
-                {parsed.username ? ` · Compte @${parsed.username}` : ""}
+                {parsed.items.length} {t("common.titles")}
+                {parsed.username ? ` · @${parsed.username}` : ""}
               </p>
               <p className="text-[11px] text-[#858A9E] font-mono mt-0.5">
-                {animeCount > 0 ? `${animeCount} animé${animeCount > 1 ? "s" : ""}` : ""}
+                {animeCount > 0 ? `${animeCount} ${t("common.anime")}` : ""}
                 {animeCount > 0 && mangaCount > 0 ? " · " : ""}
-                {mangaCount > 0 ? `${mangaCount} manga${mangaCount > 1 ? "s" : ""}` : ""}
-                {parsed.items.length > 600 ? " (600 premiers importés)" : ""}
+                {mangaCount > 0 ? `${mangaCount} ${t("common.manga")}` : ""}
+                {parsed.items.length > 600 ? " (max 600)" : ""}
               </p>
             </div>
 
             <div className="inline-flex items-center p-0.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-[11px]">
               {(
                 [
-                  { id: "merge", label: "Fusionner" },
-                  { id: "replace", label: "Remplacer" },
+                  { id: "merge", label: copy.merge },
+                  { id: "replace", label: copy.replace },
                 ] as const
               ).map((opt) => (
                 <button
@@ -208,12 +208,12 @@ export function MalImportCard() {
             {importing ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Résolution des fiches en cours...</span>
+                <span>{copy.resolving}</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Importer dans ma bibliothèque</span>
+                <span>{copy.importBtn}</span>
               </>
             )}
           </button>
@@ -224,13 +224,9 @@ export function MalImportCard() {
         <div className="p-3.5 rounded-xl bg-emerald-500/12 border border-emerald-500/30 text-xs text-emerald-200 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>
-            Import réussi : <strong>{summary.added}</strong> ajouté
-            {summary.added > 1 ? "s" : ""}
-            {summary.updated > 0 ? `, ${summary.updated} fusionné(s)` : ""}
-            {summary.unmatched > 0
-              ? ` (${summary.unmatched} sans correspondance AniList ignoré${summary.unmatched > 1 ? "s" : ""})`
-              : ""}
-            .
+            {copy.successPrefix} <strong>{summary.added}</strong> {copy.addedWord}
+            {summary.updated > 0 ? ` · ${summary.updated} ${copy.merge.toLowerCase()}` : ""}
+            {summary.unmatched > 0 ? ` (${summary.unmatched} ignored)` : ""}.
           </span>
         </div>
       )}

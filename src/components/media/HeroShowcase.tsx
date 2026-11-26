@@ -49,6 +49,8 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
   const heroDragRef = useRef({
     down: false,
     startX: 0,
+    startY: 0,
+    lockedAxis: null as "x" | "y" | null,
     didSwipe: false,
     suppressClickUntil: 0,
   });
@@ -126,12 +128,68 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
     window.addEventListener("mouseup", onUp);
   };
 
+  // Smooth directional touch swipe on mobile (never hijacks vertical scroll)
+  const handleHeroTouchStart = (e: React.TouchEvent<HTMLElement>) => {
+    if (slides.length <= 1 || e.touches.length !== 1) return;
+    if ((e.target as HTMLElement | null)?.closest("[data-hero-thumbs]")) return;
+    const touch = e.touches[0];
+    const st = heroDragRef.current;
+    st.down = true;
+    st.startX = touch.clientX;
+    st.startY = touch.clientY;
+    st.lockedAxis = null;
+    st.didSwipe = false;
+    setPaused(true);
+  };
+
+  const handleHeroTouchMove = (e: React.TouchEvent<HTMLElement>) => {
+    const st = heroDragRef.current;
+    if (!st.down || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - st.startX;
+    const dy = touch.clientY - st.startY;
+
+    if (!st.lockedAxis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      st.lockedAxis = Math.abs(dx) > Math.abs(dy) * 1.15 ? "x" : "y";
+    }
+
+    if (st.lockedAxis === "x") {
+      st.didSwipe = true;
+      setHeroDragging(true);
+      setDragOffsetX(Math.max(-110, Math.min(110, dx * 0.48)));
+    }
+  };
+
+  const handleHeroTouchEnd = (e: React.TouchEvent<HTMLElement>) => {
+    const st = heroDragRef.current;
+    if (!st.down) return;
+    st.down = false;
+    const changed = e.changedTouches[0];
+    const dx = changed ? changed.clientX - st.startX : 0;
+    const wasHorizontal = st.lockedAxis === "x" && st.didSwipe;
+    st.lockedAxis = null;
+    setHeroDragging(false);
+    setDragOffsetX(0);
+    setPaused(false);
+
+    if (wasHorizontal) {
+      st.suppressClickUntil = performance.now() + 220;
+      if (dx <= -42) nextSlide();
+      else if (dx >= 42) prevSlide();
+    }
+  };
+
   return (
     <section
       ref={heroRef}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onMouseDown={handleHeroMouseDown}
+      onTouchStart={handleHeroTouchStart}
+      onTouchMove={handleHeroTouchMove}
+      onTouchEnd={handleHeroTouchEnd}
+      onTouchCancel={handleHeroTouchEnd}
       onDragStart={(e) => e.preventDefault()}
       onClickCapture={(e) => {
         if (performance.now() < heroDragRef.current.suppressClickUntil) {
@@ -385,7 +443,10 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
 
           {/* Right Slide Selector Thumbnails + Live Auto-Advance Progress */}
           <div className="lg:col-span-4 min-w-0 flex flex-col items-start lg:items-end justify-end gap-3">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full pb-1">
+            <div
+              data-hero-thumbs="1"
+              className="flex items-center gap-2 overflow-x-auto touch-rail no-scrollbar max-w-full pb-1"
+            >
               {slides.map((slide, idx) => {
                 const isSelected = idx === index;
                 return (
@@ -397,7 +458,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                     onClick={() => setIndex(idx)}
                     aria-label={getDisplayTitle(slide)}
                     className={cn(
-                      "relative group rounded-lg overflow-hidden transition-all duration-300 cursor-pointer border",
+                      "relative group rounded-lg overflow-hidden transition-all duration-300 cursor-pointer border shrink-0",
                       isSelected
                         ? "w-14 h-20 border-accent shadow-[0_0_24px_rgb(var(--shiori-accent-rgb)/0.5)]"
                         : "w-11 h-16 border-white/[0.14] opacity-55 hover:opacity-95"
