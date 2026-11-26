@@ -58,7 +58,7 @@ const ACTIVITY_FILTERS: {
 ];
 
 export function CommunityClient() {
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const {
     profile,
     friends,
@@ -362,7 +362,7 @@ export function CommunityClient() {
               <button
                 type="button"
                 onClick={() => void loadActivities()}
-                aria-label="Actualiser le fil"
+                aria-label={tr("Rafraîchir")}
                 className="w-9 h-9 rounded-full bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.09] text-white inline-flex items-center justify-center cursor-pointer"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", loadingFeed && "animate-spin")} />
@@ -377,7 +377,7 @@ export function CommunityClient() {
               value={memberQuery}
               onChange={(e) => setMemberQuery(e.target.value)}
               placeholder={t("community.searchMember")}
-              className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+              className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.09] text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
             />
           </div>
         )}
@@ -418,10 +418,10 @@ export function CommunityClient() {
               ) : visibleActivities.length === 0 ? (
                 <div className="rounded-2xl card-surface p-10 text-center space-y-2">
                   <p className="text-sm font-semibold text-white">
-                    Aucune activité dans cette catégorie pour le moment.
+                    {tr("Aucune activité dans cette catégorie pour le moment.")}
                   </p>
                   <p className="text-xs text-[#858A9E]">
-                    Ajoutez un favori ou notez un titre pour partager votre activité avec la communauté.
+                    {tr("Ajoutez un favori ou notez un titre pour partager votre activité avec la communauté.")}
                   </p>
                 </div>
               ) : (
@@ -544,7 +544,7 @@ export function CommunityClient() {
                   </div>
                 ) : visibleProfiles.length === 0 ? (
                   <p className="text-xs text-[#8A8FA4]">
-                    Aucun membre public disponible pour le moment.
+                    {tr("Aucun membre public disponible pour le moment.")}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -577,7 +577,7 @@ export function CommunityClient() {
                                 <RoleBadge role={m.role} size="xs" />
                               </div>
                               <p className="text-[10.5px] font-mono text-[#7D8296] truncate">
-                                @{m.username} · {m.stats.totalEntries} titres
+                                @{m.username} · {m.stats.totalEntries} {t("common.titles")}
                               </p>
                             </div>
                           </Link>
@@ -606,10 +606,10 @@ export function CommunityClient() {
               <div>
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-emerald-400" />
-                  <span>Ajouter un ami</span>
+                  <span>{tr("Ajouter un ami")}</span>
                 </h2>
                 <p className="text-xs text-[#8D92A6] mt-0.5">
-                  Saisissez le @pseudo d&apos;un membre Shiori pour lui envoyer une invitation.
+                  {tr("Saisissez le @pseudo d'un membre Shiori pour lui envoyer une invitation.")}
                 </p>
               </div>
 
@@ -653,8 +653,8 @@ export function CommunityClient() {
                     setMemberQuery(e.target.value);
                     if (friendFeedback) setFriendFeedback(null);
                   }}
-                  placeholder="@pseudo de votre ami..."
-                  className="flex-1 md:w-60 h-10 px-3.5 rounded-xl bg-obsidian/85 border border-white/[0.1] text-xs font-mono text-white placeholder:text-[#656A7E] focus:outline-none focus:border-emerald-400"
+                  placeholder={tr("@pseudo de votre ami...")}
+                  className="flex-1 md:w-60 h-10 px-3.5 rounded-xl bg-obsidian/85 border border-white/[0.1] text-base sm:text-xs font-mono text-white placeholder:text-[#656A7E] focus:outline-none focus:border-emerald-400"
                 />
                 <button
                   type="submit"
@@ -666,7 +666,7 @@ export function CommunityClient() {
                   ) : (
                     <UserPlus className="w-3.5 h-3.5" />
                   )}
-                  <span>Ajouter</span>
+                  <span>{t("common.add")}</span>
                 </button>
               </form>
             </div>
@@ -687,7 +687,7 @@ export function CommunityClient() {
                   onClick={() => setFriendFeedback(null)}
                   className="text-[11px] opacity-75 hover:opacity-100 cursor-pointer shrink-0"
                 >
-                  Fermer
+                  {t("common.close")}
                 </button>
               </div>
             )}
@@ -700,7 +700,7 @@ export function CommunityClient() {
                 <div className="rounded-2xl card-surface border border-emerald-500/30 p-5 space-y-3">
                   <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <UserPlus className="w-4 h-4 text-emerald-400" />
-                    <span>Demandes reçues ({incomingFriendRequests.length})</span>
+                    <span>{tr("Demandes reçues")} ({incomingFriendRequests.length})</span>
                   </h3>
                   <div className="space-y-2.5">
                     {incomingFriendRequests.map(({ friendship, user }) => (
@@ -746,7 +746,7 @@ export function CommunityClient() {
                 <div className="rounded-2xl card-surface border border-amber-500/25 p-5 space-y-3">
                   <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <Clock className="w-4 h-4 text-amber-400" />
-                    <span>Demandes envoyées ({outgoingFriendRequests.length})</span>
+                    <span>{tr("Demandes envoyées")} ({outgoingFriendRequests.length})</span>
                   </h3>
                   <div className="space-y-2.5">
                     {outgoingFriendRequests.map(({ friendship, user }) => (
@@ -794,16 +794,16 @@ export function CommunityClient() {
           <div className="space-y-3">
             <h3 className="text-base font-semibold text-white flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-emerald-400" />
-              <span>Mes amis ({friends.length})</span>
+              <span>{tr("Mes amis")} ({friends.length})</span>
             </h3>
 
             {friends.length === 0 ? (
               <div className="rounded-2xl card-surface p-8 text-center space-y-2">
                 <p className="text-sm font-semibold text-white">
-                  Vous n&apos;avez pas encore d&apos;ami sur Shiori.
+                  {tr("Vous n'avez pas encore d'ami sur Shiori.")}
                 </p>
                 <p className="text-xs text-[#8A8FA4] max-w-md mx-auto">
-                  Entrez un @pseudo ci-dessus ou parcourez les membres suggérés ci-dessous.
+                  {tr("Entrez un @pseudo ci-dessus ou parcourez les membres suggérés ci-dessous.")}
                 </p>
               </div>
             ) : (
@@ -834,7 +834,7 @@ export function CommunityClient() {
                           <RoleBadge role={f.role} size="xs" />
                         </div>
                         <p className="text-xs font-mono text-[#7D8296] truncate">
-                          @{f.username} · {f.stats.totalEntries} titres
+                          @{f.username} · {f.stats.totalEntries} {t("common.titles")}
                         </p>
                       </div>
                     </div>
@@ -844,14 +844,14 @@ export function CommunityClient() {
                         href={`/profile/${encodeURIComponent(f.username)}`}
                         className="flex-1 h-9 rounded-xl bg-white/[0.07] hover:bg-white/[0.14] border border-white/[0.1] text-xs font-semibold text-white flex items-center justify-center transition-colors"
                       >
-                        Profil
+                        {tr("Profil")}
                       </Link>
                       <Link
                         href={`/messages?to=${encodeURIComponent(f.username)}`}
                         className="h-9 px-3 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Message</span>
+                        <span>{tr("Message")}</span>
                       </Link>
                       <FriendActionButton
                         target={{
@@ -879,7 +879,7 @@ export function CommunityClient() {
             return (
               <div className="space-y-3">
                 <h3 className="text-base font-semibold text-white">
-                  Membres à découvrir
+                  {tr("Membres à découvrir")}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {suggestions.slice(0, 8).map((m) => (
@@ -905,7 +905,7 @@ export function CommunityClient() {
                             {m.displayName}
                           </Link>
                           <p className="text-xs font-mono text-[#7D8296] truncate">
-                            @{m.username} · {m.stats.totalEntries} titres
+                            @{m.username} · {m.stats.totalEntries} {t("common.titles")}
                           </p>
                         </div>
                       </div>
@@ -923,7 +923,7 @@ export function CommunityClient() {
                           href={`/profile/${encodeURIComponent(m.username)}`}
                           className="h-9 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-semibold text-white inline-flex items-center justify-center transition-colors"
                         >
-                          Profil
+                          {tr("Profil")}
                         </Link>
                       </div>
                     </div>
@@ -939,11 +939,11 @@ export function CommunityClient() {
           {loadingMembers ? (
             <div className="flex items-center justify-center py-12 text-xs text-[#8E93A6] gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
-              <span>Chargement des membres...</span>
+              <span>{t("common.loading")}</span>
             </div>
           ) : visibleProfiles.length === 0 ? (
             <div className="rounded-2xl card-surface p-10 text-center text-sm text-[#9A9EAE]">
-              Aucun membre trouvé pour « {memberQuery} ».
+              {tr("Aucun résultat trouvé")} « {memberQuery} »
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -976,7 +976,7 @@ export function CommunityClient() {
                             <RoleBadge role={m.role} size="xs" />
                             {(m.source === "community" || m.id.startsWith("community-")) && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 font-mono text-[9.5px] uppercase text-amber-200 shrink-0">
-                                Exemple
+                                {tr("Exemple")}
                               </span>
                             )}
                           </div>
@@ -984,7 +984,7 @@ export function CommunityClient() {
                             @{m.username}
                           </p>
                           <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-[#A6AAB8]">
-                            <span>{m.stats.totalEntries} titres</span>
+                            <span>{m.stats.totalEntries} {t("common.titles")}</span>
                             {m.stats.meanScore !== null && (
                               <span className="inline-flex items-center gap-0.5 text-kinpaku">
                                 <Star className="w-3 h-3 fill-current" />
@@ -1025,7 +1025,7 @@ export function CommunityClient() {
                         href={`/profile/${encodeURIComponent(m.username)}`}
                         className="flex-1 h-9 px-3 rounded-xl bg-white/[0.07] hover:bg-white/[0.14] border border-white/[0.1] text-xs font-semibold text-white flex items-center justify-center transition-colors"
                       >
-                        Profil
+                        {tr("Profil")}
                       </Link>
                       {!isMe && (
                         <>
@@ -1039,11 +1039,11 @@ export function CommunityClient() {
                           />
                           <Link
                             href={`/messages?to=${encodeURIComponent(m.username)}`}
-                            title={`Envoyer un message à ${m.displayName}`}
+                            title={tr("Envoyer un message")}
                             className="h-9 px-3 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
                           >
                             <MessageSquare className="w-3.5 h-3.5" />
-                            <span>Message</span>
+                            <span>{tr("Message")}</span>
                           </Link>
                         </>
                       )}

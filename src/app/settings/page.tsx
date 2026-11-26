@@ -114,7 +114,7 @@ export default function SettingsPage() {
     toast,
   } = useShiori();
 
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const copy = getSettingsCopy(contentLanguage);
 
   useEffect(() => {
@@ -147,8 +147,8 @@ export default function SettingsPage() {
       setBrowserAlertsEnabled(false);
       setBrowserAlertsOn(false);
       toast({
-        title: "Alertes système désactivées",
-        description: "Les notifications restent visibles dans la cloche Shiori.",
+        title: tr("Alertes système désactivées"),
+        description: tr("Les notifications restent visibles dans la cloche Shiori."),
         variant: "info",
       });
       return;
@@ -161,20 +161,20 @@ export default function SettingsPage() {
       setBrowserAlertsOn(true);
       updateNotificationPrefs({ airingAlerts: true });
       await sendShioriSystemNotification({
-        title: "Alertes Shiori activées !",
-        body: "Vous serez prévenu dès la sortie d'un nouvel épisode suivi.",
+        title: tr("Alertes Shiori activées !"),
+        body: tr("Vous serez prévenu dès la sortie d'un nouvel épisode suivi."),
         url: "/episodes",
         tag: "shiori-push-enabled",
       });
       toast({
-        title: "Notifications système activées",
-        description: "Les sorties d'épisodes apparaîtront aussi sur votre appareil.",
+        title: tr("Notifications système activées"),
+        description: tr("Les sorties d'épisodes apparaîtront aussi sur votre appareil."),
         variant: "success",
       });
     } else if (perm === "denied") {
       toast({
-        title: "Autorisation bloquée",
-        description: "Réactivez les notifications pour Shiori dans les réglages de votre navigateur.",
+        title: tr("Autorisation bloquée"),
+        description: tr("Réactivez les notifications pour Shiori dans les réglages de votre navigateur."),
         variant: "warning",
       });
     }
@@ -251,7 +251,7 @@ export default function SettingsPage() {
     a.download = `shiori-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Sauvegarde JSON exportée", variant: "success" });
+    toast({ title: tr("Sauvegarde JSON exportée"), variant: "success" });
   };
 
   const handleFullExport = async () => {
@@ -266,14 +266,14 @@ export default function SettingsPage() {
       a.click();
       URL.revokeObjectURL(url);
       toast({
-        title: "Export complet téléchargé",
-        description: "Profil, bibliothèque, collections, badges et préférences inclus.",
+        title: tr("Export complet téléchargé"),
+        description: tr("Profil, bibliothèque, collections, badges et préférences inclus."),
         variant: "success",
       });
     } catch {
       toast({
-        title: "Export complet impossible",
-        description: "Réessayez dans un instant.",
+        title: tr("Export complet impossible"),
+        description: tr("Réessayez dans un instant."),
         variant: "warning",
       });
     } finally {
@@ -284,8 +284,8 @@ export default function SettingsPage() {
   const handleDeleteAccount = async () => {
     if (deleteConfirmText.trim().toUpperCase() !== "SUPPRIMER") {
       toast({
-        title: "Confirmation invalide",
-        description: 'Saisissez exactement "SUPPRIMER" pour confirmer.',
+        title: tr("Confirmation invalide"),
+        description: tr('Saisissez exactement "SUPPRIMER" pour confirmer.'),
         variant: "warning",
       });
       return;
@@ -298,7 +298,7 @@ export default function SettingsPage() {
         setDeleteConfirmText("");
       } else {
         toast({
-          title: "Suppression impossible",
+          title: tr("Suppression impossible"),
           description: res.message,
           variant: "warning",
         });
@@ -315,7 +315,7 @@ export default function SettingsPage() {
     const res = importLibraryJson(text);
     if (!res.ok) {
       toast({
-        title: "Échec de l'import",
+        title: tr("Échec de l'import"),
         description: res.error,
         variant: "warning",
       });
@@ -326,14 +326,14 @@ export default function SettingsPage() {
   const handleTestNotification = () => {
     pushNotification({
       kind: "AIRING",
-      title: "Notification de test Shiori",
-      body: "Vos alertes fonctionnent correctement pour vos séries en cours.",
+      title: tr("Notification de test Shiori"),
+      body: tr("Vos alertes fonctionnent correctement pour vos séries en cours."),
       mediaId: library[0]?.mediaId,
       coverImage: library[0]?.coverImage,
     });
     toast({
-      title: "Notification envoyée",
-      description: "Consultez la cloche en haut de l'écran.",
+      title: tr("Notification envoyée"),
+      description: tr("Consultez la cloche en haut de l'écran."),
       variant: "info",
     });
   };

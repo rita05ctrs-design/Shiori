@@ -14,12 +14,13 @@ import {
   Flag,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
 import { BADGE_BY_ID, RARITY_META } from "@/lib/badges";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { ActivityCommentItem, CommunityActivityItem, ReportReason } from "@/types/media";
 
 const ACTIVITY_REPORT_REASONS: { id: ReportReason; label: string }[] = [
@@ -74,6 +75,7 @@ const KIND_META: Record<
 
 export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
   const { profile, toast, recordSocialInteraction, reportContent } = useShiori();
+  const { tr, tRelativeTime } = useTranslation();
   const [commentsOpen, setCommentsOpen] = useState(item.comments.length > 0);
   const [commentText, setCommentText] = useState("");
   const [commenting, setCommenting] = useState(false);
@@ -161,8 +163,8 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
       const data = await res.json();
       if (!res.ok || !data?.comment) {
         toast({
-          title: "Commentaire refusé",
-          description: data?.error || "Impossible d'envoyer le commentaire.",
+          title: tr("Commentaire refusé"),
+          description: data?.error || tr("Impossible d'envoyer le commentaire."),
           variant: "warning",
         });
         return;
@@ -227,10 +229,10 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
               </Link>
               {(item.id.startsWith("act-seed-") || item.userId.startsWith("community-")) && (
                 <span
-                  title="Activité d'exemple de démonstration"
+                  title={tr("Exemple")}
                   className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 font-mono text-[9.5px] uppercase tracking-wider text-amber-200"
                 >
-                  Exemple
+                  {tr("Exemple")}
                 </span>
               )}
               <PinnedBadgesRow
@@ -239,7 +241,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
               />
             </div>
             <p className="text-[11px] text-[#858A9E]">
-              {formatRelativeTime(item.createdAt)}
+              {tRelativeTime(item.createdAt)}
             </p>
           </div>
         </div>
@@ -251,7 +253,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
           )}
         >
           <KindIcon className="w-3 h-3" />
-          <span>{meta.label}</span>
+          <span>{tr(meta.label)}</span>
         </span>
       </div>
 
@@ -300,13 +302,13 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
                   {badgeRarityMeta.shortLabel}
                 </span>
                 <span className="text-[11px] font-mono text-[#B5B9C9]">
-                  Trophée rare Shiori
+                  {tr("Trophée rare Shiori")}
                 </span>
               </div>
               <p className="text-sm sm:text-base font-bold text-white leading-snug">
                 {item.actorDisplayName}{" "}
                 <span className="font-normal text-[#D4D7E6]">
-                  a débloqué le badge
+                  {tr("a débloqué le badge")}
                 </span>{" "}
                 <span className={badgeRarityMeta.color}>{item.mediaTitle}</span> !
               </p>
@@ -343,7 +345,20 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
           )}
 
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-[#9EA3B5]">{item.action}</p>
+            <p className="text-xs text-[#9EA3B5]">
+              {(() => {
+                const translateSegment = (seg: string) => {
+                  const rated = seg.match(/^A attribué la note de (.+)$/i);
+                  if (rated) return tr("A attribué la note de {score}", { score: rated[1] });
+                  const epProg = seg.match(/^A progressé jusqu'à l'épisode (\d+)$/i);
+                  if (epProg) return tr("A progressé jusqu'à l'épisode {n}", { n: epProg[1] });
+                  const chProg = seg.match(/^A progressé jusqu'au chapitre (\d+)$/i);
+                  if (chProg) return tr("A progressé jusqu'au chapitre {n}", { n: chProg[1] });
+                  return tr(seg);
+                };
+                return item.action.split(" · ").map(translateSegment).join(" · ");
+              })()}
+            </p>
             {item.mediaType === "STAFF" ? (
               <a
                 href={targetHref}
@@ -386,7 +401,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
           >
             <Heart className={cn("w-3.5 h-3.5", isLiked && "fill-current")} />
             <span className="font-mono">{item.likes.length}</span>
-            <span>J&apos;aime</span>
+            <span>{tr("J'aime")}</span>
           </button>
 
           <button
@@ -401,7 +416,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
           >
             <MessageCircle className="w-3.5 h-3.5" />
             <span className="font-mono">{item.comments.length}</span>
-            <span>Commentaires</span>
+            <span>{tr("Commentaires")}</span>
           </button>
         </div>
 
@@ -410,10 +425,10 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
             type="button"
             onClick={() => setReportOpen((v) => !v)}
             className="h-8 px-2.5 rounded-full text-[11px] font-medium text-[#7D8296] hover:text-amber-300 hover:bg-amber-500/10 inline-flex items-center gap-1 transition-colors cursor-pointer"
-            title="Signaler cette publication"
+            title={tr("Signaler")}
           >
             <Flag className="w-3 h-3" />
-            <span>Signaler</span>
+            <span>{tr("Signaler")}</span>
           </button>
         )}
       </div>
@@ -421,7 +436,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
       {reportOpen && !isOwnActivity && (
         <div className="rounded-xl bg-obsidian/80 border border-amber-400/30 p-3 space-y-2.5">
           <p className="text-[11px] font-semibold text-amber-200">
-            Motif du signalement :
+            {tr("Motif du signalement :")}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {ACTIVITY_REPORT_REASONS.map((r) => (
@@ -436,7 +451,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
                     : "bg-white/[0.03] border-white/[0.08] text-[#A2A6B8] hover:text-white"
                 )}
               >
-                {r.label}
+                {tr(r.label)}
               </button>
             ))}
           </div>
@@ -446,7 +461,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
               onClick={() => setReportOpen(false)}
               className="px-3 py-1 rounded-lg text-[11px] text-[#9A9EAE] hover:text-white cursor-pointer"
             >
-              Annuler
+              {tr("Annuler")}
             </button>
             <button
               type="button"
@@ -454,7 +469,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
               onClick={() => void handleSubmitReport()}
               className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-[#090A0F] text-[11px] font-semibold cursor-pointer"
             >
-              {reporting ? "Envoi..." : "Confirmer le signalement"}
+              {reporting ? tr("Envoi...") : tr("Confirmer le signalement")}
             </button>
           </div>
         </div>
@@ -486,7 +501,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
                       </Link>
                       <RoleBadge role={c.authorRole} size="xs" />
                       <span className="text-[10px] text-[#7D8296]">
-                        {formatRelativeTime(c.createdAt)}
+                        {tRelativeTime(c.createdAt)}
                       </span>
                     </div>
                     <p className="text-xs text-[#D6D9E5] mt-0.5 leading-relaxed break-words">
@@ -511,9 +526,9 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
               type="text"
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
-              placeholder="Ajouter un commentaire..."
+              placeholder={tr("Ajouter un commentaire...")}
               maxLength={600}
-              className="flex-1 h-9 px-3 rounded-xl bg-obsidian/80 border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+              className="flex-1 h-9 px-3 rounded-xl bg-obsidian/80 border border-white/[0.09] text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
             />
             <button
               type="submit"

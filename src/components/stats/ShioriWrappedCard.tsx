@@ -19,6 +19,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { computeShioriWrapped } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ const TOTAL_SLIDES = 4;
 
 export function ShioriWrappedCard() {
   const { library, activity, profile, theme, toast } = useShiori();
+  const { t, tr, tGenre, locale } = useTranslation();
   const initialWrapped = useMemo(
     () => computeShioriWrapped(library, activity),
     [library, activity]
@@ -39,19 +41,45 @@ export function ShioriWrappedCard() {
     [library, activity, selectedYear]
   );
 
+  const busiestMonthLabel = useMemo(() => {
+    if (!wrapped.busiestMonth) return null;
+    const [yStr, mStr] = wrapped.busiestMonth.key.split("-");
+    const dt = new Date(Number(yStr), Number(mStr) - 1, 1);
+    if (Number.isNaN(dt.getTime())) return wrapped.busiestMonth.label;
+    const f = new Intl.DateTimeFormat(locale, { month: "short" })
+      .format(dt)
+      .replace(/\.$/, "");
+    return f.charAt(0).toUpperCase() + f.slice(1);
+  }, [wrapped.busiestMonth, locale]);
+
+  const archetypeTitle = tr(wrapped.archetype.title);
+  const archetypeSubtitle = tr(wrapped.archetype.subtitle);
+
   const buildShareText = () => {
     const lines = [
-      `栞 Mon Shiori Wrapped ${wrapped.year} — ${profile.displayName} (@${profile.username})`,
-      `✨ Profil : ${wrapped.archetype.title}`,
-      `📺 ${wrapped.animeCount} animés · ${wrapped.episodesWatched.toLocaleString("fr-FR")} épisodes (${wrapped.estimatedDays}j estimés)`,
-      `📖 ${wrapped.mangaCount} mangas · ${wrapped.chaptersRead.toLocaleString("fr-FR")} chapitres`,
-      wrapped.meanScore !== null ? `★ Note moyenne : ${wrapped.meanScore.toFixed(2)}/10` : "",
-      wrapped.topGenres.length > 0
-        ? `🎭 Top genres : ${wrapped.topGenres.slice(0, 3).map((g) => g.genre).join(", ")}`
+      `栞 Shiori Wrapped ${wrapped.year} — ${profile.displayName} (@${profile.username})`,
+      `✨ ${archetypeTitle}`,
+      `📺 ${tr("{animes} animés · {eps} épisodes ({days}j estimés)", {
+        animes: wrapped.animeCount,
+        eps: wrapped.episodesWatched.toLocaleString(locale),
+        days: wrapped.estimatedDays,
+      })}`,
+      `📖 ${tr("{mangas} mangas · {chaps} chapitres", {
+        mangas: wrapped.mangaCount,
+        chaps: wrapped.chaptersRead.toLocaleString(locale),
+      })}`,
+      wrapped.meanScore !== null
+        ? `★ ${tr("Note moyenne")} : ${wrapped.meanScore.toFixed(2)}/10`
         : "",
-      wrapped.topStudio ? `🎬 Studio favori : ${wrapped.topStudio.name}` : "",
+      wrapped.topGenres.length > 0
+        ? `🎭 ${tr("Genres préférés")} : ${wrapped.topGenres
+            .slice(0, 3)
+            .map((g) => tGenre(g.genre))
+            .join(", ")}`
+        : "",
+      wrapped.topStudio ? `🎬 ${tr("Studio signature")} : ${wrapped.topStudio.name}` : "",
       wrapped.topTitles.length > 0
-        ? `🏆 Top œuvres : ${wrapped.topTitles.map((t) => t.title).join(" · ")}`
+        ? `🏆 ${tr("Top œuvres")} : ${wrapped.topTitles.map((item) => item.title).join(" · ")}`
         : "",
     ].filter(Boolean);
     return lines.join("\n");
@@ -62,14 +90,14 @@ export function ShioriWrappedCard() {
       await navigator.clipboard.writeText(buildShareText());
       setCopied(true);
       toast({
-        title: "Résumé Shiori Wrapped copié !",
-        description: "Prêt à être partagé sur Discord, X ou entre amis.",
+        title: tr("Résumé Shiori Wrapped copié !"),
+        description: tr("Prêt à être partagé sur Discord, X ou entre amis."),
         variant: "success",
       });
       setTimeout(() => setCopied(false), 2000);
     } catch {
       toast({
-        title: "Copie bloquée par le navigateur",
+        title: tr("Copie bloquée par le navigateur"),
         variant: "warning",
       });
     }
@@ -120,15 +148,15 @@ export function ShioriWrappedCard() {
 
     ctx.fillStyle = "#9A9EAE";
     ctx.font = "500 26px monospace";
-    ctx.fillText(`@${profile.username}  ·  ${wrapped.archetype.title}`, 96, 258);
+    ctx.fillText(`@${profile.username}  ·  ${archetypeTitle}`, 96, 258);
 
     // 4 KPI tiles
     const kpis = [
-      { label: "ÉPISODES VUS", val: wrapped.episodesWatched.toLocaleString("fr-FR") },
-      { label: "CHAPITRES LUS", val: wrapped.chaptersRead.toLocaleString("fr-FR") },
-      { label: "TEMPS ESTIMÉ", val: `${wrapped.estimatedDays} jours` },
+      { label: tr("Épisodes vus").toUpperCase(), val: wrapped.episodesWatched.toLocaleString(locale) },
+      { label: tr("Chapitres lus").toUpperCase(), val: wrapped.chaptersRead.toLocaleString(locale) },
+      { label: tr("Temps estimé").toUpperCase(), val: tr("{n} jours", { n: wrapped.estimatedDays }) },
       {
-        label: "NOTE MOYENNE",
+        label: tr("Note moyenne").toUpperCase(),
         val: wrapped.meanScore !== null ? `${wrapped.meanScore.toFixed(1)} / 10` : "—",
       },
     ];
@@ -154,25 +182,25 @@ export function ShioriWrappedCard() {
     // Top Genres
     ctx.fillStyle = theme.accentColor;
     ctx.font = "600 22px monospace";
-    ctx.fillText("ADN GENRES", 96, 738);
+    ctx.fillText(tr("ADN GENRES"), 96, 738);
 
     ctx.fillStyle = "#F4F3EE";
     ctx.font = "600 32px sans-serif";
     const genreLine =
       wrapped.topGenres.length > 0
-        ? wrapped.topGenres.slice(0, 3).map((g) => `${g.genre} (${g.count})`).join("  ·  ")
-        : "Collection en construction";
+        ? wrapped.topGenres.slice(0, 3).map((g) => `${tGenre(g.genre)} (${g.count})`).join("  ·  ")
+        : tr("Collection en construction");
     ctx.fillText(genreLine.slice(0, 52), 96, 788);
 
     // Top Studio
     if (wrapped.topStudio) {
       ctx.fillStyle = "#F0B95B";
       ctx.font = "600 22px monospace";
-      ctx.fillText("STUDIO SIGNATURE", 96, 868);
+      ctx.fillText(tr("Studio signature").toUpperCase(), 96, 868);
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "700 34px sans-serif";
       ctx.fillText(
-        `${wrapped.topStudio.name} (${wrapped.topStudio.count} œuvre${wrapped.topStudio.count > 1 ? "s" : ""})`,
+        `${wrapped.topStudio.name} (${tr("{n} œuvres", { n: wrapped.topStudio.count })})`,
         96,
         916
       );
@@ -181,27 +209,27 @@ export function ShioriWrappedCard() {
     // Top 3 Titles
     ctx.fillStyle = theme.accentColor;
     ctx.font = "600 22px monospace";
-    ctx.fillText("CHEFS-D'ŒUVRE MARQUANTS", 96, 1002);
-    wrapped.topTitles.forEach((t, idx) => {
+    ctx.fillText(tr("Chefs-d'œuvre marquants").toUpperCase(), 96, 1002);
+    wrapped.topTitles.forEach((item, idx) => {
       const y = 1054 + idx * 54;
       ctx.fillStyle = "#F0B95B";
       ctx.font = "700 28px monospace";
       ctx.fillText(`#${idx + 1}`, 96, y);
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "600 28px sans-serif";
-      const label = t.title.length > 44 ? `${t.title.slice(0, 44)}…` : t.title;
+      const label = item.title.length > 44 ? `${item.title.slice(0, 44)}…` : item.title;
       ctx.fillText(label, 152, y);
-      if (t.score !== null) {
+      if (item.score !== null) {
         ctx.fillStyle = "#F0B95B";
         ctx.font = "600 24px monospace";
-        ctx.fillText(`★ ${t.score.toFixed(1)}`, 880, y);
+        ctx.fillText(`★ ${item.score.toFixed(1)}`, 880, y);
       }
     });
 
     // Footer watermark
     ctx.fillStyle = "#7D8296";
     ctx.font = "500 20px monospace";
-    ctx.fillText("SHIORI (栞) — SUIVI ANIME & MANGA", 96, h - 86);
+    ctx.fillText("SHIORI (栞) — ANIME & MANGA", 96, h - 86);
 
     const url = canvas.toDataURL("image/png");
     const a = document.createElement("a");
@@ -209,7 +237,7 @@ export function ShioriWrappedCard() {
     a.download = `shiori-wrapped-${wrapped.year}-${profile.username}.png`;
     a.click();
     toast({
-      title: `Carte Shiori Wrapped ${wrapped.year} téléchargée`,
+      title: tr("Carte Shiori Wrapped {year} téléchargée", { year: wrapped.year }),
       variant: "success",
       celebrate: true,
     });
@@ -239,13 +267,13 @@ export function ShioriWrappedCard() {
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Bilan annuel personnalisé · 100% données réelles</span>
+            <span>{tr("Bilan annuel personnalisé · 100% données réelles")}</span>
           </p>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-gradient-editorial mt-0.5">
             Shiori Wrapped {wrapped.year}
           </h2>
           <p className="text-xs text-[#9EA3B5] mt-1">
-            Votre rétrospective éditoriale générée en direct depuis votre bibliothèque et vos notes.
+            {tr("Votre rétrospective éditoriale générée en direct depuis votre bibliothèque et vos notes.")}
           </p>
         </div>
 
@@ -280,7 +308,7 @@ export function ShioriWrappedCard() {
             ) : (
               <Copy className="w-3.5 h-3.5" />
             )}
-            <span>{copied ? "Copié !" : "Copier le résumé"}</span>
+            <span>{copied ? t("common.copied") : tr("Copier le résumé")}</span>
           </button>
 
           <button
@@ -289,46 +317,49 @@ export function ShioriWrappedCard() {
             className="h-9 px-4 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-1.5 cursor-pointer transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Télécharger la carte PNG</span>
+            <span>{tr("Télécharger la carte PNG")}</span>
           </button>
         </div>
       </div>
 
       {/* Story Progress Bars */}
       <div className="relative z-10 grid grid-cols-4 gap-2">
-        {["Vue d'ensemble", "ADN Genres & Studio", "Tes Chefs-d'Œuvre", "Carte Partageable"].map(
-          (lbl, idx) => (
-            <button
-              key={lbl}
-              type="button"
-              onClick={() => setSlide(idx)}
-              className="text-left space-y-1.5 cursor-pointer group"
-            >
-              <div className="h-1.5 rounded-full bg-white/[0.1] overflow-hidden">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all duration-300",
-                    idx === slide
-                      ? "w-full bg-gradient-to-r from-accent to-kinpaku"
-                      : idx < slide
-                        ? "w-full bg-white/55"
-                        : "w-0"
-                  )}
-                />
-              </div>
-              <span
+        {[
+          tr("Vue d'ensemble"),
+          tr("ADN Genres & Studio"),
+          tr("Tes Chefs-d'Œuvre"),
+          tr("Carte Partageable"),
+        ].map((lbl, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => setSlide(idx)}
+            className="text-left space-y-1.5 cursor-pointer group"
+          >
+            <div className="h-1.5 rounded-full bg-white/[0.1] overflow-hidden">
+              <div
                 className={cn(
-                  "block text-[10.5px] font-mono truncate transition-colors",
+                  "h-full rounded-full transition-all duration-300",
                   idx === slide
-                    ? "text-white font-semibold"
-                    : "text-[#7D8296] group-hover:text-[#C8CCE0]"
+                    ? "w-full bg-gradient-to-r from-accent to-kinpaku"
+                    : idx < slide
+                      ? "w-full bg-white/55"
+                      : "w-0"
                 )}
-              >
-                0{idx + 1}. {lbl}
-              </span>
-            </button>
-          )
-        )}
+              />
+            </div>
+            <span
+              className={cn(
+                "block text-[10.5px] font-mono truncate transition-colors",
+                idx === slide
+                  ? "text-white font-semibold"
+                  : "text-[#7D8296] group-hover:text-[#C8CCE0]"
+              )}
+            >
+              0{idx + 1}. {lbl}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Interactive Story Stage */}
@@ -346,13 +377,13 @@ export function ShioriWrappedCard() {
               <div className="space-y-1">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent/18 border border-accent/40 text-[11px] font-semibold text-accent-soft">
                   <Trophy className="w-3 h-3" />
-                  Archétype {wrapped.year}
+                  {tr("Archétype {year}", { year: wrapped.year })}
                 </span>
                 <h3 className="text-2xl sm:text-3xl font-bold text-white">
-                  {wrapped.archetype.title}
+                  {archetypeTitle}
                 </h3>
                 <p className="text-xs sm:text-sm text-[#A6AAB8] max-w-2xl">
-                  {wrapped.archetype.subtitle}
+                  {archetypeSubtitle}
                 </p>
               </div>
 
@@ -360,54 +391,60 @@ export function ShioriWrappedCard() {
                 <div className="p-3.5 rounded-xl bg-white/[0.035] border border-white/[0.07]">
                   <p className="text-[10.5px] font-mono text-[#858A9E] flex items-center gap-1.5">
                     <Tv className="w-3.5 h-3.5 text-sky-400" />
-                    Épisodes vus
+                    {tr("Épisodes vus")}
                   </p>
                   <p className="text-2xl font-bold font-mono text-white mt-1">
-                    {wrapped.episodesWatched.toLocaleString("fr-FR")}
+                    {wrapped.episodesWatched.toLocaleString(locale)}
                   </p>
                   <p className="text-[10.5px] text-[#7D8296] mt-0.5">
-                    {wrapped.animeCount} animés · {wrapped.completedCount} terminés
+                    {tr("{animes} animés · {completed} terminés", {
+                      animes: wrapped.animeCount,
+                      completed: wrapped.completedCount,
+                    })}
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-white/[0.035] border border-white/[0.07]">
                   <p className="text-[10.5px] font-mono text-[#858A9E] flex items-center gap-1.5">
                     <BookOpen className="w-3.5 h-3.5 text-violet-400" />
-                    Chapitres lus
+                    {tr("Chapitres lus")}
                   </p>
                   <p className="text-2xl font-bold font-mono text-white mt-1">
-                    {wrapped.chaptersRead.toLocaleString("fr-FR")}
+                    {wrapped.chaptersRead.toLocaleString(locale)}
                   </p>
                   <p className="text-[10.5px] text-[#7D8296] mt-0.5">
-                    {wrapped.mangaCount} mangas suivis
+                    {tr("{n} mangas suivis", { n: wrapped.mangaCount })}
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-white/[0.035] border border-white/[0.07]">
                   <p className="text-[10.5px] font-mono text-[#858A9E] flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                    Temps estimé
+                    {tr("Temps estimé")}
                   </p>
                   <p className="text-2xl font-bold font-mono text-white mt-1">
-                    {wrapped.estimatedDays} j
+                    {wrapped.estimatedDays} {tr("j")}
                   </p>
                   <p className="text-[10.5px] text-[#7D8296] mt-0.5">
-                    {wrapped.estimatedHours.toLocaleString("fr-FR")} heures
+                    {tr("{n} heures", { n: wrapped.estimatedHours.toLocaleString(locale) })}
                   </p>
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-white/[0.035] border border-white/[0.07]">
                   <p className="text-[10.5px] font-mono text-[#858A9E] flex items-center gap-1.5">
                     <Star className="w-3.5 h-3.5 text-kinpaku fill-current" />
-                    Note moyenne
+                    {tr("Note moyenne")}
                   </p>
                   <p className="text-2xl font-bold font-mono text-kinpaku mt-1">
                     {wrapped.meanScore !== null ? `${wrapped.meanScore.toFixed(2)}/10` : "—"}
                   </p>
                   <p className="text-[10.5px] text-[#7D8296] mt-0.5">
-                    {wrapped.busiestMonth
-                      ? `Pic en ${wrapped.busiestMonth.label} (${wrapped.busiestMonth.count})`
-                      : `${wrapped.titlesTracked} œuvres analysées`}
+                    {wrapped.busiestMonth && busiestMonthLabel
+                      ? tr("Pic en {month} ({n})", {
+                          month: busiestMonthLabel,
+                          n: wrapped.busiestMonth.count,
+                        })
+                      : tr("{n} œuvres analysées", { n: wrapped.titlesTracked })}
                   </p>
                 </div>
               </div>
@@ -425,11 +462,13 @@ export function ShioriWrappedCard() {
             >
               <div className="space-y-3">
                 <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent">
-                  Tes genres dominants
+                  {tr("Tes genres dominants")}
                 </p>
                 <div className="space-y-2.5">
                   {wrapped.topGenres.length === 0 ? (
-                    <p className="text-xs text-[#8A8FA4]">Ajoutez des œuvres pour découvrir votre ADN.</p>
+                    <p className="text-xs text-[#8A8FA4]">
+                      {tr("Ajoutez des œuvres pour découvrir votre ADN.")}
+                    </p>
                   ) : (
                     wrapped.topGenres.map((g, idx) => (
                       <div
@@ -440,13 +479,17 @@ export function ShioriWrappedCard() {
                           <span className="w-6 h-6 rounded-lg bg-accent/20 text-accent-soft font-mono text-xs font-bold flex items-center justify-center">
                             #{idx + 1}
                           </span>
-                          <span className="text-sm font-semibold text-white">{g.genre}</span>
+                          <span className="text-sm font-semibold text-white">
+                            {tGenre(g.genre)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-3 font-mono text-xs">
                           {g.avgScore !== null && (
                             <span className="text-kinpaku">★ {g.avgScore.toFixed(1)}</span>
                           )}
-                          <span className="text-[#9A9EAE]">{g.count} titres</span>
+                          <span className="text-[#9A9EAE]">
+                            {tr("{n} titres", { n: g.count })}
+                          </span>
                         </div>
                       </div>
                     ))
@@ -457,24 +500,28 @@ export function ShioriWrappedCard() {
               <div className="p-5 rounded-2xl bg-gradient-to-br from-accent/14 via-surface to-kinpaku/10 border border-white/[0.1] space-y-3">
                 <Award className="w-8 h-8 text-kinpaku" />
                 <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-kinpaku">
-                  Studio signature
+                  {tr("Studio signature")}
                 </p>
                 <h4 className="text-2xl font-bold text-white">
-                  {wrapped.topStudio ? wrapped.topStudio.name : "En cours de découverte"}
+                  {wrapped.topStudio ? wrapped.topStudio.name : tr("En cours de découverte")}
                 </h4>
                 <p className="text-xs text-[#B5B9C9] leading-relaxed">
                   {wrapped.topStudio
-                    ? `${wrapped.topStudio.count} œuvre${wrapped.topStudio.count > 1 ? "s" : ""} suivie${wrapped.topStudio.count > 1 ? "s" : ""}${
-                        wrapped.topStudio.avgScore !== null
-                          ? ` avec une note moyenne de ★ ${wrapped.topStudio.avgScore.toFixed(1)}/10.`
-                          : "."
-                      }`
-                    : "Notez et suivez vos studios préférés pour révéler votre signature."}
+                    ? wrapped.topStudio.avgScore !== null
+                      ? tr("{n} œuvres suivies avec une note moyenne de ★ {score}/10.", {
+                          n: wrapped.topStudio.count,
+                          score: wrapped.topStudio.avgScore.toFixed(1),
+                        })
+                      : tr("{n} œuvres suivies.", { n: wrapped.topStudio.count })
+                    : tr("Notez et suivez vos studios préférés pour révéler votre signature.")}
                 </p>
-                {wrapped.busiestMonth && (
+                {wrapped.busiestMonth && busiestMonthLabel && (
                   <p className="text-[11px] font-mono text-[#9EA3B5] flex items-center gap-1.5 pt-1">
                     <Calendar className="w-3.5 h-3.5 text-accent-soft" />
-                    Mois le plus actif : {wrapped.busiestMonth.label} ({wrapped.busiestMonth.count} actions)
+                    {tr("Mois le plus actif : {month} ({n} actions)", {
+                      month: busiestMonthLabel,
+                      n: wrapped.busiestMonth.count,
+                    })}
                   </p>
                 )}
               </div>
@@ -492,10 +539,10 @@ export function ShioriWrappedCard() {
             >
               <div>
                 <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-kinpaku">
-                  Podium {wrapped.year}
+                  {tr("Podium {year}", { year: wrapped.year })}
                 </p>
                 <h3 className="text-xl font-bold text-white mt-0.5">
-                  Les œuvres qui ont marqué votre sélection
+                  {tr("Les œuvres qui ont marqué votre sélection")}
                 </h3>
               </div>
 
@@ -519,7 +566,9 @@ export function ShioriWrappedCard() {
                         {item.title}
                       </p>
                       <p className="text-[11px] font-mono text-[#9A9EAE] mt-1">
-                        {item.score !== null ? `★ ${item.score.toFixed(1)}/10` : `${item.progress} ${item.type === "MANGA" ? "ch." : "ép."}`}
+                        {item.score !== null
+                          ? `★ ${item.score.toFixed(1)}/10`
+                          : `${item.progress} ${item.type === "MANGA" ? t("common.chShort") : t("common.epShort")}`}
                       </p>
                     </div>
                   </Link>
@@ -539,13 +588,13 @@ export function ShioriWrappedCard() {
             >
               <div className="space-y-2 max-w-xl">
                 <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent">
-                  Prêt à partager
+                  {tr("Prêt à partager")}
                 </p>
                 <h3 className="text-xl sm:text-2xl font-bold text-white">
-                  Votre affiche Shiori Wrapped {wrapped.year}
+                  {tr("Votre affiche Shiori Wrapped {year}", { year: wrapped.year })}
                 </h3>
                 <p className="text-xs sm:text-sm text-[#9EA3B5] leading-relaxed">
-                  Téléchargez votre carte haute définition (1080×1350 PNG aux couleurs de votre thème actif) ou copiez votre résumé texte en un clic.
+                  {tr("Téléchargez votre carte haute définition (1080×1350 PNG aux couleurs de votre thème actif) ou copiez votre résumé texte en un clic.")}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 pt-2">
                   <button
@@ -554,7 +603,7 @@ export function ShioriWrappedCard() {
                     className="h-10 px-5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-2 cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Télécharger en PNG</span>
+                    <span>{tr("Télécharger en PNG")}</span>
                   </button>
                   <button
                     type="button"
@@ -562,7 +611,7 @@ export function ShioriWrappedCard() {
                     className="h-10 px-4 rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-white/[0.12] text-xs font-semibold text-white inline-flex items-center gap-2 cursor-pointer"
                   >
                     <Copy className="w-3.5 h-3.5" />
-                    <span>Copier le résumé</span>
+                    <span>{tr("Copier le résumé")}</span>
                   </button>
                 </div>
               </div>
@@ -572,14 +621,14 @@ export function ShioriWrappedCard() {
                   栞 SHIORI WRAPPED · {wrapped.year}
                 </p>
                 <p className="text-base font-bold text-white truncate">{profile.displayName}</p>
-                <p className="text-[11px] text-kinpaku font-medium">{wrapped.archetype.title}</p>
+                <p className="text-[11px] text-kinpaku font-medium">{archetypeTitle}</p>
                 <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
                   <div className="p-2 rounded-lg bg-white/[0.04]">
-                    <span className="text-[#858A9E] block text-[9.5px]">Épisodes</span>
+                    <span className="text-[#858A9E] block text-[9.5px]">{tr("Épisodes")}</span>
                     <strong className="text-white">{wrapped.episodesWatched}</strong>
                   </div>
                   <div className="p-2 rounded-lg bg-white/[0.04]">
-                    <span className="text-[#858A9E] block text-[9.5px]">Note moy.</span>
+                    <span className="text-[#858A9E] block text-[9.5px]">{tr("Note moy.")}</span>
                     <strong className="text-kinpaku">
                       {wrapped.meanScore !== null ? `★ ${wrapped.meanScore.toFixed(1)}` : "—"}
                     </strong>
@@ -598,7 +647,7 @@ export function ShioriWrappedCard() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.12] text-xs font-medium text-white cursor-pointer"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
-            <span>Précédent</span>
+            <span>{tr("Précédent")}</span>
           </button>
           <span className="text-[11px] font-mono text-[#7D8296]">
             {slide + 1} / {TOTAL_SLIDES}
@@ -608,7 +657,7 @@ export function ShioriWrappedCard() {
             onClick={() => setSlide((s) => (s + 1) % TOTAL_SLIDES)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.12] text-xs font-medium text-white cursor-pointer"
           >
-            <span>Suivant</span>
+            <span>{tr("Suivant")}</span>
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>

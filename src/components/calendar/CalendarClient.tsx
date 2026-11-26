@@ -141,7 +141,8 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   const calNames = useMemo(() => getLocalizedCalendarNames(locale), [locale]);
 
   const getSeasonBucketLabel = (bucket: SeasonalBucket): string => {
-    if (bucket.season && bucket.year) return tSeasonYear(bucket.season, bucket.year);
+    const match = bucket.id.match(/^(WINTER|SPRING|SUMMER|FALL)_(\d{4})$/);
+    if (match) return tSeasonYear(match[1], Number(match[2]));
     if (bucket.id === "ANNOUNCED") return tr("Annoncés");
     return bucket.label;
   };

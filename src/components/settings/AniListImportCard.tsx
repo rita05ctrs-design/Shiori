@@ -42,7 +42,7 @@ export function AniListImportCard() {
     contentLanguage,
     toast,
   } = useShiori();
-  const { t, locale } = useTranslation();
+  const { t, tr, locale } = useTranslation();
   const copy = getSettingsCopy(contentLanguage).anilist;
 
   const [username, setUsername] = useState(
@@ -82,18 +82,18 @@ export function AniListImportCard() {
       if (connectedUser) setUsername(connectedUser);
       const storageMsg =
         storage === "supabase"
-          ? "Jeton OAuth chiffré sauvegardé dans Supabase (table profiles)."
+          ? tr("Jeton OAuth chiffré sauvegardé dans Supabase (table profiles).")
           : sbWarn
-            ? `Connecté en session serveur chiffrée (Supabase : ${sbWarn}).`
-            : "Connecté en session serveur chiffrée. Connectez votre compte Supabase pour le sauvegarder aussi dans la table profiles.";
+            ? tr("Connecté en session serveur chiffrée (Supabase : {warn}).", { warn: sbWarn })
+            : tr("Connecté en session serveur chiffrée. Connectez votre compte Supabase pour le sauvegarder aussi dans la table profiles.");
 
       setOauthNotice({
         kind: sbWarn ? "warning" : "success",
-        message: `Compte AniList @${connectedUser || "connecté"} lié ! ${storageMsg}`,
+        message: `${tr("Compte AniList @{user} lié !", { user: connectedUser || "AniList" })} ${storageMsg}`,
       });
       toast({
-        title: `AniList connecté (@${connectedUser || "membre"})`,
-        description: "La synchronisation bidirectionnelle vers AniList est maintenant active.",
+        title: tr("AniList connecté (@{user})", { user: connectedUser || "AniList" }),
+        description: tr("La synchronisation bidirectionnelle vers AniList est maintenant active."),
         variant: "success",
         celebrate: true,
       });
@@ -104,26 +104,26 @@ export function AniListImportCard() {
     } else if (oauthErr) {
       const friendly =
         oauthErr === "access_denied"
-          ? "Autorisation AniList annulée."
+          ? tr("Autorisation AniList annulée.")
           : oauthErr === "not_configured"
-            ? "ANILIST_CLIENT_ID / ANILIST_CLIENT_SECRET non configurés dans .env.local."
+            ? tr("ANILIST_CLIENT_ID / ANILIST_CLIENT_SECRET non configurés dans .env.local.")
             : oauthErr === "invalid_state"
-              ? "Vérification de sécurité OAuth expirée. Réessayez de vous connecter."
+              ? tr("Vérification de sécurité OAuth expirée. Réessayez de vous connecter.")
               : oauthErr;
       setOauthNotice({ kind: "error", message: friendly });
       const cleanUrl = `${window.location.pathname}${window.location.hash || "#anilist-sync"}`;
       window.history.replaceState({}, "", cleanUrl);
     }
-  }, [refreshAniListStatus, toast]);
+  }, [refreshAniListStatus, toast, tr]);
 
   const runImport = async (targetUser: string) => {
     const cleaned = targetUser.trim().replace(/^@/, "");
     if (!cleaned) {
-      setError("Veuillez indiquer un nom d'utilisateur AniList.");
+      setError(tr("Veuillez indiquer un nom d'utilisateur AniList."));
       return;
     }
     if (!includeAnime && !includeManga) {
-      setError("Sélectionnez au moins les animés ou les mangas à importer.");
+      setError(tr("Sélectionnez au moins les animés ou les mangas à importer."));
       return;
     }
 
@@ -137,7 +137,7 @@ export function AniListImportCard() {
         mode,
       });
       if (!res.ok) {
-        setError(res.error || "Impossible d'importer ce profil AniList.");
+        setError(res.error || tr("Impossible d'importer ce profil AniList."));
       } else if (res.data) {
         setResult(res.data);
       }
@@ -266,10 +266,10 @@ export function AniListImportCard() {
                     </p>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-[10px] font-mono text-emerald-300">
                       {anilistConnection.storage === "supabase"
-                        ? "Stocké dans Supabase profiles"
+                        ? tr("Stocké dans Supabase profiles")
                         : anilistConnection.storage === "account"
-                          ? "Stocké sur compte Shiori"
-                          : "Session serveur chiffrée"}
+                          ? tr("Stocké sur compte Shiori")
+                          : tr("Session serveur chiffrée")}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 mt-0.5 text-[11px] text-[#8E93A6]">
@@ -543,10 +543,12 @@ export function AniListImportCard() {
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white flex items-center gap-1.5 truncate">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Import réussi : {result.user.name}</span>
+                      <span>{tr("Import réussi : {name}", { name: result.user.name })}</span>
                     </p>
                     <p className="text-[11px] text-[#8E93A6] mt-0.5">
-                      {result.counts.total} entrées fusionnées (toutes listes incluses) + statistiques
+                      {tr("{n} entrées fusionnées (toutes listes incluses) + statistiques", {
+                        n: result.counts.total,
+                      })}
                     </p>
                   </div>
                 </div>
@@ -557,7 +559,7 @@ export function AniListImportCard() {
                     rel="noreferrer"
                     className="text-xs text-sky-400 hover:text-sky-300 inline-flex items-center gap-1 shrink-0"
                   >
-                    <span>Profil</span>
+                    <span>{tr("Profil")}</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 )}

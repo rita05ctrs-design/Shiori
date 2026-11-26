@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { Check, Crown, Share2, Star, Trophy } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import type { MediaType, PublicProfileMediaSummary } from "@/types/media";
 
@@ -38,6 +39,7 @@ export function ProfileTopTenPodium({
   username,
   favorites,
 }: ProfileTopTenPodiumProps) {
+  const { t, tr } = useTranslation();
   const [scope, setScope] = useState<"ALL" | MediaType>("ALL");
   const [copied, setCopied] = useState(false);
 
@@ -54,9 +56,13 @@ export function ProfileTopTenPodium({
 
   const handleShareTopTen = async () => {
     const scopeLabel =
-      scope === "ANIME" ? "Animes" : scope === "MANGA" ? "Mangas" : "Animes & Mangas";
+      scope === "ANIME"
+        ? t("common.anime")
+        : scope === "MANGA"
+          ? t("common.manga")
+          : `${t("common.anime")} & ${t("common.manga")}`;
     const lines = [
-      `🏆 Top ${topTen.length} ${scopeLabel} de ${displayName} (@${username}) sur Shiori`,
+      `🏆 Top ${topTen.length} ${scopeLabel} — ${displayName} (@${username}) · Shiori`,
       "",
       ...topTen.map(
         (m, idx) =>
@@ -70,7 +76,7 @@ export function ProfileTopTenPodium({
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({
-          title: `Top ${topTen.length} de ${displayName} — Shiori`,
+          title: `Top ${topTen.length} — ${displayName} · Shiori`,
           text,
         });
         return;
@@ -91,10 +97,10 @@ export function ProfileTopTenPodium({
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-[#F0B95B] flex items-center gap-1.5">
             <Trophy className="w-3.5 h-3.5" />
-            <span>Vitrine Top 10</span>
+            <span>{tr("Vitrine Top 10")}</span>
           </p>
           <h2 className="text-lg sm:text-xl font-bold text-white mt-0.5">
-            Podium de {displayName}
+            {tr("Podium de {name}", { name: displayName })}
           </h2>
         </div>
 
@@ -102,9 +108,9 @@ export function ProfileTopTenPodium({
           <div className="inline-flex items-center p-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[11px]">
             {(
               [
-                { id: "ALL", label: "Tout" },
-                { id: "ANIME", label: "Animes" },
-                { id: "MANGA", label: "Mangas" },
+                { id: "ALL", label: t("common.all") },
+                { id: "ANIME", label: t("common.anime") },
+                { id: "MANGA", label: t("common.manga") },
               ] as const
             ).map((opt) => (
               <button
@@ -132,12 +138,12 @@ export function ProfileTopTenPodium({
             {copied ? (
               <>
                 <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Top 10 copié !</span>
+                <span>{tr("Copié !")}</span>
               </>
             ) : (
               <>
                 <Share2 className="w-3.5 h-3.5 text-[#F0B95B]" />
-                <span>Partager</span>
+                <span>{tr("Partager")}</span>
               </>
             )}
           </button>
@@ -146,7 +152,7 @@ export function ProfileTopTenPodium({
 
       {topTen.length === 0 ? (
         <p className="text-xs text-[#858A9E]">
-          Aucun favori dans cette catégorie pour le moment.
+          {tr("Aucun favori dans cette catégorie pour le moment.")}
         </p>
       ) : (
         <div className="space-y-4">
@@ -193,7 +199,7 @@ export function ProfileTopTenPodium({
                       {item.title}
                     </p>
                     <p className="text-[10.5px] font-mono uppercase tracking-wider text-[#858A9E] mt-1">
-                      {item.type === "MANGA" ? "Manga" : "Anime"}
+                      {item.type === "MANGA" ? t("common.manga") : t("common.anime")}
                     </p>
                   </div>
                 </Link>

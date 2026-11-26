@@ -134,7 +134,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             className="group inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 hover:bg-black/75 backdrop-blur-md border border-white/[0.12] text-xs font-medium text-[#E4E6F0] transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
-            <span>Retour</span>
+            <span>{tr("Retour")}</span>
           </button>
         </div>
       </ParallaxBanner>

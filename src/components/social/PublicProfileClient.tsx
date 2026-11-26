@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { ActivityCard } from "@/components/social/ActivityCard";
@@ -72,6 +73,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
     unblockUser,
     reportContent,
   } = useShiori();
+  const { t, tr, locale } = useTranslation();
   const [member, setMember] = useState<PublicUserProfile | null>(null);
   const [activities, setActivities] = useState<CommunityActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -227,21 +229,20 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
     return (
       <div className="pt-28 pb-16 max-w-xl mx-auto px-4 text-center space-y-4">
         <p className="text-xs font-mono uppercase tracking-[0.2em] text-accent">
-          Profil introuvable
+          {tr("Profil introuvable")}
         </p>
         <h1 className="text-2xl font-bold text-white">
-          Aucun membre trouvé pour @{username}
+          {tr("Aucun membre trouvé pour @{username}", { username })}
         </h1>
         <p className="text-sm text-[#8A8FA4]">
-          Ce pseudo n&apos;existe pas encore ou a été modifié. Découvrez les autres membres dans la
-          communauté Shiori.
+          {tr("Ce pseudo n'existe pas encore ou a été modifié.")}
         </p>
         <Link
           href="/community"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Explorer la communauté</span>
+          <span>{tr("Retour à la communauté")}</span>
         </Link>
       </div>
     );
@@ -291,7 +292,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
   const isDemoShowcaseProfile =
     displayProfile.source === "community" || displayProfile.id.startsWith("community-");
 
-  const joinedLabel = new Date(displayProfile.joinedAt).toLocaleDateString("fr-FR", {
+  const joinedLabel = new Date(displayProfile.joinedAt).toLocaleDateString(locale, {
     month: "long",
     year: "numeric",
   });
@@ -344,7 +345,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         className="inline-flex items-center gap-1.5 text-xs text-[#9A9EAE] hover:text-white transition-colors"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
-        <span>Retour à la communauté</span>
+        <span>{tr("Retour à la communauté")}</span>
       </Link>
 
       {/* Blocked User Banner */}
@@ -353,7 +354,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           <div className="flex items-center gap-2.5">
             <Ban className="w-4 h-4 text-rose-300 shrink-0" />
             <span>
-              Vous avez bloqué <strong>@{displayProfile.username}</strong>. Ses activités et messages privés sont masqués.
+              {tr("Vous avez bloqué @{username}.", { username: displayProfile.username })}
             </span>
           </div>
           <button
@@ -362,7 +363,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
             onClick={() => void handleToggleBlock()}
             className="px-3.5 py-1.5 rounded-full bg-white/[0.1] hover:bg-white/[0.18] text-white font-semibold cursor-pointer transition-colors"
           >
-            Débloquer
+            {tr("Débloquer")}
           </button>
         </div>
       )}
@@ -413,10 +414,10 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                 </span>
                 {isDemoShowcaseProfile && (
                   <span
-                    title="Profil vitrine d'exemple fourni par Shiori"
+                    title={tr("Exemple")}
                     className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/35 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-200"
                   >
-                    Profil exemple
+                    {tr("Exemple")}
                   </span>
                 )}
                 <PinnedBadgesRow badgeIds={displayProfile.pinnedBadges} size="sm" />
@@ -424,12 +425,12 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                   {displayProfile.isActivityPublic ? (
                     <>
                       <Globe className="w-3 h-3 text-emerald-400" />
-                      <span>Activité publique</span>
+                      <span>{tr("Activité publique")}</span>
                     </>
                   ) : (
                     <>
                       <Lock className="w-3 h-3 text-amber-400" />
-                      <span>Activité privée</span>
+                      <span>{tr("Activité privée")}</span>
                     </>
                   )}
                 </span>
@@ -443,7 +444,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
 
               <p className="text-xs text-[#7D8296] flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>Membre depuis {joinedLabel}</span>
+                <span>{tr("Membre depuis {date}", { date: joinedLabel })}</span>
               </p>
             </div>
           </div>
@@ -458,7 +459,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                     className="h-10 px-4 rounded-xl bg-[#F0B95B]/16 hover:bg-[#F0B95B]/26 border border-[#F0B95B]/55 text-xs font-bold text-[#FDE68A] inline-flex items-center gap-2 transition-colors"
                   >
                     <Crown className="w-4 h-4 text-[#F0B95B]" />
-                    <span>Espace Créateur</span>
+                    <span>{tr("Espace Créateur")}</span>
                   </Link>
                 )}
                 <Link
@@ -466,7 +467,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                   className="h-10 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.12] text-xs font-semibold text-white inline-flex items-center gap-2 transition-colors"
                 >
                   <Settings className="w-4 h-4 text-accent" />
-                  <span>Modifier mon profil & bannière</span>
+                  <span>{tr("Modifier mon profil")}</span>
                 </Link>
               </>
             ) : (
@@ -487,7 +488,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                       className="h-10 px-5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent inline-flex items-center gap-2 transition-all"
                     >
                       <MessageSquare className="w-4 h-4" />
-                      <span>Envoyer un message</span>
+                      <span>{tr("Envoyer un message")}</span>
                     </Link>
                   </>
                 )}
@@ -495,29 +496,29 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                   type="button"
                   disabled={blockingBusy}
                   onClick={() => void handleToggleBlock()}
-                  title={isBlocked ? "Débloquer cet utilisateur" : "Bloquer cet utilisateur"}
+                  title={isBlocked ? tr("Débloquer") : tr("Bloquer")}
                   className="h-10 px-3.5 rounded-xl bg-white/[0.05] hover:bg-rose-500/15 border border-white/[0.1] hover:border-rose-400/40 text-xs font-medium text-[#C8CCE0] hover:text-rose-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   {isBlocked ? (
                     <>
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Débloquer</span>
+                      <span>{tr("Débloquer")}</span>
                     </>
                   ) : (
                     <>
                       <Ban className="w-3.5 h-3.5" />
-                      <span>Bloquer</span>
+                      <span>{tr("Bloquer")}</span>
                     </>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={() => setReportOpen(true)}
-                  title="Signaler ce profil"
+                  title={tr("Signaler")}
                   className="h-10 px-3 rounded-xl bg-white/[0.05] hover:bg-amber-500/15 border border-white/[0.1] hover:border-amber-400/40 text-xs font-medium text-[#C8CCE0] hover:text-amber-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Flag className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Signaler</span>
+                  <span className="hidden sm:inline">{tr("Signaler")}</span>
                 </button>
               </>
             )}
@@ -529,37 +530,37 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           {
-            label: "Total titres",
-            value: displayProfile.stats.totalEntries.toLocaleString("fr-FR"),
+            label: tr("Total titres"),
+            value: displayProfile.stats.totalEntries.toLocaleString(locale),
             icon: Sparkles,
             color: "text-accent",
           },
           {
-            label: "Animés",
-            value: displayProfile.stats.animeCount.toLocaleString("fr-FR"),
+            label: t("common.anime"),
+            value: displayProfile.stats.animeCount.toLocaleString(locale),
             icon: Tv,
             color: "text-sky-400",
           },
           {
-            label: "Mangas",
-            value: displayProfile.stats.mangaCount.toLocaleString("fr-FR"),
+            label: t("common.manga"),
+            value: displayProfile.stats.mangaCount.toLocaleString(locale),
             icon: BookOpen,
             color: "text-violet-400",
           },
           {
-            label: "Épisodes vus",
-            value: displayProfile.stats.episodesWatched.toLocaleString("fr-FR"),
+            label: tr("Épisodes vus"),
+            value: displayProfile.stats.episodesWatched.toLocaleString(locale),
             icon: Tv,
             color: "text-emerald-400",
           },
           {
-            label: "Chapitres lus",
-            value: displayProfile.stats.chaptersRead.toLocaleString("fr-FR"),
+            label: tr("Chapitres lus"),
+            value: displayProfile.stats.chaptersRead.toLocaleString(locale),
             icon: BookOpen,
             color: "text-pink-400",
           },
           {
-            label: "Note moyenne",
+            label: tr("Note moyenne"),
             value:
               displayProfile.stats.meanScore !== null
                 ? `${displayProfile.stats.meanScore.toFixed(1)}/10`
@@ -604,19 +605,17 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           <div>
             <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent flex items-center gap-1.5">
               <Mic2 className="w-3.5 h-3.5" />
-              <span>Seiyuu & Doublage</span>
+              <span>{tr("Seiyuu & Doublage")}</span>
             </p>
             <h2 className="text-lg sm:text-xl font-bold text-white mt-0.5">
-              Voice Actors favoris ({displayProfile.favoriteStaff.length})
+              {tr("Voice Actors favoris")} ({displayProfile.favoriteStaff.length})
             </h2>
           </div>
         </div>
 
         {displayProfile.favoriteStaff.length === 0 ? (
           <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E]">
-            {isOwnProfile
-              ? "Vous n'avez pas encore ajouté de Voice Actors favoris. Utilisez la recherche ci-dessous pour mettre en avant vos Seiyuu préférés !"
-              : `${displayProfile.displayName} n'a pas encore ajouté de Voice Actors favoris.`}
+            {tr("Aucun Voice Actor favori pour le moment.")}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
@@ -683,10 +682,10 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
             <div>
               <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent flex items-center gap-1.5">
                 <FolderKanban className="w-3.5 h-3.5" />
-                <span>Listes personnalisées</span>
+                <span>{tr("Collections personnalisées")}</span>
               </p>
               <h2 className="text-lg sm:text-xl font-bold text-white mt-0.5">
-                Collections partagées ({sharedCollections.length})
+                {tr("Collections partagées")} ({sharedCollections.length})
               </h2>
             </div>
             {isOwnProfile && (
@@ -694,14 +693,14 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                 href="/library"
                 className="text-xs text-accent-soft hover:text-white transition-colors"
               >
-                Gérer mes collections →
+                {tr("Gérer mes collections →")}
               </Link>
             )}
           </div>
 
           {sharedCollections.length === 0 ? (
             <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E]">
-              Aucune collection publique pour le moment. Créez une collection dans votre bibliothèque et activez « Publique » pour la partager ici.
+              {tr("Aucune collection publique pour le moment.")}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -726,12 +725,12 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                       )}
                     </div>
                     <span className="text-[10.5px] font-mono text-[#8A8FA4] shrink-0">
-                      {col.items.length} titre{col.items.length > 1 ? "s" : ""}
+                      {col.items.length} {t("common.titles")}
                     </span>
                   </div>
 
                   {col.items.length === 0 ? (
-                    <p className="text-xs text-[#7D8296]">Collection vide pour le moment.</p>
+                    <p className="text-xs text-[#7D8296]">{tr("Collection vide")}</p>
                   ) : (
                     <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                       {col.items.slice(0, 6).map((item) => (
@@ -762,21 +761,21 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
       {/* Public Activity History */}
       <section className="space-y-4">
         <h2 className="text-lg sm:text-xl font-bold text-white">
-          Activité récente
+          {tr("Activité récente")}
         </h2>
         {isBlocked ? (
           <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E] flex items-center gap-2">
             <Ban className="w-4 h-4 text-rose-400" />
-            <span>Activité masquée tant que cet utilisateur est bloqué.</span>
+            <span>{tr("Activité masquée tant que cet utilisateur est bloqué.")}</span>
           </div>
         ) : !displayProfile.isActivityPublic ? (
           <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E] flex items-center gap-2">
             <Lock className="w-4 h-4 text-amber-400" />
-            <span>Cet utilisateur a choisi de garder son activité privée.</span>
+            <span>{tr("Cet utilisateur a choisi de garder son activité privée.")}</span>
           </div>
         ) : activities.length === 0 ? (
           <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E]">
-            Aucune activité publique enregistrée pour le moment.
+            {tr("Aucune activité publique enregistrée pour le moment.")}
           </div>
         ) : (
           <div className="space-y-3.5">
@@ -800,7 +799,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Signaler ce profil"
+          aria-label={tr("Signaler")}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
         >
           <form
@@ -810,20 +809,20 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <Flag className="w-4 h-4 text-amber-400" />
-                <span>Signaler @{displayProfile.username}</span>
+                <span>{tr("Signaler")} @{displayProfile.username}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setReportOpen(false)}
                 className="p-1.5 rounded-lg text-[#9A9EAE] hover:text-white hover:bg-white/[0.08] cursor-pointer"
-                aria-label="Fermer"
+                aria-label={t("common.close")}
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium text-[#C8CCE0]">Motif</label>
+              <label className="text-xs font-medium text-[#C8CCE0]">{tr("Motif du signalement :")}</label>
               <div className="grid grid-cols-1 gap-1.5">
                 {REPORT_REASONS.map((r) => (
                   <button
@@ -836,7 +835,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                         : "bg-white/[0.03] border-white/[0.08] text-[#B5B9C9] hover:text-white"
                     }`}
                   >
-                    {r.label}
+                    {tr(r.label)}
                   </button>
                 ))}
               </div>
@@ -844,15 +843,15 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-[#C8CCE0]">
-                Détails complémentaires (optionnel)
+                {tr("Détails complémentaires (optionnel)")}
               </label>
               <textarea
                 rows={3}
                 maxLength={500}
                 value={reportDetails}
                 onChange={(e) => setReportDetails(e.target.value)}
-                placeholder="Précisez ce qui vous pose problème..."
-                className="w-full px-3 py-2 rounded-xl bg-obsidian/80 border border-white/[0.1] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-amber-400"
+                placeholder={tr("Précisez ce qui vous pose problème...")}
+                className="w-full px-3 py-2 rounded-xl bg-obsidian/80 border border-white/[0.1] text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-amber-400"
               />
             </div>
 
@@ -862,14 +861,14 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                 onClick={() => setReportOpen(false)}
                 className="h-9 px-4 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-xs font-medium text-[#C8CCE0] cursor-pointer"
               >
-                Annuler
+                {tr("Annuler")}
               </button>
               <button
                 type="submit"
                 disabled={submittingReport}
                 className="h-9 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-[#090A0F] text-xs font-semibold cursor-pointer"
               >
-                {submittingReport ? "Envoi..." : "Envoyer le signalement"}
+                {submittingReport ? tr("Envoi...") : tr("Confirmer le signalement")}
               </button>
             </div>
           </form>

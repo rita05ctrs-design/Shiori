@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Megaphone, Sparkles, X } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import type { SiteAnnouncement, SiteConfig } from "@/types/media";
 
@@ -11,6 +12,7 @@ const DISMISS_STORAGE_KEY = "shiori_dismissed_announcement_v1";
 export const SITE_CONFIG_UPDATED_EVENT = "shiori:site-config-updated";
 
 export function GlobalAnnouncementBanner() {
+  const { tr } = useTranslation();
   const [announcement, setAnnouncement] = useState<SiteAnnouncement | null>(null);
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
 
@@ -112,7 +114,7 @@ export function GlobalAnnouncementBanner() {
             ) : (
               <Megaphone className="w-2.5 h-2.5" />
             )}
-            Annonce
+            {tr("Annonce")}
           </span>
           <p className="text-xs sm:text-[13px] font-medium leading-snug truncate sm:whitespace-normal">
             {announcement.message}
@@ -149,7 +151,7 @@ export function GlobalAnnouncementBanner() {
         <button
           type="button"
           onClick={handleDismiss}
-          aria-label="Fermer l'annonce"
+          aria-label={tr("Fermer l'annonce")}
           className="w-6 h-6 rounded-full hover:bg-white/[0.1] flex items-center justify-center opacity-75 hover:opacity-100 transition-opacity shrink-0 cursor-pointer"
         >
           <X className="w-3.5 h-3.5" />

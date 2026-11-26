@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 export function Footer() {
   const pathname = usePathname();
   const { setCommandOpen, isAuthenticated, isCreator, openAuthModal } = useShiori();
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const hideOnMobile = pathname.startsWith("/messages");
 
   return (
@@ -33,7 +33,7 @@ export function Footer() {
                 Shiori
               </span>
               <span className="px-2 py-0.5 rounded-full bg-[#F0B95B]/12 border border-[#F0B95B]/35 text-[10px] font-semibold text-[#FDE68A] uppercase tracking-wider">
-                Indépendant
+                {tr("Indépendant")}
               </span>
             </div>
 
@@ -44,8 +44,8 @@ export function Footer() {
             <p className="text-xs text-[#A3A7B8] flex items-center gap-1.5">
               <Crown className="w-3.5 h-3.5 text-[#F0B95B] shrink-0" />
               <span>
-                Conçu et développé avec passion par le{" "}
-                <span className="text-[#FDE68A] font-medium">créateur de Shiori</span>.
+                {tr("Conçu et développé avec passion par le")}{" "}
+                <span className="text-[#FDE68A] font-medium">{tr("créateur de Shiori")}</span>.
               </span>
             </p>
 
@@ -55,7 +55,7 @@ export function Footer() {
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#F0B95B]/20 via-[#E5484D]/18 to-[#F0B95B]/20 hover:from-[#F0B95B]/30 hover:to-[#E5484D]/28 border border-[#F0B95B]/55 text-xs sm:text-sm font-semibold text-[#FDE68A] shadow-[0_10px_28px_-12px_rgba(240,185,91,0.55)] transition-all"
               >
                 <Heart className="w-4 h-4 text-[#E5484D] fill-[#E5484D]/30" />
-                <span>Soutenir Shiori</span>
+                <span>{tr("Soutenir Shiori")}</span>
               </Link>
               {isCreator && (
                 <Link
@@ -63,7 +63,7 @@ export function Footer() {
                   className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-[#F0B95B]/35 text-xs font-semibold text-[#FDE68A] transition-colors"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-[#F0B95B]" />
-                  <span>Espace Créateur</span>
+                  <span>{tr("Espace Créateur")}</span>
                 </Link>
               )}
             </div>
@@ -129,7 +129,7 @@ export function Footer() {
                   href="/support"
                   className="text-[#F0B95B] hover:text-[#FDE68A] font-medium transition-colors"
                 >
-                  Soutenir le projet &amp; Badge Supporter
+                  {tr("Soutenir le projet & Badge Supporter")}
                 </Link>
               </li>
               <li>

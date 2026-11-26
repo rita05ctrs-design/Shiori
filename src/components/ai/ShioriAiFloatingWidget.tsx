@@ -19,7 +19,7 @@ const ShioriAiChatPanel = dynamic(
  */
 export function ShioriAiFloatingWidget() {
   const pathname = usePathname();
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function ShioriAiFloatingWidget() {
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setOpen((v) => !v)}
-        aria-label={open ? "Fermer l'assistant Shiori IA" : "Ouvrir l'assistant Shiori IA"}
+        aria-label={open ? tr("Fermer l'assistant Shiori IA") : tr("Ouvrir l'assistant Shiori IA")}
         aria-expanded={open}
         className="ml-auto flex items-center gap-2.5 h-12 px-4 rounded-full bg-gradient-to-r from-accent via-accent to-accent-deep hover:brightness-110 text-accent-fg border border-white/20 shadow-[0_14px_38px_rgba(229,72,77,0.48)] font-semibold text-xs transition-all cursor-pointer"
       >
@@ -73,7 +73,7 @@ export function ShioriAiFloatingWidget() {
         ) : (
           <>
             <Sparkles className="w-4 h-4 text-kinpaku" />
-            <span>Shiori IA</span>
+            <span>{t("ai.pageTitle")}</span>
           </>
         )}
       </motion.button>

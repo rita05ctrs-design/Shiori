@@ -8,6 +8,7 @@ import {
   RARITY_RANK,
 } from "@/lib/badges";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import type { BadgeCategory, BadgeRarity, EvaluatedBadge } from "@/types/media";
 
@@ -39,10 +40,11 @@ export function BadgesShowcase({
   canPin = false,
   onTogglePin,
   onPreviewUnlock,
-  title = "Badges & Trophées",
+  title,
   subtitle,
   compact = false,
 }: BadgesShowcaseProps) {
+  const { tr, locale } = useTranslation();
   const [category, setCategory] = useState<"all" | BadgeCategory>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [expandedCompact, setExpandedCompact] = useState(false);
@@ -110,17 +112,17 @@ export function BadgesShowcase({
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-kinpaku flex items-center gap-1.5">
             <Trophy className="w-3.5 h-3.5" />
             <span>
-              Vitrine Gamification · {unlockedCount} / {badges.length} débloqués
+              {tr("Vitrine Gamification")} · {unlockedCount} / {badges.length} {tr("débloqués")}
             </span>
           </p>
           <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-            {title}
+            {title ?? tr("Badges & Trophées")}
           </h2>
           <p className="text-xs text-[#8D92A6] max-w-2xl">
             {subtitle ||
               (canPin
-                ? "De votre premier animé jusqu'aux paliers Mythiques (1 000 animés, 25 000 épisodes, 15 000 chapitres). Épinglez jusqu'à 3 badges favoris à côté de votre pseudo."
-                : "Trophées débloqués automatiquement selon l'historique de visionnage, de lecture, de critique et d'engagement communautaire.")}
+                ? tr("Épinglez jusqu'à 3 badges favoris à côté de votre pseudo.")
+                : tr("Trophées débloqués automatiquement selon l'historique de visionnage, de lecture et d'engagement."))}
           </p>
         </div>
 
@@ -138,7 +140,7 @@ export function BadgesShowcase({
                     rarityCounts[r] === 0 && "opacity-40"
                   )}
                 >
-                  <span>{meta.label}</span>
+                  <span>{tr(meta.label)}</span>
                   <span>{rarityCounts[r]}</span>
                 </span>
               );
@@ -147,7 +149,7 @@ export function BadgesShowcase({
           {canPin && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/[0.07] border border-white/[0.12] text-[10.5px] font-mono text-white">
               <Pin className="w-3 h-3 text-accent" />
-              <span>{pinnedBadges.length} / 3 épinglés</span>
+              <span>{tr("{n} / 3 épinglés", { n: pinnedBadges.length })}</span>
             </span>
           )}
         </div>
@@ -156,7 +158,7 @@ export function BadgesShowcase({
       {/* Overall Trophy Collection Bar */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-[11px] font-mono text-[#9A9EAE]">
-          <span>Progression globale des trophées</span>
+          <span>{tr("Progression globale des trophées")}</span>
           <span className="text-white font-semibold">
             {unlockedCount}/{badges.length} ({completionPct}%)
           </span>
@@ -172,19 +174,19 @@ export function BadgesShowcase({
       {/* Category Filters + Status Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 max-w-full">
-          {CATEGORY_TABS.map((t) => (
+          {CATEGORY_TABS.map((tab) => (
             <button
-              key={t.id}
+              key={tab.id}
               type="button"
-              onClick={() => setCategory(t.id)}
+              onClick={() => setCategory(tab.id)}
               className={cn(
                 "px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer whitespace-nowrap shrink-0",
-                category === t.id
+                category === tab.id
                   ? "bg-white text-[#090A0F] border-white"
                   : "bg-obsidian/70 border-white/[0.08] text-[#9A9EAE] hover:text-white"
               )}
             >
-              {t.label}
+              {tr(tab.label)}
             </button>
           ))}
         </div>
@@ -192,11 +194,11 @@ export function BadgesShowcase({
         <div className="inline-flex items-center p-0.5 rounded-full bg-obsidian/80 border border-white/[0.08] self-start sm:self-auto shrink-0 max-w-full overflow-x-auto no-scrollbar">
           {(
             [
-              { id: "all", label: "Tous" },
-              { id: "unlocked", label: `Débloqués (${unlockedCount})` },
+              { id: "all", label: tr("Tous") },
+              { id: "unlocked", label: `${tr("Débloqués")} (${unlockedCount})` },
               {
                 id: "locked",
-                label: `Défis (${Math.max(0, badges.length - unlockedCount)})`,
+                label: `${tr("Défis")} (${Math.max(0, badges.length - unlockedCount)})`,
               },
             ] as { id: StatusFilter; label: string }[]
           ).map((s) => (
@@ -221,7 +223,7 @@ export function BadgesShowcase({
       {/* Badges Grid */}
       {displayedBadges.length === 0 ? (
         <div className="rounded-2xl bg-obsidian/60 border border-white/[0.07] p-8 text-center text-xs text-[#8A8FA4]">
-          Aucun badge dans cette catégorie avec ce filtre pour le moment.
+          {tr("Aucun badge dans cette catégorie avec ce filtre pour le moment.")}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -231,12 +233,12 @@ export function BadgesShowcase({
 
             if (badge.unlocked) {
               const unlockedDateLabel = badge.unlockedAt
-                ? new Date(badge.unlockedAt).toLocaleDateString("fr-FR", {
+                ? new Date(badge.unlockedAt).toLocaleDateString(locale, {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
                   })
-                : "Débloqué";
+                : tr("Débloqué");
 
               return (
                 <div
@@ -285,10 +287,10 @@ export function BadgesShowcase({
                             meta.pillClass
                           )}
                         >
-                          {meta.shortLabel}
+                          {tr(meta.label)}
                         </span>
                         <span className="text-[10px] font-mono text-[#9EA3B5] truncate">
-                          {BADGE_CATEGORY_LABELS[badge.category]}
+                          {tr(BADGE_CATEGORY_LABELS[badge.category])}
                         </span>
                       </div>
 
@@ -304,7 +306,7 @@ export function BadgesShowcase({
                   {/* Footer Row: Date + Pin Action + Animation Replay */}
                   <div className="relative z-10 pt-2.5 border-t border-white/[0.08] flex items-center justify-between gap-2">
                     <span className="text-[10.5px] font-mono text-[#A6AAB8]">
-                      Obtenu le {unlockedDateLabel}
+                      {unlockedDateLabel}
                     </span>
 
                     <div className="flex items-center gap-1.5">
@@ -312,7 +314,7 @@ export function BadgesShowcase({
                         <button
                           type="button"
                           onClick={() => onPreviewUnlock(badge.id)}
-                          title="Revoir l'animation de déblocage"
+                          title={tr("Revoir l'animation")}
                           className="w-7 h-7 rounded-lg bg-white/[0.06] hover:bg-white/[0.15] border border-white/[0.1] text-[#D2D6E6] hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
@@ -331,7 +333,7 @@ export function BadgesShowcase({
                           )}
                         >
                           <Pin className={cn("w-3 h-3", isPinned && "fill-current")} />
-                          <span>{isPinned ? "Épinglé" : "Épingler"}</span>
+                          <span>{isPinned ? tr("Épinglé") : tr("Épingler")}</span>
                         </button>
                       )}
                     </div>
@@ -367,7 +369,7 @@ export function BadgesShowcase({
                             : "bg-white/[0.05] border-white/[0.08] text-[#8C91A6]"
                         )}
                       >
-                        {meta.label} · Verrouillé
+                        {tr(meta.label)} · {tr("Verrouillé")}
                       </span>
                     </div>
                     <h3 className="text-sm font-semibold text-[#C6CAD8] leading-snug">
@@ -383,8 +385,8 @@ export function BadgesShowcase({
                 <div className="space-y-1.5 pt-2 border-t border-white/[0.05]">
                   <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
                     <span className="text-[#9A9EAE]">
-                      {Math.min(badge.current, badge.target).toLocaleString("fr-FR")} /{" "}
-                      {badge.target.toLocaleString("fr-FR")} {badge.unitLabel}
+                      {Math.min(badge.current, badge.target).toLocaleString(locale)} /{" "}
+                      {badge.target.toLocaleString(locale)} {badge.unitLabel}
                     </span>
                     <span className="text-white/75 font-semibold">
                       {badge.progressPct}%
@@ -419,12 +421,12 @@ export function BadgesShowcase({
             {expandedCompact ? (
               <>
                 <ChevronUp className="w-3.5 h-3.5" />
-                <span>Réduire la vitrine</span>
+                <span>{tr("Réduire")}</span>
               </>
             ) : (
               <>
                 <ChevronDown className="w-3.5 h-3.5" />
-                <span>Voir tous les badges (+{hiddenCount} autres)</span>
+                <span>{tr("Voir tous les badges (+{n})", { n: hiddenCount })}</span>
               </>
             )}
           </button>

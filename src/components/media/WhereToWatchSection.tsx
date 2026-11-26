@@ -78,12 +78,14 @@ export function StreamingIconsStrip({
   max?: number;
   className?: string;
 }) {
+  const { tr } = useTranslation();
   if (!links || links.length === 0) return null;
   const visible = links.slice(0, max);
-  const titleText = `Disponible sur ${links
+  const sites = links
     .slice(0, 5)
     .map((l) => formatStreamingDisplayName(l.site))
-    .join(", ")}`;
+    .join(", ");
+  const titleText = tr("Disponible sur {sites}", { sites });
 
   return (
     <span

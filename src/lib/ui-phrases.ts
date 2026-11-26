@@ -1,5 +1,7 @@
 import type { ContentLanguage } from "@/types/media";
 import { UI_PHRASES_SOCIAL } from "./ui-phrases-social.ts";
+import { UI_PHRASES_EXTRA_A } from "./ui-phrases-extra-a.ts";
+import { UI_PHRASES_EXTRA_B } from "./ui-phrases-extra-b.ts";
 
 export type PhraseMap = Record<Exclude<ContentLanguage, "fr">, string>;
 
@@ -1493,7 +1495,7 @@ export const UI_PHRASES_CORE: Record<string, PhraseMap> = {
     de: "{unit} {n} erschienen",
     it: "{unit} {n} uscito",
     pt: "{unit} {n} lançado",
-    ja: "第{n}話 放送済",
+    ja: "{unit}{n} 放送済",
   },
   "{unit} {n} bientôt": {
     en: "{unit} {n} soon",
@@ -1501,7 +1503,7 @@ export const UI_PHRASES_CORE: Record<string, PhraseMap> = {
     de: "{unit} {n} bald",
     it: "{unit} {n} presto",
     pt: "{unit} {n} em breve",
-    ja: "第{n}話 まもなく",
+    ja: "{unit}{n} まもなく",
   },
   "{n} ép. à voir": {
     en: "{n} ep. behind",
@@ -1517,7 +1519,7 @@ export const UI_PHRASES_CORE: Record<string, PhraseMap> = {
     de: "Gesehen: {unit} {n}",
     it: "Visto: {unit} {n}",
     pt: "Visto: {unit} {n}",
-    ja: "視聴済: {n}話",
+    ja: "視聴済: {unit}{n}",
   },
 
   // === Discover & Library ===
@@ -2304,6 +2306,8 @@ export const UI_PHRASES_CORE: Record<string, PhraseMap> = {
 export const UI_PHRASES: Record<string, PhraseMap> = {
   ...UI_PHRASES_CORE,
   ...UI_PHRASES_SOCIAL,
+  ...UI_PHRASES_EXTRA_A,
+  ...UI_PHRASES_EXTRA_B,
 };
 
 export function translatePhrase(

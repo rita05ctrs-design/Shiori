@@ -72,7 +72,7 @@ const STATUS_COLORS_HEX: Record<LibraryStatus, string> = {
 
 export default function StatsPage() {
   const { library, activity, anilistStats } = useShiori();
-  const { t, tStatus } = useTranslation();
+  const { t, tr, tStatus, tGenre, locale } = useTranslation();
   const [scope, setScope] = useState<"ALL" | MediaType>("ALL");
   const [showWrapped, setShowWrapped] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -107,11 +107,26 @@ export default function StatsPage() {
       }))
       .filter((d) => d.value > 0);
 
+    const localizedMonthlyActivity = analytics.monthlyActivity.map((m) => {
+      const [yStr, mStr] = m.key.split("-");
+      const dt = new Date(Number(yStr), Number(mStr) - 1, 1);
+      const formatted = Number.isNaN(dt.getTime())
+        ? m.label
+        : new Intl.DateTimeFormat(locale, { month: "short" })
+            .format(dt)
+            .replace(/\.$/, "");
+      return {
+        ...m,
+        label: formatted.charAt(0).toUpperCase() + formatted.slice(1),
+      };
+    });
+
     return {
       ...analytics,
       statusData,
+      monthlyActivity: localizedMonthlyActivity,
     };
-  }, [entries, activity, scope, tStatus]);
+  }, [entries, activity, scope, tStatus, locale]);
 
   const maxGenreCount = Math.max(1, ...metrics.topGenres.map((g) => g.count));
   const hasMonthlyActivity = metrics.monthlyActivity.some((m) => m.count > 0);
@@ -132,16 +147,16 @@ export default function StatsPage() {
         {/* Single clean Scope Switcher */}
         <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08] self-start sm:self-auto">
           {[
-            { id: "ALL", label: "Global" },
-            { id: "ANIME", label: "Animes" },
-            { id: "MANGA", label: "Mangas" },
-          ].map((t) => {
-            const active = scope === t.id;
+            { id: "ALL", label: tr("Global") },
+            { id: "ANIME", label: tr("Animes") },
+            { id: "MANGA", label: tr("Mangas") },
+          ].map((tabItem) => {
+            const active = scope === tabItem.id;
             return (
               <button
-                key={t.id}
+                key={tabItem.id}
                 type="button"
-                onClick={() => setScope(t.id as "ALL" | MediaType)}
+                onClick={() => setScope(tabItem.id as "ALL" | MediaType)}
                 className={cn(
                   "relative px-4 py-1.5 rounded-full text-xs font-semibold transition-colors cursor-pointer",
                   active ? "text-white" : "text-[#9A9EAE] hover:text-white"
@@ -154,7 +169,7 @@ export default function StatsPage() {
                     className="absolute inset-0 rounded-full bg-accent shadow-[0_6px_18px_rgb(var(--shiori-accent-rgb)/0.35)]"
                   />
                 )}
-                <span className="relative z-10">{t.label}</span>
+                <span className="relative z-10">{tabItem.label}</span>
               </button>
             );
           })}
@@ -165,21 +180,21 @@ export default function StatsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
         <div className="rounded-2xl card-surface p-5">
           <div className="flex items-center justify-between text-[#858A9E]">
-            <span className="text-xs font-medium">Titres suivis</span>
+            <span className="text-xs font-medium">{tr("Titres suivis")}</span>
             <Film className="w-4 h-4 text-accent" />
           </div>
           <p className="mt-2.5 text-3xl font-bold font-mono text-white">
             <AnimatedNumber value={metrics.totalTitles} />
           </p>
           <p className="mt-1 text-xs text-[#7A7F94]">
-            {metrics.completedCount} terminés · {metrics.completionRate}%
+            {tr("{n} terminés · {pct}%", { n: metrics.completedCount, pct: metrics.completionRate })}
           </p>
         </div>
 
         <div className="rounded-2xl card-surface p-5">
           <div className="flex items-center justify-between text-[#858A9E]">
             <span className="text-xs font-medium">
-              {scope === "MANGA" ? "Chapitres lus" : "Épisodes & Chapitres"}
+              {scope === "MANGA" ? tr("Chapitres lus") : tr("Épisodes & Chapitres")}
             </span>
             <BookOpen className="w-4 h-4 text-violet-400" />
           </div>
@@ -190,30 +205,33 @@ export default function StatsPage() {
           </p>
           <p className="mt-1 text-xs text-[#7A7F94]">
             {scope === "MANGA"
-              ? `${metrics.mangaRead} manga${metrics.mangaRead > 1 ? "s" : ""} lu${metrics.mangaRead > 1 ? "s" : ""}`
+              ? tr("{n} mangas lus", { n: metrics.mangaRead })
               : scope === "ANIME"
-                ? `${metrics.animeWatching} en cours · ${metrics.animeCompleted} terminés`
-                : `${metrics.totalChapters.toLocaleString("fr-FR")} chapitres lus`}
+                ? tr("{watching} en cours · {completed} terminés", {
+                    watching: metrics.animeWatching,
+                    completed: metrics.animeCompleted,
+                  })
+                : tr("{n} chapitres lus", { n: metrics.totalChapters.toLocaleString(locale) })}
           </p>
         </div>
 
         <div className="rounded-2xl card-surface p-5">
           <div className="flex items-center justify-between text-[#858A9E]">
-            <span className="text-xs font-medium">Temps estimé</span>
+            <span className="text-xs font-medium">{tr("Temps estimé")}</span>
             <Clock className="w-4 h-4 text-sky-400" />
           </div>
           <p className="mt-2.5 text-3xl font-bold font-mono text-white">
             <AnimatedNumber value={metrics.totalDays} decimals={1} formatLocale={false} />
-            <span className="text-base font-normal text-[#858A9E] ml-1">j</span>
+            <span className="text-base font-normal text-[#858A9E] ml-1">{tr("j")}</span>
           </p>
           <p className="mt-1 text-xs text-[#7A7F94]">
-            {metrics.totalHours.toLocaleString("fr-FR")} heures
+            {tr("{n} heures", { n: metrics.totalHours.toLocaleString(locale) })}
           </p>
         </div>
 
         <div className="rounded-2xl card-surface p-5">
           <div className="flex items-center justify-between text-[#858A9E]">
-            <span className="text-xs font-medium">Note moyenne</span>
+            <span className="text-xs font-medium">{tr("Note moyenne")}</span>
             <Star className="w-4 h-4 text-[#F0B95B] fill-[#F0B95B]" />
           </div>
           <p className="mt-2.5 text-3xl font-bold font-mono text-[#F0B95B]">
@@ -224,8 +242,7 @@ export default function StatsPage() {
             )}
           </p>
           <p className="mt-1 text-xs text-[#7A7F94]">
-            Sur {metrics.scoredCount} titre{metrics.scoredCount > 1 ? "s" : ""} noté
-            {metrics.scoredCount > 1 ? "s" : ""}
+            {tr("Sur {n} titres notés", { n: metrics.scoredCount })}
           </p>
         </div>
       </div>
@@ -239,14 +256,14 @@ export default function StatsPage() {
       {/* TIER 1 — Top Genres (Clean & Scannable) */}
       <div className="rounded-2xl card-surface p-5 sm:p-6 space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-white">Genres préférés</h2>
+          <h2 className="text-base font-semibold text-white">{tr("Genres préférés")}</h2>
           {metrics.favorites.length > 0 && (
             <Link
               href="/library?favorites=1"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-[#B8BCCB] hover:text-white transition-colors"
             >
               <Heart className="w-3.5 h-3.5 text-rose-400 fill-current" />
-              <span>Voir mes {metrics.favorites.length} favoris</span>
+              <span>{tr("Voir mes {n} favoris", { n: metrics.favorites.length })}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           )}
@@ -254,7 +271,7 @@ export default function StatsPage() {
 
         {metrics.topGenres.length === 0 ? (
           <p className="text-sm text-[#7D8296]">
-            Ajoutez quelques œuvres à votre bibliothèque pour découvrir vos genres préférés.
+            {tr("Ajoutez quelques œuvres à votre bibliothèque pour découvrir vos genres préférés.")}
           </p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3.5">
@@ -270,14 +287,14 @@ export default function StatsPage() {
                       <span className="font-mono text-[10px] text-[#6E7387]">
                         0{i + 1}
                       </span>
-                      <span>{g.genre}</span>
+                      <span>{tGenre(g.genre)}</span>
                     </Link>
                     <div className="flex items-center gap-2.5 font-mono text-[11px]">
                       {g.avgScore !== null && (
                         <span className="text-[#F0B95B]">★ {g.avgScore.toFixed(1)}</span>
                       )}
                       <span className="text-[#9A9EAE]">
-                        {g.count} titre{g.count > 1 ? "s" : ""}
+                        {tr("{n} titres", { n: g.count })}
                       </span>
                     </div>
                   </div>
@@ -312,7 +329,11 @@ export default function StatsPage() {
             )}
           >
             <Sparkles className="w-3.5 h-3.5 text-accent" />
-            <span>{showWrapped ? "Masquer Shiori Wrapped" : "Voir ma rétrospective (Shiori Wrapped)"}</span>
+            <span>
+              {showWrapped
+                ? tr("Masquer Shiori Wrapped")
+                : tr("Voir ma rétrospective (Shiori Wrapped)")}
+            </span>
             <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showWrapped && "rotate-180")} />
           </button>
         )}
@@ -328,7 +349,11 @@ export default function StatsPage() {
           )}
         >
           <BarChart3 className="w-3.5 h-3.5 text-sky-400" />
-          <span>{showAdvanced ? "Masquer les statistiques avancées" : "Statistiques avancées"}</span>
+          <span>
+            {showAdvanced
+              ? tr("Masquer les statistiques avancées")
+              : tr("Statistiques avancées")}
+          </span>
           <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showAdvanced && "rotate-180")} />
         </button>
       </div>
@@ -360,30 +385,30 @@ export default function StatsPage() {
           >
             {/* Detailed Breakdown & Duration Note */}
             <div className="rounded-2xl card-surface p-5 space-y-3">
-              <h3 className="text-sm font-semibold text-white">Détail par statut</h3>
+              <h3 className="text-sm font-semibold text-white">{tr("Détail par statut")}</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-xs">
                 <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[11px] text-[#858A9E]">Animes commencés</p>
+                  <p className="text-[11px] text-[#858A9E]">{tr("Animes commencés")}</p>
                   <p className="text-lg font-bold font-mono text-white mt-0.5">{metrics.animeStarted}</p>
                 </div>
                 <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[11px] text-[#858A9E]">Animes en cours</p>
+                  <p className="text-[11px] text-[#858A9E]">{tr("Animes en cours")}</p>
                   <p className="text-lg font-bold font-mono text-sky-300 mt-0.5">{metrics.animeWatching}</p>
                 </div>
                 <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[11px] text-[#858A9E]">Animes terminés</p>
+                  <p className="text-[11px] text-[#858A9E]">{tr("Animes terminés")}</p>
                   <p className="text-lg font-bold font-mono text-emerald-300 mt-0.5">{metrics.animeCompleted}</p>
                 </div>
                 <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[11px] text-[#858A9E]">En pause</p>
+                  <p className="text-[11px] text-[#858A9E]">{tStatus("ON_HOLD", "ANIME")}</p>
                   <p className="text-lg font-bold font-mono text-amber-300 mt-0.5">{metrics.animeOnHold}</p>
                 </div>
                 <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[11px] text-[#858A9E]">Abandonnés</p>
+                  <p className="text-[11px] text-[#858A9E]">{tr("Abandonnés")}</p>
                   <p className="text-lg font-bold font-mono text-rose-300 mt-0.5">{metrics.animeDropped}</p>
                 </div>
                 <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <p className="text-[11px] text-[#858A9E]">Mangas lus</p>
+                  <p className="text-[11px] text-[#858A9E]">{tr("Mangas lus")}</p>
                   <p className="text-lg font-bold font-mono text-violet-300 mt-0.5">{metrics.mangaRead}</p>
                 </div>
               </div>
@@ -392,8 +417,9 @@ export default function StatsPage() {
                 <p className="text-[11.5px] text-[#8A8FA4] flex items-center gap-1.5 pt-1">
                   <Info className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                   <span>
-                    Durée estimée à 24 min/épisode pour {metrics.unknownDurationCount} animé
-                    {metrics.unknownDurationCount > 1 ? "s" : ""} sans durée renseignée.
+                    {tr("Durée estimée à 24 min/épisode pour {n} animés sans durée renseignée.", {
+                      n: metrics.unknownDurationCount,
+                    })}
                   </span>
                 </p>
               )}
@@ -412,7 +438,7 @@ export default function StatsPage() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-semibold text-white flex items-center gap-2">
                     <Award className="w-4 h-4 text-[#F0B95B]" />
-                    <span>Studios & Auteurs les plus suivis</span>
+                    <span>{tr("Studios & Auteurs les plus suivis")}</span>
                   </h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -424,7 +450,7 @@ export default function StatsPage() {
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-[#F4F3EE] truncate">{s.name}</p>
                         <p className="text-[11px] text-[#7D8296] font-mono mt-0.5">
-                          {s.count} œuvre{s.count > 1 ? "s" : ""}
+                          {tr("{n} œuvres", { n: s.count })}
                         </p>
                       </div>
                       {s.avgScore !== null && (
@@ -452,10 +478,12 @@ export default function StatsPage() {
                     )}
                     <div>
                       <h3 className="text-sm font-semibold text-white">
-                        Résumé importé depuis AniList (@{anilistStats.anilistUsername})
+                        {tr("Résumé importé depuis AniList (@{user})", {
+                          user: anilistStats.anilistUsername,
+                        })}
                       </h3>
                       <p className="text-xs text-[#858A9E]">
-                        Chiffres globaux issus de votre dernier import AniList (peut inclure des révisions).
+                        {tr("Chiffres globaux issus de votre dernier import AniList (peut inclure des révisions).")}
                       </p>
                     </div>
                   </div>
@@ -467,7 +495,7 @@ export default function StatsPage() {
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-sky-400 hover:text-sky-300"
                       >
-                        <span>Voir sur AniList</span>
+                        <span>{tr("Voir sur AniList")}</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
@@ -475,34 +503,34 @@ export default function StatsPage() {
                       href="/settings#anilist-import"
                       className="px-3 py-1 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-[#D6D9E6] hover:text-white transition-colors"
                     >
-                      Actualiser
+                      {tr("Actualiser")}
                     </Link>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <p className="text-[11px] text-[#858A9E]">Animes AniList</p>
+                    <p className="text-[11px] text-[#858A9E]">{tr("Animes AniList")}</p>
                     <p className="text-lg font-bold font-mono text-white mt-0.5">
-                      {anilistStats.anime.count.toLocaleString("fr-FR")}
+                      {anilistStats.anime.count.toLocaleString(locale)}
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <p className="text-[11px] text-[#858A9E]">Épisodes (AniList)</p>
+                    <p className="text-[11px] text-[#858A9E]">{tr("Épisodes (AniList)")}</p>
                     <p className="text-lg font-bold font-mono text-sky-300 mt-0.5">
-                      {anilistStats.anime.episodesWatched.toLocaleString("fr-FR")}
+                      {anilistStats.anime.episodesWatched.toLocaleString(locale)}
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <p className="text-[11px] text-[#858A9E]">Mangas AniList</p>
+                    <p className="text-[11px] text-[#858A9E]">{tr("Mangas AniList")}</p>
                     <p className="text-lg font-bold font-mono text-white mt-0.5">
-                      {anilistStats.manga.count.toLocaleString("fr-FR")}
+                      {anilistStats.manga.count.toLocaleString(locale)}
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <p className="text-[11px] text-[#858A9E]">Chapitres (AniList)</p>
+                    <p className="text-[11px] text-[#858A9E]">{tr("Chapitres (AniList)")}</p>
                     <p className="text-lg font-bold font-mono text-violet-300 mt-0.5">
-                      {anilistStats.manga.chaptersRead.toLocaleString("fr-FR")}
+                      {anilistStats.manga.chaptersRead.toLocaleString(locale)}
                     </p>
                   </div>
                 </div>

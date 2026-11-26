@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Check, X, Search } from "lucide-react";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 
 export interface LuxurySelectOption {
@@ -45,9 +46,11 @@ export function LuxurySelect({
   columns = 1,
   align = "left",
   searchable,
-  searchPlaceholder = "Filtrer...",
+  searchPlaceholder,
   className,
 }: LuxurySelectProps) {
+  const { tr } = useTranslation();
+  const resolvedSearchPlaceholder = searchPlaceholder ?? tr("Filtrer...");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -143,7 +146,7 @@ export function LuxurySelect({
             <span
               role="button"
               tabIndex={-1}
-              title="Réinitialiser ce filtre"
+              title={tr("Réinitialiser ce filtre")}
               onClick={(e) => {
                 e.stopPropagation();
                 onChange(defaultValue);
@@ -186,8 +189,8 @@ export function LuxurySelect({
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder={searchPlaceholder}
-                    className="w-full h-8 pl-8 pr-7 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-white placeholder:text-[#686D82] focus:outline-none focus:border-accent/60"
+                    placeholder={resolvedSearchPlaceholder}
+                    className="w-full h-8 pl-8 pr-7 rounded-lg bg-white/[0.04] border border-white/[0.08] text-base sm:text-xs text-white placeholder:text-[#686D82] focus:outline-none focus:border-accent/60"
                   />
                   {query && (
                     <button
@@ -205,7 +208,7 @@ export function LuxurySelect({
             <div className="p-1.5 max-h-[290px] overflow-y-auto overscroll-contain">
               {visibleOptions.length === 0 ? (
                 <p className="py-5 px-3 text-center text-xs text-[#7D8296]">
-                  Aucune option trouvée
+                  {tr("Aucune option trouvée")}
                 </p>
               ) : (
                 <div

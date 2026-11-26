@@ -17,6 +17,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { computeProfileAffinity } from "@/lib/affinity";
 import { cn } from "@/lib/utils";
 import type { PublicUserProfile } from "@/types/media";
@@ -50,6 +51,7 @@ const TONE_STYLES = {
 
 export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps) {
   const { library, favoriteStaff, getEntry, upsertEntry } = useShiori();
+  const { tr, tGenre } = useTranslation();
   const [showComparator, setShowComparator] = useState(false);
 
   const affinity = useMemo(
@@ -115,7 +117,7 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                 {affinity.compatibilityPct}%
               </span>
               <span className="text-[9.5px] font-mono uppercase tracking-widest text-[#9A9EAE] mt-1">
-                Affinité
+                {tr("Affinité")}
               </span>
             </div>
           </div>
@@ -124,7 +126,7 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Compatibilité & Affinité</span>
+                <span>{tr("Compatibilité & Affinité")}</span>
               </p>
               <span
                 className={cn(
@@ -137,36 +139,32 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
             </div>
 
             <h2 className="text-lg sm:text-xl font-bold text-white">
-              Votre compatibilité avec {targetProfile.displayName}
+              {tr("Compatibilité avec {name}", { name: targetProfile.displayName })}
             </h2>
 
             <p className="text-xs text-[#9EA3B5] max-w-xl leading-relaxed">
-              Calculée en direct d&apos;après vos animés & mangas en commun, l&apos;écart entre vos notes,
-              vos coups de cœur partagés et vos genres favoris.
+              {tr("Calculée en direct d'après vos titres en commun, vos notes, vos coups de cœur partagés et vos genres favoris.")}
             </p>
 
             {/* Key Affinity Pills */}
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <span className="px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/[0.09] font-mono text-[11px] text-white">
-                {affinity.commonTitles.length} titre
-                {affinity.commonTitles.length > 1 ? "s" : ""} en commun
+                {tr("{n} titre(s) en commun", { n: affinity.commonTitles.length })}
               </span>
               <span className="px-2.5 py-1 rounded-full bg-rose-500/14 border border-rose-400/30 font-mono text-[11px] text-rose-200 inline-flex items-center gap-1">
                 <Heart className="w-3 h-3 fill-current" />
-                {affinity.sharedFavorites.length} favori
-                {affinity.sharedFavorites.length > 1 ? "s" : ""} partagé
-                {affinity.sharedFavorites.length > 1 ? "s" : ""}
+                {tr("{n} favori(s) partagé(s)", { n: affinity.sharedFavorites.length })}
               </span>
               {affinity.avgScoreDiff !== null && (
                 <span className="px-2.5 py-1 rounded-full bg-amber-500/12 border border-amber-400/30 font-mono text-[11px] text-amber-200 inline-flex items-center gap-1">
                   <TrendingUp className="w-3 h-3" />
-                  Écart moyen : ±{affinity.avgScoreDiff.toFixed(1)}★
+                  ±{affinity.avgScoreDiff.toFixed(1)}★
                 </span>
               )}
               {affinity.sharedStaff.length > 0 && (
                 <span className="px-2.5 py-1 rounded-full bg-violet-500/14 border border-violet-400/30 font-mono text-[11px] text-violet-200 inline-flex items-center gap-1">
                   <Mic2 className="w-3 h-3" />
-                  {affinity.sharedStaff.length} Seiyuu en commun
+                  {affinity.sharedStaff.length} Seiyuu
                 </span>
               )}
               {affinity.commonTitles.length > 0 && (
@@ -181,7 +179,7 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                   )}
                 >
                   <Scale className="w-3 h-3" />
-                  <span>{showComparator ? "Masquer le comparateur" : "Comparer nos notes"}</span>
+                  <span>{showComparator ? tr("Masquer le comparateur") : tr("Comparer nos notes")}</span>
                   <ChevronDown
                     className={cn(
                       "w-3 h-3 transition-transform",
@@ -210,14 +208,14 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
               {affinity.sharedGenres.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] font-mono uppercase tracking-wider text-[#858A9E] mr-1">
-                    Genres partagés :
+                    {tr("Genres partagés :")}
                   </span>
                   {affinity.sharedGenres.map((g) => (
                     <span
                       key={g.genre}
                       className="px-2.5 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.09] text-[11px] text-[#D6D9E6]"
                     >
-                      {g.genre}
+                      {tGenre(g.genre)}
                     </span>
                   ))}
                 </div>
@@ -229,11 +227,11 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                   <div className="rounded-2xl bg-emerald-500/[0.06] border border-emerald-400/25 p-3.5 space-y-2">
                     <p className="text-xs font-bold text-emerald-200 flex items-center gap-1.5">
                       <Handshake className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Vos accords parfaits</span>
+                      <span>{tr("Vos accords parfaits")}</span>
                     </p>
                     {affinity.biggestAgreements.length === 0 ? (
                       <p className="text-[11px] text-[#8A8FA4]">
-                        Pas encore assez de titres notés en commun.
+                        {tr("Pas encore assez de titres notés en commun.")}
                       </p>
                     ) : (
                       affinity.biggestAgreements.map((m) => (
@@ -254,11 +252,11 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                   <div className="rounded-2xl bg-amber-500/[0.06] border border-amber-400/25 p-3.5 space-y-2">
                     <p className="text-xs font-bold text-amber-200 flex items-center gap-1.5">
                       <Flame className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Vos plus gros débats</span>
+                      <span>{tr("Vos plus gros débats")}</span>
                     </p>
                     {affinity.biggestDebates.length === 0 ? (
                       <p className="text-[11px] text-[#8A8FA4]">
-                        Aucun désaccord majeur — vous êtes sur la même longueur d&apos;onde !
+                        {tr("Aucun désaccord majeur — vous êtes sur la même longueur d'onde !")}
                       </p>
                     ) : (
                       affinity.biggestDebates.map((m) => (
@@ -285,12 +283,12 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                   <table className="w-full text-left text-xs">
                     <thead className="bg-white/[0.03] border-b border-white/[0.07] font-mono text-[10px] uppercase tracking-wider text-[#858A9E]">
                       <tr>
-                        <th className="px-3.5 py-2">Œuvre en commun</th>
-                        <th className="px-3 py-2 text-right">Vous</th>
+                        <th className="px-3.5 py-2">{tr("Œuvre en commun")}</th>
+                        <th className="px-3 py-2 text-right">{tr("Vous")}</th>
                         <th className="px-3 py-2 text-right truncate max-w-[110px]">
                           {targetProfile.displayName}
                         </th>
-                        <th className="px-3 py-2 text-right">Écart</th>
+                        <th className="px-3 py-2 text-right">{tr("Écart")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/[0.05]">
@@ -347,16 +345,15 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
               <Heart className="w-3.5 h-3.5 text-rose-400 fill-current" />
               <span>
                 {affinity.sharedFavorites.length > 0
-                  ? `Favoris & coups de cœur partagés (${affinity.sharedFavorites.length})`
-                  : `Œuvres en commun (${affinity.commonTitles.length})`}
+                  ? `${tr("Favoris partagés")} (${affinity.sharedFavorites.length})`
+                  : `${tr("Œuvres en commun")} (${affinity.commonTitles.length})`}
               </span>
             </h3>
           </div>
 
           {affinity.commonTitles.length === 0 ? (
             <div className="rounded-2xl bg-obsidian/65 border border-white/[0.06] p-4 text-xs text-[#8A8FA4]">
-              Aucun titre en commun identifié dans son aperçu public — profitez de ses
-              recommandations juste à côté pour découvrir son univers !
+              {tr("Aucun titre en commun identifié dans son aperçu public.")}
             </div>
           ) : (
             <div className="space-y-2">
@@ -390,22 +387,22 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                         </p>
                         {m.bothFavorite && (
                           <span className="px-1.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/35 text-[9.5px] font-semibold text-rose-200 shrink-0">
-                            Favori commun
+                            {tr("Favori commun")}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-[11px] font-mono">
                         <span className="text-[#B5B9C9]">
-                          Vous :{" "}
+                          {tr("Vous")} :{" "}
                           <strong className="text-white">
-                            {m.viewerScore !== null ? `★ ${m.viewerScore.toFixed(1)}` : "Vu"}
+                            {m.viewerScore !== null ? `★ ${m.viewerScore.toFixed(1)}` : "✓"}
                           </strong>
                         </span>
                         <span className="text-white/25">·</span>
                         <span className="text-[#B5B9C9]">
                           {targetProfile.displayName} :{" "}
                           <strong className="text-kinpaku">
-                            {m.targetScore !== null ? `★ ${m.targetScore.toFixed(1)}` : "Vu"}
+                            {m.targetScore !== null ? `★ ${m.targetScore.toFixed(1)}` : "✓"}
                           </strong>
                         </span>
                       </div>
@@ -421,15 +418,16 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
           <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-kinpaku" />
             <span>
+              {tr("Recommandations tirées de sa liste")}
               {affinity.recommendationsFromTarget.length > 0
-                ? `${affinity.recommendationsFromTarget.length} recommandation${affinity.recommendationsFromTarget.length > 1 ? "s" : ""} tirée${affinity.recommendationsFromTarget.length > 1 ? "s" : ""} de sa liste`
-                : "Recommandations tirées de sa liste"}
+                ? ` (${affinity.recommendationsFromTarget.length})`
+                : ""}
             </span>
           </h3>
 
           {affinity.recommendationsFromTarget.length === 0 ? (
             <div className="rounded-2xl bg-obsidian/65 border border-white/[0.06] p-4 text-xs text-[#8A8FA4]">
-              Incroyable — vous avez déjà vu tous les titres phares de {targetProfile.displayName} !
+              {tr("Vous avez déjà vu tous les titres phares de {name} !", { name: targetProfile.displayName })}
             </div>
           ) : (
             <div className="space-y-2.5">
@@ -463,7 +461,7 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                       </p>
                       {rec.genres.length > 0 && (
                         <p className="text-[10px] font-mono text-[#7E8398] truncate mt-0.5">
-                          {rec.genres.slice(0, 3).join(" · ")}
+                          {rec.genres.slice(0, 3).map((g) => tGenre(g)).join(" · ")}
                         </p>
                       )}
                     </div>
@@ -506,12 +504,12 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                       {alreadyInLib ? (
                         <>
                           <Check className="w-3 h-3" />
-                          <span>Ajouté</span>
+                          <span>{tr("Ajouté")}</span>
                         </>
                       ) : (
                         <>
                           <Plus className="w-3 h-3" />
-                          <span>Ma liste</span>
+                          <span>{tr("Ma liste")}</span>
                         </>
                       )}
                     </button>

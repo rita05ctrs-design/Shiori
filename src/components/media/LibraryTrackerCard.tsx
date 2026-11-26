@@ -266,7 +266,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.85 }}
               onClick={handleToggleFav}
-              aria-label="Coup de cœur"
+              aria-label={tr("Coup de cœur")}
               className={cn(
                 "w-8 h-8 rounded-full border flex items-center justify-center transition-colors cursor-pointer",
                 entry.isFavorite

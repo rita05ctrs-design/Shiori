@@ -1,5 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+
+import { UI_PHRASES, translatePhrase } from "../src/lib/ui-phrases.ts";
+import {
+  formatFormat,
+  formatMediaStatus,
+  formatRelativeTime,
+  formatSeason,
+} from "../src/lib/utils.ts";
 
 import {
   clampProgress,
@@ -1530,4 +1540,74 @@ test("donation: resolveDonationLink classifies Ko-fi, Buy Me a Coffee, PayPal an
   assert.equal(paypal.configured, true);
   assert.equal(paypal.platform, "paypal");
   assert.equal(paypal.platformLabel, "PayPal");
+});
+
+test("i18n UI_PHRASES: 100% of tr() literal keys exist in all 7 languages with intact placeholders and localized formatters", () => {
+  const nonFrenchLangs = ["en", "es", "de", "it", "pt", "ja"] as const;
+  const entries = Object.entries(UI_PHRASES);
+  assert.ok(entries.length >= 1000, `Expected >= 1000 phrases, got ${entries.length}`);
+
+  // 1. Every dictionary entry must have non-empty translations in all 6 non-French languages and preserve {placeholders}
+  for (const [frKey, map] of entries) {
+    const expectedVars = [...frKey.matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((m) => m[1]).sort();
+    for (const lang of nonFrenchLangs) {
+      const value = map[lang];
+      assert.ok(
+        typeof value === "string" && value.trim().length > 0,
+        `Missing "${lang}" translation for "${frKey}"`
+      );
+      const gotVars = [...value.matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((m) => m[1]).sort();
+      assert.deepEqual(
+        gotVars,
+        expectedVars,
+        `Placeholder mismatch in "${lang}" for "${frKey}": expected ${JSON.stringify(expectedVars)}, got ${JSON.stringify(gotVars)}`
+      );
+    }
+  }
+
+  // 2. Scan every .ts/.tsx file under src/ and assert 100% of literal tr("...") keys exist in UI_PHRASES
+  const srcRoot = path.resolve(process.cwd(), "src");
+  const walkFiles = (dir: string, out: string[] = []): string[] => {
+    for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, d.name);
+      if (d.isDirectory()) walkFiles(full, out);
+      else if (/\.(ts|tsx)$/.test(d.name)) out.push(full);
+    }
+    return out;
+  };
+  const missingKeys: string[] = [];
+  for (const file of walkFiles(srcRoot)) {
+    const content = fs.readFileSync(file, "utf8");
+    const re = /\btr\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(content)) !== null) {
+      const raw = match[1] !== undefined ? match[1] : match[2];
+      const key = raw
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\n/g, "\n");
+      if (!(key in UI_PHRASES)) {
+        missingKeys.push(`${path.relative(srcRoot, file)} -> ${key}`);
+      }
+    }
+  }
+  assert.deepEqual(missingKeys, [], `Found tr() keys missing from UI_PHRASES: ${missingKeys.slice(0, 10).join("; ")}`);
+
+  // 3. Spot-check QuickEditModal, Calendar, and formatters across EN and JA
+  assert.equal(translatePhrase("en", "Ajouter à Shiori"), "Add to Shiori");
+  assert.equal(translatePhrase("en", "Note personnelle"), "Personal score");
+  assert.equal(translatePhrase("en", "Chef-d'œuvre"), "Masterpiece");
+  assert.equal(translatePhrase("ja", "Ajouter à Shiori"), "Shioriに追加");
+  assert.equal(translatePhrase("ja", "Enregistrer"), "保存");
+  assert.equal(translatePhrase("en", "Place #{rank}", { rank: 2 }), "Rank #2");
+
+  assert.equal(formatFormat("TV", "en"), "TV");
+  assert.equal(formatFormat("MOVIE", "en"), "Movie");
+  assert.equal(formatFormat("MOVIE", "ja"), "映画");
+  assert.equal(formatMediaStatus("RELEASING", "en"), "Airing");
+  assert.equal(formatMediaStatus("FINISHED", "ja"), "完結");
+  assert.equal(formatSeason("WINTER", 2026, "en"), "Winter 2026");
+  assert.equal(formatSeason("SPRING", 2026, "ja"), "2026年春");
+  assert.equal(formatRelativeTime(new Date().toISOString(), "en"), "Just now");
+  assert.equal(formatRelativeTime(new Date().toISOString(), "ja"), "たった今");
 });

@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
-import { cn, formatRelativeTime, formatScore, getDisplayTitle } from "@/lib/utils";
+import { cn, formatScore, getDisplayTitle } from "@/lib/utils";
 import { formatStreamingDisplayName } from "@/lib/streaming";
 import {
   AI_CHATS_SYNC_EVENT,
@@ -174,7 +174,7 @@ export function ShioriAiChatPanel({
   onNavigate,
 }: ShioriAiChatPanelProps) {
   const { library, orderedFavorites, getEntry, quickAdd, toast, contentLanguage } = useShiori();
-  const { t } = useTranslation();
+  const { t, tr, tRelativeTime } = useTranslation();
   const starterPrompts = useMemo(
     () => [t("ai.starter1"), t("ai.starter2"), t("ai.starter3"), t("ai.starter4")],
     [t]
@@ -891,10 +891,10 @@ export function ShioriAiChatPanel({
       updatedAt: saved.updatedAt,
     });
     toast({
-      title: isCurrentChatSaved ? "Chat mis à jour" : "Chat enregistré",
+      title: isCurrentChatSaved ? tr("Chat mis à jour") : tr("Chat enregistré"),
       description:
         saved.recommendedCount > 0
-          ? `${saved.recommendedCount} anime${saved.recommendedCount > 1 ? "s" : ""} conseillé${saved.recommendedCount > 1 ? "s" : ""} sauvegardé${saved.recommendedCount > 1 ? "s" : ""}`
+          ? tr("{n} animés conseillés sauvegardés", { n: saved.recommendedCount })
           : saved.title,
       variant: "success",
     });
@@ -933,12 +933,12 @@ export function ShioriAiChatPanel({
     }
 
     toast({
-      title: "Conversation supprimée",
+      title: tr("Conversation supprimée"),
       description: chat.title,
       variant: "info",
       durationMs: 5500,
       action: {
-        label: "Annuler",
+        label: t("common.cancel"),
         onClick: () => {
           setSavedChats(previousList);
           writeSavedAiChats(previousList);
@@ -968,12 +968,12 @@ export function ShioriAiChatPanel({
 
     if (prevMessages.length > 0 && !prevSavedId) {
       toast({
-        title: "Conversation effacée",
-        description: "Vous pouvez la restaurer ou démarrer un nouveau chat.",
+        title: tr("Conversation effacée"),
+        description: tr("Vous pouvez la restaurer ou démarrer un nouveau chat."),
         variant: "default",
         durationMs: 5000,
         action: {
-          label: "Annuler",
+          label: t("common.cancel"),
           onClick: () => {
             setMessages(prevMessages);
             setActiveSavedId(prevSavedId);
@@ -1001,7 +1001,7 @@ export function ShioriAiChatPanel({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-[#F4F3EE] truncate">
-                Shiori IA
+                {t("ai.pageTitle")}
               </h2>
               <span className="px-1.5 py-0.5 rounded-md bg-kinpaku/15 border border-kinpaku/35 font-mono text-[9.5px] font-bold text-kinpaku uppercase tracking-wider">
                 Gemini
@@ -1009,8 +1009,14 @@ export function ShioriAiChatPanel({
             </div>
             <p className="text-[11px] text-[#8E93A6] truncate">
               {meta
-                ? `${meta.totalSeen} vus exclus · ${meta.favoritesCount} favoris analysés`
-                : `${animeSeenCount} animés exclus · ${orderedFavorites.length} favoris pris en compte`}
+                ? tr("{seen} vus exclus · {favs} favoris analysés", {
+                    seen: meta.totalSeen,
+                    favs: meta.favoritesCount,
+                  })
+                : tr("{seen} animés exclus · {favs} favoris pris en compte", {
+                    seen: animeSeenCount,
+                    favs: orderedFavorites.length,
+                  })}
             </p>
           </div>
         </div>
@@ -1022,13 +1028,13 @@ export function ShioriAiChatPanel({
             onClick={toggleVoiceAutoSpeak}
             title={
               voiceAutoSpeak
-                ? "Réponse vocale automatique activée (cliquer pour couper)"
-                : "Activer la lecture vocale automatique des réponses"
+                ? tr("Réponse vocale automatique activée (cliquer pour couper)")
+                : tr("Activer la lecture vocale automatique des réponses")
             }
             aria-label={
               voiceAutoSpeak
-                ? "Désactiver la réponse vocale automatique"
-                : "Activer la réponse vocale automatique"
+                ? tr("Désactiver la réponse vocale automatique")
+                : tr("Activer la réponse vocale automatique")
             }
             aria-pressed={voiceAutoSpeak}
             className={cn(
@@ -1052,10 +1058,10 @@ export function ShioriAiChatPanel({
               onClick={handleSaveCurrentChat}
               title={
                 isCurrentChatSaved
-                  ? "Conversation enregistrée (cliquer pour mettre à jour)"
-                  : "Enregistrer cette conversation et ses animés conseillés"
+                  ? tr("Conversation enregistrée (cliquer pour mettre à jour)")
+                  : tr("Enregistrer cette conversation et ses animés conseillés")
               }
-              aria-label="Enregistrer cette conversation"
+              aria-label={tr("Enregistrer cette conversation")}
               className={cn(
                 "h-8 px-2.5 rounded-xl border text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer",
                 isCurrentChatSaved
@@ -1078,8 +1084,8 @@ export function ShioriAiChatPanel({
           <button
             type="button"
             onClick={() => setSavedDrawerOpen((v) => !v)}
-            title="Conversations enregistrées"
-            aria-label="Ouvrir les conversations enregistrées"
+            title={t("ai.savedChats")}
+            aria-label={t("ai.savedChats")}
             aria-expanded={savedDrawerOpen}
             className={cn(
               "h-8 px-2 rounded-xl border text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer",
@@ -1101,8 +1107,8 @@ export function ShioriAiChatPanel({
             <button
               type="button"
               onClick={handleNewChat}
-              title="Effacer et démarrer une nouvelle conversation"
-              aria-label="Nouvelle conversation"
+              title={tr("Effacer et démarrer une nouvelle conversation")}
+              aria-label={tr("Nouvelle conversation")}
               className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#A5A9BB] hover:text-white transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -1112,8 +1118,8 @@ export function ShioriAiChatPanel({
             <Link
               href="/assistant"
               onClick={onClose}
-              title="Ouvrir en plein écran"
-              aria-label="Ouvrir Shiori IA en plein écran"
+              title={tr("Ouvrir en plein écran")}
+              aria-label={tr("Ouvrir en plein écran")}
               className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#A5A9BB] hover:text-white transition-colors"
             >
               <Maximize2 className="w-3.5 h-3.5" />
@@ -1123,7 +1129,7 @@ export function ShioriAiChatPanel({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Fermer Shiori IA"
+              aria-label={t("common.close")}
               className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#A5A9BB] hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -1205,16 +1211,16 @@ export function ShioriAiChatPanel({
                               </p>
                               {isActive && (
                                 <span className="px-1.5 py-0.2 rounded bg-accent text-accent-fg text-[9.5px] font-bold uppercase shrink-0">
-                                  Ouvert
+                                  {tr("Ouvert")}
                                 </span>
                               )}
                             </div>
                             <p className="text-[10.5px] font-mono text-[#8A8FA4] truncate mt-0.5">
                               {chat.recommendedCount > 0
-                                ? `${chat.recommendedCount} anime${chat.recommendedCount > 1 ? "s" : ""} conseillé${chat.recommendedCount > 1 ? "s" : ""}`
-                                : `${chat.messages.length} message${chat.messages.length > 1 ? "s" : ""}`}
+                                ? tr("{n} animés conseillés", { n: chat.recommendedCount })
+                                : tr("{n} messages", { n: chat.messages.length })}
                               {" · "}
-                              {formatRelativeTime(chat.updatedAt)}
+                              {tRelativeTime(chat.updatedAt)}
                             </p>
                           </div>
                         </button>
@@ -1222,8 +1228,8 @@ export function ShioriAiChatPanel({
                         <button
                           type="button"
                           onClick={() => handleDeleteSavedChat(chat)}
-                          title="Supprimer cette conversation"
-                          aria-label={`Supprimer ${chat.title}`}
+                          title={tr("Supprimer cette conversation")}
+                          aria-label={tr("Supprimer cette conversation")}
                           className="w-8 h-8 rounded-lg bg-white/[0.04] hover:bg-rose-500/20 border border-white/[0.07] hover:border-rose-400/40 flex items-center justify-center text-[#8A8FA4] hover:text-rose-300 transition-colors cursor-pointer shrink-0"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

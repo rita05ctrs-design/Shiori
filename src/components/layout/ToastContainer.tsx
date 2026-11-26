@@ -13,6 +13,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn, STATUS_CONFIG } from "@/lib/utils";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 
@@ -26,6 +27,7 @@ const SPARKLE_RAYS = [
 
 export function ToastContainer() {
   const { toasts, dismissToast } = useShiori();
+  const { tr, tStatus } = useTranslation();
 
   return (
     <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] md:bottom-20 right-3 sm:right-6 z-[95] flex flex-col gap-3 pointer-events-none max-w-[390px] w-[calc(100vw-1.5rem)]">
@@ -135,7 +137,7 @@ export function ToastContainer() {
                     <p className="text-[13px] font-semibold text-white leading-tight">
                       {t.title}
                     </p>
-                    {statusCfg && (
+                    {statusCfg && t.status && (
                       <span
                         className={cn(
                           "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-semibold",
@@ -145,7 +147,7 @@ export function ToastContainer() {
                         )}
                       >
                         <span className={cn("w-1.5 h-1.5 rounded-full", statusCfg.dot)} />
-                        {statusCfg.shortLabel}
+                        {tStatus(t.status, "ANIME")}
                       </span>
                     )}
                   </div>
@@ -174,7 +176,7 @@ export function ToastContainer() {
                         onClick={() => dismissToast(t.id)}
                         className="inline-block text-[11px] font-medium text-[#FF8A8E] hover:text-white transition-colors"
                       >
-                        Voir ma bibliothèque →
+                        {tr("Voir ma bibliothèque →")}
                       </Link>
                     )}
                   </div>
@@ -183,7 +185,7 @@ export function ToastContainer() {
                 <button
                   type="button"
                   onClick={() => dismissToast(t.id)}
-                  aria-label="Fermer la notification"
+                  aria-label={tr("Fermer la notification")}
                   className="p-1.5 rounded-lg text-[#7D8296] hover:text-white hover:bg-white/[0.07] transition-colors cursor-pointer self-start"
                 >
                   <X className="w-3.5 h-3.5" />

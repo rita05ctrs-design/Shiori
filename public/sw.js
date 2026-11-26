@@ -1,4 +1,4 @@
-const STATIC_CACHE = "shiori-pwa-v2";
+const STATIC_CACHE = "shiori-pwa-v3";
 const IMAGE_CACHE = "shiori-media-img-v1";
 const MAX_CACHED_IMAGES = 150;
 

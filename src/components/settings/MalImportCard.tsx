@@ -22,7 +22,7 @@ import type { LibraryEntry } from "@/types/media";
 
 export function MalImportCard() {
   const { importEntriesBulk, contentLanguage } = useShiori();
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const copy = getSettingsCopy(contentLanguage).mal;
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,7 +48,7 @@ export function MalImportCard() {
       if (result.items.length === 0) {
         setParsed(null);
         setError(
-          "Aucune entrée anime ou manga détectée. Vérifiez qu'il s'agit bien d'un export XML MyAnimeList."
+          tr("Aucune entrée anime ou manga détectée. Vérifiez qu'il s'agit bien d'un export XML MyAnimeList.")
         );
         return;
       }
@@ -59,7 +59,7 @@ export function MalImportCard() {
       setError(
         err instanceof Error
           ? err.message
-          : "Impossible de lire ce fichier MyAnimeList."
+          : tr("Impossible de lire ce fichier MyAnimeList.")
       );
     }
   };
@@ -78,7 +78,7 @@ export function MalImportCard() {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok || !Array.isArray(data.entries)) {
-        setError(data?.error ?? "Échec de la correspondance avec le catalogue AniList.");
+        setError(data?.error ?? tr("Échec de la correspondance avec le catalogue AniList."));
         return;
       }
 
@@ -93,7 +93,7 @@ export function MalImportCard() {
         unmatched: Number(data.unmatched ?? 0),
       });
     } catch {
-      setError("Erreur réseau lors de la résolution des titres MyAnimeList.");
+      setError(tr("Erreur réseau lors de la résolution des titres MyAnimeList."));
     } finally {
       setImporting(false);
     }

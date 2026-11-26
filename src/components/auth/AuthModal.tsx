@@ -19,6 +19,7 @@ import {
   Check,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ export function AuthModal() {
     signUpWithSupabase,
     signInWithGoogle,
   } = useShiori();
+  const { tr } = useTranslation();
 
   const [tab, setTab] = useState<"signup" | "signin">("signup");
   const [displayName, setDisplayName] = useState("");
@@ -157,25 +159,25 @@ export function AuthModal() {
                     {supabaseReady ? (
                       <>
                         <Cloud className="w-3 h-3" />
-                        <span>Cloud Supabase actif</span>
+                        <span>{tr("Cloud Supabase actif")}</span>
                       </>
                     ) : (
                       <>
                         <ShieldCheck className="w-3 h-3" />
-                        <span>Inscriptions actives</span>
+                        <span>{tr("Inscriptions actives")}</span>
                       </>
                     )}
                   </span>
                 </div>
                 <h3 className="text-xl font-bold text-white tracking-tight">
                   {tab === "signup"
-                    ? "Créer votre compte Shiori"
-                    : "Connexion à Shiori"}
+                    ? tr("Créer votre compte Shiori")
+                    : tr("Connexion à Shiori")}
                 </h3>
                 <p className="text-xs text-[#8A8FA4] mt-0.5">
                   {tab === "signup"
-                    ? "Sauvegardez votre bibliothèque, vos notes et vos statistiques."
-                    : "Retrouvez votre collection et votre progression sauvegardée."}
+                    ? tr("Sauvegardez votre bibliothèque, vos notes et vos statistiques.")
+                    : tr("Retrouvez votre collection et votre progression sauvegardée.")}
                 </p>
               </div>
               <motion.button
@@ -191,8 +193,8 @@ export function AuthModal() {
             {/* Animated 2-Tab Pill Switcher */}
             <div className="relative z-10 mx-6 grid grid-cols-2 gap-1 p-1 rounded-2xl bg-white/[0.04] border border-white/[0.07] mb-5">
               {[
-                { id: "signup" as const, label: "Inscription" },
-                { id: "signin" as const, label: "Connexion" },
+                { id: "signup" as const, label: tr("Inscription") },
+                { id: "signin" as const, label: tr("Connexion") },
               ].map((t) => {
                 const active = tab === t.id;
                 return (
@@ -249,7 +251,7 @@ export function AuthModal() {
                     d="M21.1 12.3c0-.6-.1-1.1-.2-1.6H12v3.9h5.5c-.3 1.2-1 2.2-2.1 2.9l2.9 2.4c1.7-1.6 2.8-4 2.8-7.6z"
                   />
                 </svg>
-                <span>Continuer avec Google</span>
+                <span>{tr("Continuer avec Google")}</span>
                 {!supabaseReady && (
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.08] text-[#9A9EAE]">
                     Supabase
@@ -259,7 +261,7 @@ export function AuthModal() {
 
               <div className="flex items-center gap-3 text-[10.5px] font-mono uppercase tracking-widest text-[#686D82]">
                 <span className="h-px flex-1 bg-white/[0.08]" />
-                <span>ou par e-mail</span>
+                <span>{tr("ou par e-mail")}</span>
                 <span className="h-px flex-1 bg-white/[0.08]" />
               </div>
             </div>
@@ -279,7 +281,7 @@ export function AuthModal() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
-                          Nom d&apos;affichage
+                          {tr("Nom d'affichage")}
                         </label>
                         <div className="relative">
                           <User className="w-4 h-4 text-[#6E7387] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -289,15 +291,15 @@ export function AuthModal() {
                             minLength={2}
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
-                            placeholder="Ex: Yuki"
-                            className="w-full h-10 pl-10 pr-3 rounded-xl bg-[#08090E] border border-white/[0.09] text-sm text-white placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
+                            placeholder="Yuki"
+                            className="w-full h-10 pl-10 pr-3 rounded-xl bg-[#08090E] border border-white/[0.09] text-base sm:text-sm text-white placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
                           />
                         </div>
                       </div>
 
                       <div>
                         <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
-                          Pseudo (optionnel)
+                          {tr("Pseudo (optionnel)")}
                         </label>
                         <div className="relative">
                           <AtSign className="w-3.5 h-3.5 text-[#6E7387] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -306,7 +308,7 @@ export function AuthModal() {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             placeholder="yuki_anime"
-                            className="w-full h-10 pl-9 pr-3 rounded-xl bg-[#08090E] border border-white/[0.09] text-sm text-white font-mono placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
+                            className="w-full h-10 pl-9 pr-3 rounded-xl bg-[#08090E] border border-white/[0.09] text-base sm:text-sm text-white font-mono placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
                           />
                         </div>
                       </div>
@@ -316,8 +318,8 @@ export function AuthModal() {
                   <div>
                     <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
                       {tab === "signin" && !supabaseReady
-                        ? "Adresse e-mail ou pseudo"
-                        : "Adresse e-mail"}
+                        ? tr("Adresse e-mail ou pseudo")
+                        : tr("Adresse e-mail")}
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-[#6E7387] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -326,12 +328,8 @@ export function AuthModal() {
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder={
-                          tab === "signin" && !supabaseReady
-                            ? "vous@exemple.fr ou pseudo"
-                            : "vous@exemple.fr"
-                        }
-                        className="w-full h-10 pl-10 pr-3.5 rounded-xl bg-[#08090E] border border-white/[0.09] text-sm text-white placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
+                        placeholder="you@example.com"
+                        className="w-full h-10 pl-10 pr-3.5 rounded-xl bg-[#08090E] border border-white/[0.09] text-base sm:text-sm text-white placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
                       />
                     </div>
                   </div>
@@ -339,11 +337,11 @@ export function AuthModal() {
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E]">
-                        Mot de passe
+                        {tr("Mot de passe")}
                       </label>
                       {tab === "signup" && password && (
                         <span className="text-[10.5px] font-mono text-[#A5A9BB]">
-                          Force : <strong className="text-white">{strength.label}</strong>
+                          {tr("Force :")} <strong className="text-white">{tr(strength.label)}</strong>
                         </span>
                       )}
                     </div>
@@ -355,13 +353,13 @@ export function AuthModal() {
                         minLength={6}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="6 caractères minimum"
-                        className="w-full h-10 pl-10 pr-10 rounded-xl bg-[#08090E] border border-white/[0.09] text-sm text-white placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
+                        placeholder={tr("6 caractères minimum")}
+                        className="w-full h-10 pl-10 pr-10 rounded-xl bg-[#08090E] border border-white/[0.09] text-base sm:text-sm text-white placeholder:text-[#555A6E] focus:outline-none focus:border-accent"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((v) => !v)}
-                        aria-label="Afficher ou masquer le mot de passe"
+                        aria-label={tr("Mot de passe")}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7D8296] hover:text-white cursor-pointer"
                       >
                         {showPassword ? (
@@ -413,10 +411,10 @@ export function AuthModal() {
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-white flex items-center gap-1.5">
                           <Library className="w-3.5 h-3.5 text-accent-soft" />
-                          <span>Importer ma bibliothèque actuelle ({library.length} titres)</span>
+                          <span>{tr("Importer ma bibliothèque actuelle ({n} titres)", { n: library.length })}</span>
                         </p>
                         <p className="text-[10.5px] text-[#83889C] mt-0.5">
-                          Décochez pour démarrer avec une bibliothèque vierge.
+                          {tr("Décochez pour démarrer avec une bibliothèque vierge.")}
                         </p>
                       </div>
                     </button>
@@ -454,10 +452,10 @@ export function AuthModal() {
                 <Sparkles className="w-4 h-4" />
                 <span>
                   {submitting
-                    ? "Traitement..."
+                    ? tr("Traitement...")
                     : tab === "signup"
-                      ? "Créer mon compte Shiori"
-                      : "Se connecter"}
+                      ? tr("Créer mon compte Shiori")
+                      : tr("Se connecter")}
                 </span>
               </motion.button>
             </form>

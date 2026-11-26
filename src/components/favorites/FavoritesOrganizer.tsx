@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 import type { MediaType, PublicProfileMediaSummary } from "@/types/media";
 
@@ -87,6 +88,7 @@ function RankPopoverPicker({
   onSelectRank,
   compactTrigger = false,
 }: RankPopoverPickerProps) {
+  const { tr } = useTranslation();
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -125,7 +127,7 @@ function RankPopoverPicker({
             e.stopPropagation();
             onOpenChange(!open);
           }}
-          title={`Changer la place de ${mediaTitle}`}
+          title={tr("Changer la place de {title}", { title: mediaTitle })}
           className={cn(
             "min-w-[34px] h-7 px-2 rounded-lg border font-mono text-[11px] font-extrabold inline-flex items-center justify-center gap-0.5 transition-transform hover:scale-105 cursor-pointer",
             getRankBadgeClass(currentRank)
@@ -139,7 +141,10 @@ function RankPopoverPicker({
           type="button"
           onClick={() => onOpenChange(!open)}
           aria-expanded={open}
-          aria-label={`Choisir la place de ${mediaTitle} (actuellement #${currentRank})`}
+          aria-label={tr("Choisir la place de {title} (actuellement #{rank})", {
+            title: mediaTitle,
+            rank: currentRank,
+          })}
           className={cn(
             "h-9 px-3 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
             open
@@ -162,7 +167,9 @@ function RankPopoverPicker({
           ) : (
             <Sparkles className="w-3 h-3 text-accent-soft" />
           )}
-          <span className="font-mono font-bold">Place #{currentRank}</span>
+          <span className="font-mono font-bold">
+            {tr("Place #{rank}", { rank: currentRank })}
+          </span>
           <ChevronDown
             className={cn(
               "w-3.5 h-3.5 opacity-75 transition-transform duration-200",
@@ -195,7 +202,7 @@ function RankPopoverPicker({
               />
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-mono uppercase tracking-[0.16em] text-accent-soft">
-                  Choisir sa place
+                  {tr("Choisir sa place")}
                 </p>
                 <p className="text-xs font-semibold text-white truncate">
                   {mediaTitle}
@@ -214,7 +221,7 @@ function RankPopoverPicker({
             {podiumSlots.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[10px] font-mono uppercase tracking-wider text-[#858A9E]">
-                  Podium d&apos;honneur
+                  {tr("Podium d'honneur")}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {podiumSlots.map((slot) => {
@@ -245,7 +252,7 @@ function RankPopoverPicker({
                           #{slot}
                         </span>
                         <span className="text-[9px] font-mono opacity-80 leading-none">
-                          {slot === 1 ? "Or" : slot === 2 ? "Argent" : "Bronze"}
+                          {slot === 1 ? tr("Or") : slot === 2 ? tr("Argent") : tr("Bronze")}
                         </span>
                       </button>
                     );
@@ -258,7 +265,7 @@ function RankPopoverPicker({
             {restSlots.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[10px] font-mono uppercase tracking-wider text-[#858A9E]">
-                  Autres places (#4 → #{total})
+                  {tr("Autres places (#4 → #{total})", { total })}
                 </p>
                 <div className="grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto pr-0.5">
                   {restSlots.map((slot) => {
@@ -292,7 +299,7 @@ function RankPopoverPicker({
                 className="flex-1 h-7 rounded-lg bg-[#F0B95B]/15 hover:bg-[#F0B95B]/25 disabled:opacity-30 border border-[#F0B95B]/35 text-[#FDE68A] text-[11px] font-semibold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
                 <ArrowUpToLine className="w-3 h-3" />
-                <span>Mettre #1</span>
+                <span>{tr("Mettre #1")}</span>
               </button>
               <button
                 type="button"
@@ -300,7 +307,7 @@ function RankPopoverPicker({
                 onClick={() => pick(total)}
                 className="flex-1 h-7 rounded-lg bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-30 border border-white/[0.1] text-[#C8CCE0] hover:text-white text-[11px] font-semibold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:cursor-not-allowed"
               >
-                <span>Fin (#{total})</span>
+                <span>{tr("Fin (#{total})", { total })}</span>
               </button>
             </div>
           </motion.div>
@@ -314,7 +321,7 @@ export function FavoritesOrganizer({
   externalFavorites,
   editable = false,
   defaultEditMode = false,
-  title = "Animés & Mangas favoris",
+  title,
 }: FavoritesOrganizerProps) {
   const {
     library,
@@ -325,6 +332,8 @@ export function FavoritesOrganizer({
     toggleFavorite,
     toast,
   } = useShiori();
+  const { tr } = useTranslation();
+  const resolvedTitle = title ?? tr("Animés & Mangas favoris");
 
   const [scope, setScope] = useState<"ALL" | MediaType>("ALL");
   const [editMode, setEditMode] = useState(defaultEditMode);
@@ -395,10 +404,10 @@ export function FavoritesOrganizer({
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-rose-400 flex items-center gap-1.5">
             <Heart className="w-3.5 h-3.5 fill-current" />
-            <span>Top Classement Personnel · #1 → Dernier</span>
+            <span>{tr("Top Classement Personnel · #1 → Dernier")}</span>
           </p>
           <h2 className="text-lg sm:text-xl font-bold text-white mt-0.5">
-            {title} ({scopedFavorites.length})
+            {resolvedTitle} ({scopedFavorites.length})
           </h2>
         </div>
 
@@ -413,7 +422,7 @@ export function FavoritesOrganizer({
                 scope === "ALL" ? "bg-white text-[#090A0F]" : "text-[#9A9EAE] hover:text-white"
               )}
             >
-              Tous ({sourceList.length})
+              {tr("Tous")} ({sourceList.length})
             </button>
             <button
               type="button"
@@ -426,7 +435,7 @@ export function FavoritesOrganizer({
               )}
             >
               <Tv className="w-3 h-3" />
-              <span>Animés ({animeCount})</span>
+              <span>{tr("Animés")} ({animeCount})</span>
             </button>
             <button
               type="button"
@@ -439,7 +448,7 @@ export function FavoritesOrganizer({
               )}
             >
               <BookOpen className="w-3 h-3" />
-              <span>Mangas ({mangaCount})</span>
+              <span>{tr("Mangas")} ({mangaCount})</span>
             </button>
           </div>
 
@@ -451,7 +460,7 @@ export function FavoritesOrganizer({
                 className="h-8 px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-semibold text-white inline-flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 text-rose-400" />
-                <span>Ajouter</span>
+                <span>{tr("Ajouter")}</span>
               </button>
 
               {scopedFavorites.length > 1 && (
@@ -462,9 +471,10 @@ export function FavoritesOrganizer({
                     setEditMode(next);
                     if (!next) {
                       toast({
-                        title: "Classement favoris enregistré !",
-                        description:
-                          "Votre Top #1 → dernier est sauvegardé et visible sur votre profil.",
+                        title: tr("Classement favoris enregistré !"),
+                        description: tr(
+                          "Votre Top #1 → dernier est sauvegardé et visible sur votre profil."
+                        ),
                         variant: "success",
                       });
                     }
@@ -479,12 +489,12 @@ export function FavoritesOrganizer({
                   {editMode ? (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>Terminer le tri</span>
+                      <span>{tr("Terminer le tri")}</span>
                     </>
                   ) : (
                     <>
                       <ListOrdered className="w-3.5 h-3.5" />
-                      <span>Trier mon classement</span>
+                      <span>{tr("Trier mon classement")}</span>
                     </>
                   )}
                 </button>
@@ -499,7 +509,7 @@ export function FavoritesOrganizer({
         <div className="rounded-2xl card-surface border border-white/[0.1] p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-white">
-              Ajouter un titre de votre bibliothèque aux favoris
+              {tr("Ajouter un titre de votre bibliothèque aux favoris")}
             </p>
             <button
               type="button"
@@ -515,13 +525,13 @@ export function FavoritesOrganizer({
               type="text"
               value={pickerQuery}
               onChange={(e) => setPickerQuery(e.target.value)}
-              placeholder="Rechercher dans votre bibliothèque..."
-              className="w-full h-9 pl-9 pr-3 rounded-xl bg-obsidian/80 border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+              placeholder={tr("Rechercher dans votre bibliothèque...")}
+              className="w-full h-9 pl-9 pr-3 rounded-xl bg-obsidian/80 border border-white/[0.09] text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
             />
           </div>
           {pickerCandidates.length === 0 ? (
             <p className="text-xs text-[#858A9E]">
-              Aucun autre titre disponible dans cette catégorie.
+              {tr("Aucun autre titre disponible dans cette catégorie.")}
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -542,7 +552,7 @@ export function FavoritesOrganizer({
                       {entry.title}
                     </p>
                     <p className="text-[10px] font-mono text-[#858A9E]">
-                      {entry.type === "MANGA" ? "Manga" : "Animé"}
+                      {entry.type === "MANGA" ? "Manga" : "Anime"}
                       {entry.score !== null ? ` · ★ ${entry.score.toFixed(1)}` : ""}
                     </p>
                   </div>
@@ -557,9 +567,9 @@ export function FavoritesOrganizer({
       {/* Content: Empty / Luxury Podium Reorder Mode / Ranked Poster Showcase Grid */}
       {scopedFavorites.length === 0 ? (
         <div className="rounded-2xl card-surface p-6 text-xs text-[#858A9E]">
-          Aucun coup de cœur sélectionné dans cette catégorie pour le moment.
+          {tr("Aucun coup de cœur sélectionné dans cette catégorie pour le moment.")}
           {editable &&
-            " Cliquez sur « Ajouter » ou sur le cœur d'un titre dans votre bibliothèque."}
+            ` ${tr("Cliquez sur « Ajouter » ou sur le cœur d'un titre dans votre bibliothèque.")}`}
         </div>
       ) : editable && editMode ? (
         /* LUXURY EDITORIAL PODIUM REORDER LIST */
@@ -568,12 +578,9 @@ export function FavoritesOrganizer({
             <p className="text-xs text-[#C2C6D8] flex items-center gap-2">
               <GripVertical className="w-4 h-4 text-accent shrink-0" />
               <span>
-                <strong className="text-white">Glissez-déposez</strong> une carte ou cliquez sur{" "}
-                <span className="px-1.5 py-0.5 rounded-md bg-white/[0.08] border border-white/[0.12] font-mono text-[11px] text-white">
-                  Place #
-                </span>{" "}
-                pour choisir sa position exacte du <strong className="text-kinpaku">#1</strong> au{" "}
-                <strong className="text-white">#{scopedFavorites.length}</strong>.
+                {tr("Glissez-déposez une carte ou cliquez sur Place # pour choisir sa position exacte (#1 → #{total}).", {
+                  total: scopedFavorites.length,
+                })}
               </span>
             </p>
           </div>
@@ -669,7 +676,7 @@ export function FavoritesOrganizer({
                     <div className="flex items-center gap-2 flex-wrap">
                       {rank === 1 && (
                         <span className="px-2 py-0.5 rounded-full bg-[#F0B95B]/20 border border-[#F0B95B]/45 text-[9.5px] font-mono font-bold uppercase tracking-wider text-[#FDE68A]">
-                          N°1 Absolu
+                          {tr("N°1 Absolu")}
                         </span>
                       )}
                       {rank === 2 && (
@@ -698,7 +705,7 @@ export function FavoritesOrganizer({
                         ) : (
                           <Tv className="w-3 h-3 text-sky-400" />
                         )}
-                        {m.type === "MANGA" ? "Manga" : "Animé"}
+                        {m.type === "MANGA" ? "Manga" : "Anime"}
                       </span>
                       {m.score !== null && (
                         <span className="inline-flex items-center gap-0.5 text-kinpaku font-semibold">
@@ -732,7 +739,7 @@ export function FavoritesOrganizer({
                         type="button"
                         disabled={idx === 0}
                         onClick={() => moveFavorite(m.mediaId, "up", scope)}
-                        title="Monter d'une place"
+                        title={tr("Monter d'une place")}
                         className="w-7 h-8 rounded-lg hover:bg-white/[0.14] disabled:opacity-25 text-white flex items-center justify-center transition-colors cursor-pointer disabled:cursor-not-allowed"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
@@ -742,7 +749,7 @@ export function FavoritesOrganizer({
                         type="button"
                         disabled={idx === scopedFavorites.length - 1}
                         onClick={() => moveFavorite(m.mediaId, "down", scope)}
-                        title="Descendre d'une place"
+                        title={tr("Descendre d'une place")}
                         className="w-7 h-8 rounded-lg hover:bg-white/[0.14] disabled:opacity-25 text-white flex items-center justify-center transition-colors cursor-pointer disabled:cursor-not-allowed"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
@@ -752,7 +759,7 @@ export function FavoritesOrganizer({
                     <button
                       type="button"
                       onClick={() => toggleFavorite(m.mediaId)}
-                      title="Retirer des favoris"
+                      title={tr("Retirer des favoris")}
                       className="w-8 h-8 rounded-xl bg-transparent hover:bg-rose-500/20 text-[#6F7489] hover:text-rose-300 flex items-center justify-center transition-colors cursor-pointer"
                     >
                       <X className="w-4 h-4" />

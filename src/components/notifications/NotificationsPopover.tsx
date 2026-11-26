@@ -20,7 +20,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
+import { cn } from "@/lib/utils";
 import type { ShioriNotification } from "@/types/media";
 
 type FilterTab = "ALL" | "FRIEND_REQUEST" | "MESSAGE" | "SOCIAL" | "BADGE";
@@ -112,6 +113,7 @@ export function NotificationsPopover() {
     clearNotifications,
     acceptFriend,
   } = useShiori();
+  const { tr, tRelativeTime } = useTranslation();
 
   const [open, setOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterTab>("ALL");
@@ -189,8 +191,8 @@ export function NotificationsPopover() {
       <button
         type="button"
         onClick={handleToggleOpen}
-        aria-label="Notifications"
-        title="Notifications"
+        aria-label={tr("Notifications")}
+        title={tr("Notifications")}
         className={cn(
           "relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full flex items-center justify-center border transition-all cursor-pointer",
           open
@@ -219,14 +221,14 @@ export function NotificationsPopover() {
             <div className="px-3.5 sm:px-4 pt-3.5 pb-3 bg-surface-solid-header border-b border-white/[0.08] space-y-2.5 shrink-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-sm font-semibold text-white">Notifications</span>
+                  <span className="text-sm font-semibold text-white">{tr("Notifications")}</span>
                   {unreadCount > 0 ? (
                     <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-accent/18 text-accent-soft border border-accent/35 shrink-0">
-                      {unreadCount} non lue{unreadCount > 1 ? "s" : ""}
+                      {tr("{n} non lue(s)", { n: unreadCount })}
                     </span>
                   ) : (
                     <span className="text-[10.5px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/12 text-emerald-300 border border-emerald-500/25 shrink-0">
-                      À jour
+                      {tr("À jour")}
                     </span>
                   )}
                 </div>
@@ -239,15 +241,15 @@ export function NotificationsPopover() {
                       className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full bg-white/[0.06] hover:bg-accent/20 border border-white/[0.1] hover:border-accent/40 text-[10.5px] sm:text-[11px] font-semibold text-[#E8EAF2] hover:text-white transition-all cursor-pointer whitespace-nowrap"
                     >
                       <CheckCheck className="w-3.5 h-3.5 text-accent-soft shrink-0" />
-                      <span>Tout marquer comme lu</span>
+                      <span>{tr("Tout marquer comme lu")}</span>
                     </button>
                   )}
                   {notifications.length > 0 && (
                     <button
                       type="button"
                       onClick={clearNotifications}
-                      title="Effacer tout"
-                      aria-label="Effacer tout"
+                      title={tr("Effacer tout")}
+                      aria-label={tr("Effacer tout")}
                       className="p-1.5 rounded-lg text-[#8D92A4] hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -258,14 +260,14 @@ export function NotificationsPopover() {
 
               {/* Category Filter Pills */}
               <div className="flex flex-wrap items-center gap-1.5">
-                {FILTER_TABS.map((t) => {
-                  const active = activeFilter === t.id;
-                  const count = tabCounts[t.id];
+                {FILTER_TABS.map((tab) => {
+                  const active = activeFilter === tab.id;
+                  const count = tabCounts[tab.id];
                   return (
                     <button
-                      key={t.id}
+                      key={tab.id}
                       type="button"
-                      onClick={() => setActiveFilter(t.id)}
+                      onClick={() => setActiveFilter(tab.id)}
                       className={cn(
                         "px-2.5 py-1 rounded-full text-[11px] font-medium transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 border",
                         active
@@ -273,7 +275,7 @@ export function NotificationsPopover() {
                           : "bg-white/[0.04] hover:bg-white/[0.08] text-[#A2A6B8] hover:text-white border-white/[0.07]"
                       )}
                     >
-                      <span>{t.label}</span>
+                      <span>{tr(tab.label)}</span>
                       {count > 0 && (
                         <span
                           className={cn(
@@ -297,11 +299,11 @@ export function NotificationsPopover() {
                   <Bell className="w-8 h-8 text-[#4F5466] mx-auto mb-2.5" />
                   <p className="text-sm font-medium text-[#C5C8D6]">
                     {activeFilter === "ALL"
-                      ? "Tout est à jour"
-                      : "Aucune notification dans cette catégorie"}
+                      ? tr("Tout est à jour")
+                      : tr("Aucune notification dans cette catégorie")}
                   </p>
                   <p className="text-xs text-[#797E92] mt-1">
-                    Demandes d&apos;amis, messages privés, likes, commentaires et badges débloqués apparaîtront ici en temps réel.
+                    {tr("Demandes d'amis, messages privés, likes, commentaires et badges débloqués apparaîtront ici en temps réel.")}
                   </p>
                 </div>
               ) : (
@@ -365,9 +367,9 @@ export function NotificationsPopover() {
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 text-[11px] text-[#757A8E]">
                             <KindIcon kind={n.kind} />
-                            <span>{meta.label}</span>
+                            <span>{tr(meta.label)}</span>
                             <span>·</span>
-                            <span>{formatRelativeTime(n.createdAt)}</span>
+                            <span>{tRelativeTime(n.createdAt)}</span>
                           </div>
 
                           {n.kind === "FRIEND_REQUEST" && n.actorUsername && (
@@ -382,7 +384,7 @@ export function NotificationsPopover() {
                               ) : (
                                 <Check className="w-3 h-3" />
                               )}
-                              <span>Accepter</span>
+                              <span>{tr("Accepter")}</span>
                             </button>
                           )}
                         </div>
@@ -417,14 +419,14 @@ export function NotificationsPopover() {
                 className="text-xs text-[#9A9EAE] hover:text-white flex items-center gap-1.5 transition-colors"
               >
                 <Settings className="w-3.5 h-3.5" />
-                <span>Préférences</span>
+                <span>{tr("Préférences")}</span>
               </Link>
               <Link
                 href="/community?tab=activity"
                 onClick={() => setOpen(false)}
                 className="text-xs font-medium text-accent-hover hover:text-[#FF7A80] transition-colors"
               >
-                Voir la communauté →
+                {tr("Voir la communauté →")}
               </Link>
             </div>
           </motion.div>

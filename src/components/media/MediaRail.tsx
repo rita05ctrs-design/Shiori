@@ -27,7 +27,7 @@ export function MediaRail({
   items,
   showRank = false,
 }: MediaRailProps) {
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const {
     ref: scrollRef,
     trackThumbRef,
@@ -85,7 +85,7 @@ export function MediaRail({
             type="button"
             disabled={!canScrollLeft}
             onClick={() => scrollByAmount(-1)}
-            aria-label="Défiler vers la gauche"
+            aria-label={tr("Défiler vers la gauche")}
             className="w-8 h-8 rounded-full bg-white/[0.045] hover:bg-white/[0.12] active:scale-90 disabled:opacity-30 border border-white/[0.08] flex items-center justify-center text-[#C2C6D4] hover:text-white transition-all cursor-pointer disabled:cursor-default"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -94,7 +94,7 @@ export function MediaRail({
             type="button"
             disabled={!canScrollRight}
             onClick={() => scrollByAmount(1)}
-            aria-label="Défiler vers la droite"
+            aria-label={tr("Défiler vers la droite")}
             className="w-8 h-8 rounded-full bg-white/[0.045] hover:bg-white/[0.12] active:scale-90 disabled:opacity-30 border border-white/[0.08] flex items-center justify-center text-[#C2C6D4] hover:text-white transition-all cursor-pointer disabled:cursor-default"
           >
             <ChevronRight className="w-4 h-4" />

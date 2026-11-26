@@ -14,6 +14,7 @@ import {
   Cell,
 } from "recharts";
 import { BarChart3, CalendarRange } from "lucide-react";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { LibraryStatus } from "@/types/media";
 import type { MonthlyActivityPoint, YearEvolutionPoint } from "@/lib/stats";
 
@@ -35,17 +36,19 @@ interface StatsCoreChartsProps {
 }
 
 export function StatsCoreCharts({ statusData, scoreBuckets }: StatsCoreChartsProps) {
+  const { tr } = useTranslation();
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
       {/* Status Distribution Donut */}
       <div className="lg:col-span-5 rounded-2xl card-surface p-5 sm:p-6 flex flex-col">
         <h2 className="text-base font-semibold text-white mb-4">
-          Répartition par statut
+          {tr("Répartition par statut")}
         </h2>
 
         {statusData.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-sm text-[#7D8296] py-10">
-            Aucune œuvre pour le moment.
+            {tr("Aucune œuvre pour le moment.")}
           </div>
         ) : (
           <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 items-center gap-4">
@@ -104,9 +107,9 @@ export function StatsCoreCharts({ statusData, scoreBuckets }: StatsCoreChartsPro
       <div className="lg:col-span-7 rounded-2xl card-surface p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-white">
-            Répartition de vos notes
+            {tr("Répartition de vos notes")}
           </h2>
-          <span className="text-xs font-mono text-[#858A9E]">Note / 10</span>
+          <span className="text-xs font-mono text-[#858A9E]">{tr("Note / 10")}</span>
         </div>
 
         <div className="h-52 w-full">
@@ -138,8 +141,8 @@ export function StatsCoreCharts({ statusData, scoreBuckets }: StatsCoreChartsPro
                   fontSize: "12px",
                   color: "#F4F3EE",
                 }}
-                formatter={(value: number) => [`${value} titre(s)`, "Notes"]}
-                labelFormatter={(label) => `Note ${label} / 10`}
+                formatter={(value: number) => [tr("{n} titres", { n: value }), tr("Notes")]}
+                labelFormatter={(label) => tr("Note {n} / 10", { n: String(label) })}
               />
               <Bar
                 dataKey="count"
@@ -165,22 +168,24 @@ export function StatsAdvancedCharts({
   monthlyActivity,
   hasMonthlyActivity,
 }: StatsAdvancedChartsProps) {
+  const { tr } = useTranslation();
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
       <div className="lg:col-span-6 rounded-2xl card-surface p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <CalendarRange className="w-4 h-4 text-accent" />
-            <span>Par année de sortie</span>
+            <span>{tr("Par année de sortie")}</span>
           </h3>
           <span className="text-xs font-mono text-[#858A9E]">
-            {yearEvolution.length} an{yearEvolution.length > 1 ? "s" : ""}
+            {tr("{n} ans", { n: yearEvolution.length })}
           </span>
         </div>
 
         {yearEvolution.length === 0 ? (
           <div className="h-52 flex items-center justify-center text-sm text-[#7D8296] text-center px-4">
-            Aucune donnée annuelle disponible.
+            {tr("Aucune donnée annuelle disponible.")}
           </div>
         ) : (
           <div className="h-56 w-full">
@@ -201,10 +206,10 @@ export function StatsAdvancedCharts({
                     color: "#F4F3EE",
                   }}
                   formatter={(value: number, name: string) => [
-                    `${value} titre(s)`,
-                    name === "animeCount" ? "Animes" : "Mangas",
+                    tr("{n} titres", { n: value }),
+                    name === "animeCount" ? tr("Animes") : tr("Mangas"),
                   ]}
-                  labelFormatter={(label) => `Année ${label}`}
+                  labelFormatter={(label) => tr("Année {year}", { year: String(label) })}
                 />
                 <Bar dataKey="animeCount" stackId="yr" fill="#38BDF8" radius={[0, 0, 2, 2]} />
                 <Bar dataKey="mangaCount" stackId="yr" fill="#A78BFA" radius={[6, 6, 0, 0]} />
@@ -218,13 +223,13 @@ export function StatsAdvancedCharts({
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-kinpaku" />
-            <span>Activité mensuelle (12 mois)</span>
+            <span>{tr("Activité mensuelle (12 mois)")}</span>
           </h3>
         </div>
 
         {!hasMonthlyActivity ? (
           <div className="h-52 flex items-center justify-center text-sm text-[#7D8296] text-center px-4">
-            Vos mises à jour apparaîtront mois par mois ici.
+            {tr("Vos mises à jour apparaîtront mois par mois ici.")}
           </div>
         ) : (
           <div className="h-56 w-full">
@@ -244,7 +249,7 @@ export function StatsAdvancedCharts({
                     fontSize: "12px",
                     color: "#F4F3EE",
                   }}
-                  formatter={(value: number) => [`${value} action(s)`, "Activité"]}
+                  formatter={(value: number) => [tr("{n} actions", { n: value }), tr("Activité")]}
                 />
                 <Bar dataKey="count" fill="#F0B95B" radius={[6, 6, 2, 2]} />
               </BarChart>

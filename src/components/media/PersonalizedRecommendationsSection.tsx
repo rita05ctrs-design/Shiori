@@ -311,7 +311,17 @@ export function PersonalizedRecommendationsSection() {
                       ) : (
                         <Sparkles className="w-2.5 h-2.5 shrink-0" />
                       )}
-                      <span className="truncate">{rec.reason}</span>
+                      <span className="truncate">
+                        {rec.reason.startsWith("Parce que tu aimes ")
+                          ? tr("Parce que tu aimes {topic}", {
+                              topic: tGenre(rec.reason.slice("Parce que tu aimes ".length)),
+                            })
+                          : rec.reason.startsWith("Similaire à ")
+                            ? tr("Similaire à {title}", {
+                                title: rec.reason.slice("Similaire à ".length),
+                              })
+                            : rec.reason}
+                      </span>
                     </div>
                   </div>
                 </div>

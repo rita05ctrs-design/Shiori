@@ -20,6 +20,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   getInstantAliasSuggestions,
   resolveSearchAlias,
@@ -28,7 +29,7 @@ import {
   rankMediaByFuzzySearch,
   searchLibraryEntriesFuzzy,
 } from "@/lib/fuzzy-search";
-import { formatFormat, formatScore, getDisplayTitle, getStatusLabel } from "@/lib/utils";
+import { formatScore, getDisplayTitle } from "@/lib/utils";
 import type { MediaItem, MediaType } from "@/types/media";
 
 type SearchScope = "ALL" | MediaType;
@@ -52,6 +53,7 @@ export function CommandPalette() {
     quickAdd,
     openQuickEdit,
   } = useShiori();
+  const { t, tr, tFormat, tStatus } = useTranslation();
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>("ALL");
   const [results, setResults] = useState<MediaItem[]>([]);
@@ -185,14 +187,14 @@ export function CommandPalette() {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Titre FR, EN, JP, abréviation (snk, jjk)..."
-                className="min-w-0 flex-1 bg-transparent text-sm sm:text-[15px] text-white placeholder:text-[#6E7387] focus:outline-none"
+                placeholder={tr("Titre FR, EN, JP, abréviation (snk, jjk)...")}
+                className="min-w-0 flex-1 bg-transparent text-base sm:text-[15px] text-white placeholder:text-[#6E7387] focus:outline-none"
               />
               {query && (
                 <button
                   type="button"
                   onClick={() => setQuery("")}
-                  aria-label="Effacer"
+                  aria-label={tr("Effacer")}
                   className="p-1 rounded-md text-[#7D8296] hover:text-white cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -202,29 +204,29 @@ export function CommandPalette() {
               <div className="hidden xs:flex sm:flex items-center rounded-lg bg-white/[0.05] p-0.5 border border-white/[0.07] shrink-0">
                 {(
                   [
-                    { id: "ALL", label: "Tous" },
-                    { id: "ANIME", label: "Anime" },
-                    { id: "MANGA", label: "Manga" },
+                    { id: "ALL", label: t("common.all") },
+                    { id: "ANIME", label: t("common.anime") },
+                    { id: "MANGA", label: t("common.manga") },
                   ] as const
-                ).map((t) => (
+                ).map((tab) => (
                   <button
-                    key={t.id}
+                    key={tab.id}
                     type="button"
-                    onClick={() => setScope(t.id)}
+                    onClick={() => setScope(tab.id)}
                     className={`px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-                      scope === t.id
+                      scope === tab.id
                         ? "bg-accent text-accent-fg"
                         : "text-[#9A9EAE] hover:text-white"
                     }`}
                   >
-                    {t.label}
+                    {tab.label}
                   </button>
                 ))}
               </div>
               <button
                 type="button"
                 onClick={() => setCommandOpen(false)}
-                aria-label="Fermer la recherche"
+                aria-label={t("common.close")}
                 className="p-1.5 rounded-lg text-[#8D92A4] hover:text-white hover:bg-white/[0.07] cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -235,22 +237,22 @@ export function CommandPalette() {
             <div className="flex sm:hidden items-center gap-1 px-3 py-2 border-b border-white/[0.06] bg-white/[0.015]">
               {(
                 [
-                  { id: "ALL", label: "Tous" },
-                  { id: "ANIME", label: "Animes" },
-                  { id: "MANGA", label: "Mangas" },
+                  { id: "ALL", label: t("common.all") },
+                  { id: "ANIME", label: t("common.anime") },
+                  { id: "MANGA", label: t("common.manga") },
                 ] as const
-              ).map((t) => (
+              ).map((tab) => (
                 <button
-                  key={t.id}
+                  key={tab.id}
                   type="button"
-                  onClick={() => setScope(t.id)}
+                  onClick={() => setScope(tab.id)}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
-                    scope === t.id
+                    scope === tab.id
                       ? "bg-accent text-accent-fg"
                       : "bg-white/[0.04] text-[#9A9EAE]"
                   }`}
                 >
-                  {t.label}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -260,7 +262,7 @@ export function CommandPalette() {
               <div className="px-3.5 py-2 border-b border-white/[0.06] bg-kinpaku/[0.07] flex items-center gap-2 text-xs text-[#F5D68E]">
                 <Wand2 className="w-3.5 h-3.5 text-kinpaku shrink-0" />
                 <span className="truncate">
-                  Alias reconnu :{" "}
+                  {tr("Alias détecté :")}{" "}
                   <strong className="text-white">{aliasResolution.canonicalLabel}</strong>
                 </span>
               </div>
@@ -272,7 +274,7 @@ export function CommandPalette() {
               instantAliases.length > 0 && (
                 <div className="px-3 py-2 border-b border-white/[0.06] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                   <span className="text-[10.5px] font-mono uppercase text-[#7A7F94] shrink-0">
-                    Suggestions :
+                    {tr("Suggestions :")}
                   </span>
                   {instantAliases.map((a) => (
                     <button
@@ -293,7 +295,7 @@ export function CommandPalette() {
               {localMatches.length > 0 && (
                 <div>
                   <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296]">
-                    Dans votre bibliothèque
+                    {tr("Dans votre bibliothèque")}
                   </p>
                   <div className="space-y-1">
                     {localMatches.map((entry) => (
@@ -316,10 +318,12 @@ export function CommandPalette() {
                               {entry.title}
                             </p>
                             <p className="text-xs text-[#8D92A4] font-mono truncate">
-                              {entry.type === "MANGA" ? "Manga · Ch." : "Anime · Ép."}{" "}
+                              {entry.type === "MANGA"
+                                ? `${t("common.manga")} · ${t("common.chShort")}`
+                                : `${t("common.anime")} · ${t("common.epShort")}`}{" "}
                               {entry.progress}
                               {entry.totalUnits ? `/${entry.totalUnits}` : ""} ·{" "}
-                              {getStatusLabel(entry.status, entry.type)}
+                              {tStatus(entry.status, entry.type)}
                             </p>
                           </div>
                         </button>
@@ -331,7 +335,7 @@ export function CommandPalette() {
                           }}
                           className="h-8 px-2.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.14] text-xs font-medium text-white shrink-0 cursor-pointer"
                         >
-                          Modifier
+                          {tr("Modifier")}
                         </button>
                       </div>
                     ))}
@@ -342,7 +346,7 @@ export function CommandPalette() {
               {loading && (
                 <div className="py-6 flex items-center justify-center gap-2.5 text-sm text-[#9A9EAE]">
                   <Loader2 className="w-4 h-4 animate-spin text-accent" />
-                  <span>Recherche multilingue en cours...</span>
+                  <span>{tr("Recherche multilingue en cours...")}</span>
                 </div>
               )}
 
@@ -352,12 +356,12 @@ export function CommandPalette() {
                   <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296] flex items-center gap-1.5">
                     <Sparkles className="w-3 h-3 text-accent" />
                     <span>
-                      Catalogue{" "}
+                      {tr("Catalogue")}{" "}
                       {scope === "ALL"
-                        ? "(Animes & Mangas)"
+                        ? `(${t("common.anime")} & ${t("common.manga")})`
                         : scope === "ANIME"
-                          ? "(Animes)"
-                          : "(Mangas)"}
+                          ? `(${t("common.anime")})`
+                          : `(${t("common.manga")})`}
                     </span>
                   </p>
                   <div className="space-y-1">
@@ -401,9 +405,9 @@ export function CommandPalette() {
                                       : "text-sky-300 font-medium"
                                   }
                                 >
-                                  {item.type === "MANGA" ? "Manga" : "Anime"}
+                                  {item.type === "MANGA" ? t("common.manga") : t("common.anime")}
                                 </span>
-                                {item.format ? ` · ${formatFormat(item.format)}` : ""}
+                                {item.format ? ` · ${tFormat(item.format)}` : ""}
                                 {item.seasonYear ? ` · ${item.seasonYear}` : ""}
                                 {item.averageScore ? ` · ★ ${formatScore(item.averageScore)}` : ""}
                               </p>
@@ -420,17 +424,17 @@ export function CommandPalette() {
                               className="h-8 px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer hover:bg-emerald-500/25"
                             >
                               <Check className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Dans ma liste</span>
+                              <span className="hidden sm:inline">{tr("Dans ma liste")}</span>
                             </button>
                           ) : (
                             <button
                               type="button"
                               onClick={() => quickAdd(item, "WATCHING")}
-                              title="Ajouter directement en cours"
+                              title={t("common.add")}
                               className="h-8 px-2.5 sm:px-3 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              <span>Ajouter</span>
+                              <span>{t("common.add")}</span>
                             </button>
                           )}
                         </div>
@@ -448,7 +452,7 @@ export function CommandPalette() {
                     }
                     className="mt-2 w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-[#D6D9E5] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <span>Voir tous les résultats pour &laquo; {query.trim()} &raquo;</span>
+                    <span>{tr("Voir tous les résultats pour « {q} »", { q: query.trim() })}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -460,7 +464,7 @@ export function CommandPalette() {
                 results.length === 0 &&
                 localMatches.length === 0 && (
                   <div className="py-10 text-center text-sm text-[#8D92A4]">
-                    Aucun résultat trouvé pour &laquo; {query} &raquo;.
+                    {tr("Aucun résultat trouvé")} « {query} »
                   </div>
                 )}
 
@@ -468,7 +472,7 @@ export function CommandPalette() {
               {!loading && query.trim().length < 2 && (
                 <div>
                   <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7D8296]">
-                    Accès rapide
+                    {tr("Accès rapide")}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {QUICK_ROUTES.map((r) => {
@@ -485,9 +489,9 @@ export function CommandPalette() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs font-semibold text-white truncate">
-                              {r.label}
+                              {tr(r.label)}
                             </p>
-                            <p className="text-[11px] text-[#7D8296] truncate">{r.sub}</p>
+                            <p className="text-[11px] text-[#7D8296] truncate">{tr(r.sub)}</p>
                           </div>
                         </button>
                       );
@@ -500,9 +504,9 @@ export function CommandPalette() {
             {/* Subtle Footer Hint */}
             <div className="px-4 py-2 border-t border-white/[0.06] bg-white/[0.02] flex items-center justify-between text-[11px] text-[#74798E]">
               <span className="truncate">
-                Tolérant aux fautes · Titres FR, EN, JP & alias (snk, jjk, mha...)
+                {tr("Tolérant aux fautes · Titres FR, EN, JP & alias (snk, jjk, mha...)")}
               </span>
-              <span className="hidden sm:inline font-mono shrink-0 ml-2">Échap</span>
+              <span className="hidden sm:inline font-mono shrink-0 ml-2">{tr("Échap")}</span>
             </div>
           </motion.div>
         </div>

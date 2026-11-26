@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
 import { cn } from "@/lib/utils";
 import type { ResolvedDonationLink } from "@/lib/donation";
@@ -56,6 +57,7 @@ const FUND_USES = [
 
 export function SupportClient({ donation }: SupportClientProps) {
   const { profile, isAuthenticated, unlockedBadges, openAuthModal, toast } = useShiori();
+  const { tr } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const hasSupporterBadge = unlockedBadges.some((b) => b.badgeId === "supporter");
@@ -66,15 +68,15 @@ export function SupportClient({ donation }: SupportClientProps) {
       await navigator.clipboard.writeText(tag);
       setCopied(true);
       toast({
-        title: "Pseudo copié",
-        description: `${tag} copié — collez-le dans votre message de soutien !`,
+        title: tr("Copié !"),
+        description: tag,
         variant: "success",
       });
       setTimeout(() => setCopied(false), 2200);
     } catch {
       toast({
-        title: "Votre pseudo",
-        description: `Indiquez ${tag} dans votre message de soutien.`,
+        title: tr("Pseudo"),
+        description: tag,
       });
     }
   };
@@ -89,7 +91,7 @@ export function SupportClient({ donation }: SupportClientProps) {
             className="inline-flex items-center gap-1.5 text-xs font-medium text-[#9A9EAE] hover:text-white transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Retour à l&apos;accueil</span>
+            <span>{tr("Retour à l'accueil")}</span>
           </Link>
         </div>
 
@@ -108,27 +110,20 @@ export function SupportClient({ donation }: SupportClientProps) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0B95B]/15 border border-[#F0B95B]/45 text-[11px] font-bold uppercase tracking-[0.16em] text-[#FDE68A]">
                 <Heart className="w-3.5 h-3.5 text-[#E5484D] fill-[#E5484D]" />
-                Projet Indépendant
+                {tr("Projet Indépendant")}
               </span>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.1] text-[11px] font-medium text-[#CFD3E0]">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                100% gratuit · Sans publicité intrusive
+                {tr("100% gratuit · Sans publicité intrusive")}
               </span>
             </div>
 
             <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-white leading-[1.08]">
-              Aidez{" "}
-              <span className="bg-gradient-to-r from-[#FDE68A] via-[#F0B95B] to-[#E5484D] bg-clip-text text-transparent">
-                Shiori (栞)
-              </span>{" "}
-              à rester libre et indépendant.
+              {tr("Aidez Shiori (栞) à rester libre et indépendant.")}
             </h1>
 
             <p className="text-sm sm:text-base text-[#B6BAC9] leading-relaxed">
-              Shiori est conçu et maintenu avec passion par un créateur indépendant pour offrir aux
-              amateurs d&apos;animés et de mangas un espace soigné, rapide et sans trackers
-              publicitaires. Chaque contribution — même symbolique — aide directement à maintenir
-              les serveurs, le nom de domaine et l&apos;assistant IA accessibles à tous.
+              {tr("Shiori est conçu et maintenu avec passion par un créateur indépendant pour offrir aux amateurs d'animés et de mangas un espace soigné, rapide et sans trackers publicitaires. Chaque contribution — même symbolique — aide directement à maintenir les serveurs, le nom de domaine et l'assistant IA accessibles à tous.")}
             </p>
 
             {/* Primary Configurable Donation Action */}
@@ -142,29 +137,27 @@ export function SupportClient({ donation }: SupportClientProps) {
                     className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#F0B95B] via-[#E5A143] to-[#E5484D] hover:brightness-110 text-[#07080C] font-extrabold text-sm sm:text-base shadow-[0_18px_42px_-12px_rgba(240,185,91,0.65)] transition-all"
                   >
                     <Heart className="w-4 h-4 fill-current" />
-                    <span>Soutenir via {donation.platformLabel}</span>
+                    <span>{tr("Soutenir via {platform}", { platform: donation.platformLabel })}</span>
                     <ExternalLink className="w-4 h-4" />
                   </a>
                   <p className="text-xs text-[#9A9EAE]">
-                    Don libre &amp; sécurisé sur{" "}
-                    <span className="text-[#FDE68A] font-medium">{donation.platformLabel}</span> ·
-                    Aucun abonnement obligatoire.
+                    {tr("Don libre & sécurisé sur {platform} · Aucun abonnement obligatoire.", {
+                      platform: donation.platformLabel,
+                    })}
                   </p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-[#F0B95B]/30 bg-[#07080C]/75 p-4 sm:p-5 space-y-2.5 max-w-2xl">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="px-2.5 py-0.5 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/45 text-[11px] font-semibold text-[#FDE68A]">
-                      Lien de don bientôt disponible
+                      {tr("Lien de don bientôt disponible")}
                     </span>
                     <span className="text-[11px] font-mono text-[#7C8194]">
                       Ko-fi · Buy Me a Coffee · PayPal.me
                     </span>
                   </div>
                   <p className="text-xs sm:text-sm text-[#C4C8D6] leading-relaxed">
-                    La plateforme de soutien n&apos;est pas encore reliée sur cette instance. En
-                    attendant son ouverture officielle, la meilleure façon d&apos;aider Shiori est de
-                    partager le site avec vos amis et de faire vivre la communauté !
+                    {tr("La plateforme de soutien n'est pas encore reliée sur cette instance. En attendant son ouverture officielle, la meilleure façon d'aider Shiori est de partager le site avec vos amis et de faire vivre la communauté !")}
                   </p>
                   <div className="pt-1 flex flex-wrap gap-2">
                     <Link
@@ -172,7 +165,7 @@ export function SupportClient({ donation }: SupportClientProps) {
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.07] hover:bg-white/[0.13] border border-white/[0.1] text-xs font-semibold text-white transition-colors"
                     >
                       <Users className="w-3.5 h-3.5 text-[#F0B95B]" />
-                      <span>Rejoindre la communauté</span>
+                      <span>{tr("Rejoindre la communauté")}</span>
                     </Link>
                   </div>
                 </div>
@@ -185,14 +178,13 @@ export function SupportClient({ donation }: SupportClientProps) {
         <section className="space-y-5">
           <div className="space-y-1">
             <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#F0B95B]">
-              Transparence totale
+              {tr("Transparence totale")}
             </p>
             <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              À quoi sert votre soutien ?
+              {tr("À quoi sert votre soutien ?")}
             </h2>
             <p className="text-sm text-[#9599AC]">
-              100 % des dons sont réinvestis dans l&apos;infrastructure technique et l&apos;évolution
-              continue de Shiori.
+              {tr("100 % des dons sont réinvestis dans l'infrastructure technique et l'évolution continue de Shiori.")}
             </p>
           </div>
 
@@ -214,13 +206,13 @@ export function SupportClient({ donation }: SupportClientProps) {
                       <Icon className={cn("w-5 h-5", item.accent)} />
                     </div>
                     <span className="text-[10.5px] font-mono uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[#9EA3B5]">
-                      {item.share}
+                      {tr(item.share)}
                     </span>
                   </div>
                   <div className="space-y-1.5">
-                    <h3 className="text-base font-bold text-white">{item.title}</h3>
+                    <h3 className="text-base font-bold text-white">{tr(item.title)}</h3>
                     <p className="text-xs sm:text-sm text-[#9A9EAE] leading-relaxed">
-                      {item.description}
+                      {tr(item.description)}
                     </p>
                   </div>
                 </div>
@@ -240,17 +232,17 @@ export function SupportClient({ donation }: SupportClientProps) {
               <div className="space-y-1">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#F0B95B]/20 border border-[#F0B95B]/55 text-[10.5px] font-bold uppercase tracking-wider text-[#FDE68A]">
                   <Crown className="w-3 h-3 text-[#F0B95B]" />
-                  Distinction Or
+                  {tr("Distinction Or")}
                 </span>
-                <h3 className="text-lg font-bold text-white">Badge « Supporter »</h3>
+                <h3 className="text-lg font-bold text-white">{tr("Badge « Supporter »")}</h3>
                 <p className="text-xs text-[#9EA3B5]">
-                  Épinglable sur votre profil public et visible dans la communauté.
+                  {tr("Épinglable sur votre profil public et visible dans la communauté.")}
                 </p>
               </div>
               {hasSupporterBadge && (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/45 text-xs font-semibold text-emerald-200">
                   <Check className="w-3.5 h-3.5" />
-                  Déjà débloqué sur votre profil !
+                  {tr("Déjà débloqué sur votre profil !")}
                 </span>
               )}
             </div>
@@ -259,10 +251,10 @@ export function SupportClient({ donation }: SupportClientProps) {
             <div className="lg:col-span-8 space-y-4">
               <div className="space-y-1">
                 <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#F0B95B]">
-                  Merci pour votre geste
+                  {tr("Merci pour votre geste")}
                 </p>
                 <h2 className="text-xl sm:text-2xl font-bold text-white">
-                  Comment obtenir le badge « Supporter » sur votre profil ?
+                  {tr("Comment obtenir le badge « Supporter » sur votre profil ?")}
                 </h2>
               </div>
 
@@ -272,9 +264,7 @@ export function SupportClient({ donation }: SupportClientProps) {
                     1
                   </span>
                   <span>
-                    Lors de votre don, indiquez simplement votre{" "}
-                    <strong className="text-white">@pseudo Shiori</strong> dans le champ message
-                    (Ko-fi, Buy Me a Coffee ou PayPal).
+                    {tr("Lors de votre don, indiquez simplement votre @pseudo Shiori dans le champ message (Ko-fi, Buy Me a Coffee ou PayPal).")}
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
@@ -282,9 +272,7 @@ export function SupportClient({ donation }: SupportClientProps) {
                     2
                   </span>
                   <span>
-                    Le créateur vérifie votre soutien et active manuellement le badge doré{" "}
-                    <strong className="text-[#FDE68A]">Supporter</strong> directement sur votre
-                    compte depuis l&apos;administration Shiori.
+                    {tr("Le créateur vérifie votre soutien et active manuellement le badge doré Supporter directement sur votre compte depuis l'administration Shiori.")}
                   </span>
                 </li>
                 <li className="flex items-start gap-3">
@@ -292,8 +280,7 @@ export function SupportClient({ donation }: SupportClientProps) {
                     3
                   </span>
                   <span>
-                    Rendez-vous dans votre profil public pour épingler votre badge et le faire
-                    apparaître à côté de votre pseudo !
+                    {tr("Rendez-vous dans votre profil public pour épingler votre badge et le faire apparaître à côté de votre pseudo !")}
                   </span>
                 </li>
               </ol>
@@ -312,13 +299,13 @@ export function SupportClient({ donation }: SupportClientProps) {
                       ) : (
                         <Copy className="w-3.5 h-3.5 text-[#F0B95B]" />
                       )}
-                      <span>Copier mon pseudo (@{profile.username})</span>
+                      <span>{tr("Copier mon pseudo (@{username})", { username: profile.username })}</span>
                     </button>
                     <Link
                       href={`/profile/${encodeURIComponent(profile.username)}#badges`}
                       className="text-xs font-medium text-[#9A9EAE] hover:text-white transition-colors"
                     >
-                      Voir mes badges →
+                      {tr("Voir mes badges →")}
                     </Link>
                   </>
                 ) : (
@@ -328,7 +315,7 @@ export function SupportClient({ donation }: SupportClientProps) {
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.14] text-xs font-semibold text-white transition-colors cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-[#F0B95B]" />
-                    <span>Créer un compte Shiori pour recevoir le badge</span>
+                    <span>{tr("Créer un compte Shiori pour recevoir le badge")}</span>
                   </button>
                 )}
               </div>

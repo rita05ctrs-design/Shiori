@@ -126,7 +126,7 @@ const MOBILE_BOTTOM_NAV: {
 
 export function Navbar() {
   const pathname = usePathname();
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const {
     profile,
     isAuthenticated,
@@ -150,6 +150,39 @@ export function Navbar() {
   useEffect(() => {
     setProfileMenuOpen(false);
   }, [pathname]);
+
+  // Keep browser tab <title> synced with the active UI language across every route
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const applyTitle = () => {
+      if (pathname.startsWith("/library")) {
+        document.title = `${t("nav.library")} | Shiori`;
+      } else if (pathname.startsWith("/discover")) {
+        document.title = `${t("nav.discover")} | Shiori`;
+      } else if (pathname.startsWith("/calendar")) {
+        document.title = `${t("nav.releases")} | Shiori`;
+      } else if (pathname.startsWith("/episodes")) {
+        document.title = `${t("episodes.title")} | Shiori`;
+      } else if (pathname.startsWith("/stats")) {
+        document.title = `${t("stats.title")} | Shiori`;
+      } else if (pathname.startsWith("/community")) {
+        document.title = `${t("nav.community")} | Shiori`;
+      } else if (pathname.startsWith("/assistant")) {
+        document.title = `${t("ai.pageTitle")} | Shiori`;
+      } else if (pathname.startsWith("/messages")) {
+        document.title = `${t("nav.messages")} | Shiori`;
+      } else if (pathname.startsWith("/support")) {
+        document.title = `${tr("Soutenir Shiori")} | Shiori`;
+      } else if (pathname.startsWith("/admin")) {
+        document.title = `${tr("Espace Créateur")} | Shiori`;
+      } else if (pathname === "/") {
+        document.title = `Shiori — ${tr("Suivi Anime & Manga")}`;
+      }
+    };
+    applyTitle();
+    const timer = window.setTimeout(applyTitle, 120);
+    return () => window.clearTimeout(timer);
+  }, [pathname, contentLanguage, t, tr]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 18);
@@ -254,7 +287,7 @@ export function Navbar() {
 
           {/* Primary Navigation (Desktop — adapts cleanly across narrow/windowed and wide screens) */}
           <nav
-            aria-label="Navigation principale"
+            aria-label={tr("Navigation principale")}
             className="hidden md:flex items-center gap-0.5 p-1 rounded-full bg-white/[0.03] border border-white/[0.06] min-w-0 max-w-full overflow-x-auto no-scrollbar"
           >
             {NAV_ITEMS.map((item) => {
@@ -323,8 +356,8 @@ export function Navbar() {
             {isAuthenticated && (
               <Link
                 href="/messages"
-                aria-label="Messages privés"
-                title="Messages privés"
+                aria-label={t("nav.messages")}
+                title={t("nav.messages")}
                 className={cn(
                   "hidden sm:flex relative w-9 h-9 rounded-full border items-center justify-center transition-all",
                   pathname.startsWith("/messages")
@@ -349,7 +382,7 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={() => setProfileMenuOpen((v) => !v)}
-                aria-label="Menu profil et paramètres"
+                aria-label={tr("Menu profil et paramètres")}
                 aria-expanded={profileMenuOpen}
                 className={cn(
                   "flex items-center gap-2 h-8.5 sm:h-9 px-1 sm:px-1.5 xl:pr-2.5 rounded-full transition-all cursor-pointer border",
@@ -431,7 +464,7 @@ export function Navbar() {
                           className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-semibold text-[#FDE68A] bg-[#F0B95B]/14 hover:bg-[#F0B95B]/22 border border-[#F0B95B]/40 transition-colors mb-1"
                         >
                           <Crown className="w-4 h-4 text-[#F0B95B]" />
-                          <span>Espace Créateur</span>
+                          <span>{tr("Espace Créateur")}</span>
                         </Link>
                       )}
                       <Link
@@ -506,7 +539,7 @@ export function Navbar() {
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#FDE68A] hover:bg-[#F0B95B]/12 transition-colors"
                       >
                         <Heart className="w-4 h-4 text-[#F0B95B]" />
-                        <span>Soutenir Shiori</span>
+                        <span>{tr("Soutenir Shiori")}</span>
                       </Link>
 
                       {/* Inline Quick Preferences: Language (7 languages) + Ambiance */}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Sparkles, Trophy, X } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { RARITY_META } from "@/lib/badges";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,7 @@ const AUTO_DISMISS_MS = 5800;
 
 export function BadgeUnlockToast() {
   const { badgeUnlockQueue, dismissBadgeUnlock, profile } = useShiori();
+  const { t, tr } = useTranslation();
   const [paused, setPaused] = useState(false);
 
   const active = badgeUnlockQueue[0] ?? null;
@@ -137,12 +139,12 @@ export function BadgeUnlockToast() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-[#D8DCEB]">
                     <Trophy className="w-3 h-3 text-amber-300" />
-                    <span>Nouveau badge débloqué</span>
+                    <span>{tr("Nouveau badge débloqué")}</span>
                   </span>
                   <button
                     type="button"
                     onClick={dismissBadgeUnlock}
-                    aria-label="Fermer la notification de badge"
+                    aria-label={t("common.close")}
                     className="w-6 h-6 rounded-full bg-white/[0.08] hover:bg-white/[0.18] flex items-center justify-center text-[#C8CCE0] hover:text-white transition-colors cursor-pointer shrink-0"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -173,12 +175,12 @@ export function BadgeUnlockToast() {
                     onClick={dismissBadgeUnlock}
                     className="inline-flex items-center gap-1 text-[11px] font-semibold text-white hover:text-accent-soft transition-colors"
                   >
-                    <span>Voir mes trophées & épingler</span>
+                    <span>{tr("Voir mes trophées & épingler")}</span>
                     <ArrowRight className="w-3 h-3" />
                   </Link>
                   {remainingCount > 0 && (
                     <span className="text-[10.5px] font-mono text-[#9EA3B5]">
-                      +{remainingCount} autre{remainingCount > 1 ? "s" : ""}
+                      +{remainingCount}
                     </span>
                   )}
                 </div>

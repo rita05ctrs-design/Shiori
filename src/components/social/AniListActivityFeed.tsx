@@ -20,7 +20,8 @@ import {
   Search,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
-import { cn, formatRelativeTime, formatScore } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
+import { cn, formatScore } from "@/lib/utils";
 import type {
   AniListFeedItem,
   AniListFeedReply,
@@ -31,6 +32,7 @@ type AniListTypeFilter = "ALL" | "ANIME" | "MANGA" | "TEXT";
 
 export function AniListActivityFeed() {
   const { anilistConnection, anilistStats, toast } = useShiori();
+  const { tr, tRelativeTime } = useTranslation();
 
   // Default to "following" if connected via AniList OAuth, otherwise "global"
   const [scope, setScope] = useState<AniListScope>("global");
@@ -127,13 +129,13 @@ export function AniListActivityFeed() {
         setHasNextPage(Boolean(data?.hasNextPage));
         setPage(targetPage);
       } catch {
-        setErrorMsg("Impossible de joindre AniList pour le moment.");
+        setErrorMsg(tr("Impossible de joindre AniList pour le moment."));
       } finally {
         setLoading(false);
         setLoadingMore(false);
       }
     },
-    [scope, typeFilter, activeLookupUser, anilistConnection.user?.id, anilistStats?.anilistUserId]
+    [scope, typeFilter, activeLookupUser, anilistConnection.user?.id, anilistStats?.anilistUserId, tr]
   );
 
   useEffect(() => {
@@ -143,8 +145,8 @@ export function AniListActivityFeed() {
   const handleLike = async (item: AniListFeedItem) => {
     if (!anilistConnection.connected) {
       toast({
-        title: "Connexion AniList requise",
-        description: "Connectez votre compte AniList (OAuth) pour liker sur AniList.",
+        title: tr("Connexion AniList requise"),
+        description: tr("Connectez votre compte AniList (OAuth) pour liker sur AniList."),
         variant: "info",
       });
       return;
@@ -208,8 +210,8 @@ export function AniListActivityFeed() {
     if (!text) return;
     if (!anilistConnection.connected) {
       toast({
-        title: "Connexion AniList requise",
-        description: "Connectez votre compte AniList (OAuth) pour répondre sur AniList.",
+        title: tr("Connexion AniList requise"),
+        description: tr("Connectez votre compte AniList (OAuth) pour répondre sur AniList."),
         variant: "info",
       });
       return;
@@ -225,8 +227,8 @@ export function AniListActivityFeed() {
       const data = await res.json();
       if (!res.ok || !data?.reply) {
         toast({
-          title: "Erreur AniList",
-          description: data?.error || "Impossible d'envoyer la réponse.",
+          title: tr("Erreur AniList"),
+          description: data?.error || tr("Impossible d'envoyer la réponse."),
           variant: "warning",
         });
         return;
@@ -261,8 +263,8 @@ export function AniListActivityFeed() {
       const data = await res.json();
       if (!res.ok || !data?.activity) {
         toast({
-          title: "Publication impossible",
-          description: data?.error || "Impossible de publier sur AniList.",
+          title: tr("Publication impossible"),
+          description: data?.error || tr("Impossible de publier sur AniList."),
           variant: "warning",
         });
         return;
@@ -270,7 +272,7 @@ export function AniListActivityFeed() {
       setActivities((prev) => [data.activity as AniListFeedItem, ...prev]);
       setStatusDraft("");
       toast({
-        title: "Statut publié sur AniList !",
+        title: tr("Statut publié sur AniList !"),
         variant: "success",
       });
     } finally {
@@ -286,9 +288,9 @@ export function AniListActivityFeed() {
           <div className="w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar">
             <div className="inline-flex flex-nowrap items-center gap-1 p-1 rounded-xl bg-obsidian/80 border border-white/[0.08]">
               {[
-                { id: "global" as const, label: "Global AniList", icon: Globe },
-                { id: "following" as const, label: "Abonnements", icon: Users },
-                { id: "me" as const, label: "Mon activité", icon: User },
+                { id: "global" as const, label: tr("Global AniList"), icon: Globe },
+                { id: "following" as const, label: tr("Abonnements"), icon: Users },
+                { id: "me" as const, label: tr("Mon activité"), icon: User },
               ].map((s) => {
                 const Icon = s.icon;
                 const active = scope === s.id;
@@ -319,7 +321,7 @@ export function AniListActivityFeed() {
                 className="h-8 px-3 rounded-full bg-sky-500/18 hover:bg-sky-500/28 border border-sky-400/40 text-sky-200 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-colors"
               >
                 <Link2 className="w-3 h-3" />
-                <span>Connecter AniList</span>
+                <span>{tr("Connecter AniList")}</span>
               </a>
             )}
             <button
@@ -328,7 +330,7 @@ export function AniListActivityFeed() {
               className="h-8 px-3 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white inline-flex items-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
-              <span>Actualiser</span>
+              <span>{tr("Actualiser")}</span>
             </button>
           </div>
         </div>
@@ -337,10 +339,10 @@ export function AniListActivityFeed() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 max-w-full">
             {[
-              { id: "ALL" as const, label: "Tout", icon: null },
-              { id: "ANIME" as const, label: "Animés", icon: Tv },
-              { id: "MANGA" as const, label: "Mangas", icon: BookOpen },
-              { id: "TEXT" as const, label: "Statuts", icon: FileText },
+              { id: "ALL" as const, label: tr("Tout"), icon: null },
+              { id: "ANIME" as const, label: tr("Animés"), icon: Tv },
+              { id: "MANGA" as const, label: tr("Mangas"), icon: BookOpen },
+              { id: "TEXT" as const, label: tr("Statuts"), icon: FileText },
             ].map((f) => {
               const Icon = f.icon;
               const active = typeFilter === f.id;
@@ -377,15 +379,15 @@ export function AniListActivityFeed() {
                   type="text"
                   value={customUsername}
                   onChange={(e) => setCustomUsername(e.target.value)}
-                  placeholder="Pseudo AniList (ex: 6t79)"
-                  className="h-8 w-44 pl-8 pr-2.5 rounded-lg bg-obsidian border border-white/[0.1] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-sky-400"
+                  placeholder={tr("Pseudo AniList")}
+                  className="h-8 w-44 pl-8 pr-2.5 rounded-lg bg-obsidian border border-white/[0.1] text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-sky-400"
                 />
               </div>
               <button
                 type="submit"
                 className="h-8 px-3 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-200 text-xs font-semibold cursor-pointer"
               >
-                Voir
+                {tr("Voir")}
               </button>
             </form>
           )}
@@ -398,9 +400,11 @@ export function AniListActivityFeed() {
               type="text"
               value={statusDraft}
               onChange={(e) => setStatusDraft(e.target.value)}
-              placeholder={`Publier un statut sur AniList en tant que @${anilistConnection.user?.name}...`}
+              placeholder={tr("Publier un statut sur AniList en tant que @{user}...", {
+                user: anilistConnection.user?.name ?? "",
+              })}
               maxLength={1000}
-              className="flex-1 h-9 px-3.5 rounded-xl bg-obsidian/80 border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-sky-400"
+              className="flex-1 h-9 px-3.5 rounded-xl bg-obsidian/80 border border-white/[0.09] text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-sky-400"
             />
             <button
               type="submit"
@@ -408,7 +412,7 @@ export function AniListActivityFeed() {
               className="h-9 px-4 rounded-xl bg-[#02A9FF] hover:bg-[#2BB8FF] disabled:opacity-45 text-[#06121C] text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>Publier</span>
+              <span>{tr("Publier")}</span>
             </button>
           </form>
         )}
@@ -419,18 +423,17 @@ export function AniListActivityFeed() {
         <div className="rounded-2xl card-surface border border-sky-500/30 p-8 text-center space-y-3">
           <Users className="w-8 h-8 text-sky-400 mx-auto" />
           <h3 className="text-base font-bold text-white">
-            Connectez votre compte AniList pour voir vos abonnements
+            {tr("Connectez votre compte AniList pour voir vos abonnements")}
           </h3>
           <p className="text-xs text-[#8A8FA4] max-w-md mx-auto">
-            Le fil « Abonnements » affiche en direct l&apos;activité des amis que vous suivez sur
-            AniList et vous permet aussi de liker, répondre et publier depuis Shiori.
+            {tr("Le fil « Abonnements » affiche en direct l'activité des amis que vous suivez sur AniList et vous permet aussi de liker, répondre et publier depuis Shiori.")}
           </p>
           <a
             href="/api/auth/anilist/start"
             className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#02A9FF] hover:bg-[#29B8FF] text-[#06121C] text-xs font-bold shadow-[0_10px_26px_rgba(2,169,255,0.35)]"
           >
             <Link2 className="w-4 h-4" />
-            <span>Connecter mon compte AniList</span>
+            <span>{tr("Connecter mon compte AniList")}</span>
           </a>
         </div>
       )}
@@ -451,12 +454,12 @@ export function AniListActivityFeed() {
       ) : !requiresAuth && activities.length === 0 ? (
         <div className="rounded-2xl card-surface p-10 text-center space-y-2">
           <p className="text-sm font-semibold text-white">
-            Aucune activité AniList trouvée pour ce filtre.
+            {tr("Aucune activité AniList trouvée pour ce filtre.")}
           </p>
           <p className="text-xs text-[#858A9E]">
             {scope === "me" && !activeLookupUser
-              ? "Indiquez votre pseudo AniList ci-dessus ou connectez votre compte AniList."
-              : "Essayez un autre filtre ou passez sur Global AniList."}
+              ? tr("Indiquez votre pseudo AniList ci-dessus ou connectez votre compte AniList.")
+              : tr("Essayez un autre filtre ou passez sur Global AniList.")}
           </p>
         </div>
       ) : (
@@ -497,7 +500,7 @@ export function AniListActivityFeed() {
                         {item.user.name}
                       </p>
                       <p className="text-[11px] text-[#7D8296]">
-                        {formatRelativeTime(new Date(item.createdAt * 1000).toISOString())}
+                        {tRelativeTime(new Date(item.createdAt * 1000).toISOString())}
                       </p>
                     </div>
                   </a>
@@ -511,7 +514,7 @@ export function AniListActivityFeed() {
                         href={item.siteUrl}
                         target="_blank"
                         rel="noreferrer"
-                        title="Ouvrir sur AniList"
+                        title={tr("Ouvrir sur AniList")}
                         className="text-[#7D8296] hover:text-white transition-colors"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
@@ -591,7 +594,7 @@ export function AniListActivityFeed() {
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     <span className="font-mono">{item.replyCount}</span>
-                    <span>Réponses</span>
+                    <span>{tr("Réponses")}</span>
                   </button>
                 </div>
 
@@ -601,7 +604,7 @@ export function AniListActivityFeed() {
                     {isLoadingRep ? (
                       <div className="flex items-center gap-2 text-xs text-[#8E93A6] py-1">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                        <span>Chargement des réponses AniList...</span>
+                        <span>{tr("Chargement des réponses AniList...")}</span>
                       </div>
                     ) : replies.length > 0 ? (
                       <div className="space-y-2">
@@ -628,7 +631,7 @@ export function AniListActivityFeed() {
                                   {r.user.name}
                                 </a>
                                 <span className="text-[10px] text-[#7D8296]">
-                                  {formatRelativeTime(new Date(r.createdAt * 1000).toISOString())}
+                                  {tRelativeTime(new Date(r.createdAt * 1000).toISOString())}
                                 </span>
                               </div>
                               <p className="text-xs text-[#D6D9E5] mt-0.5 break-words">
@@ -639,7 +642,9 @@ export function AniListActivityFeed() {
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[11px] text-[#7D8296]">Aucune réponse pour le moment.</p>
+                      <p className="text-[11px] text-[#7D8296]">
+                        {tr("Aucune réponse pour le moment.")}
+                      </p>
                     )}
 
                     <form
@@ -654,10 +659,10 @@ export function AniListActivityFeed() {
                         }
                         placeholder={
                           anilistConnection.connected
-                            ? "Répondre sur AniList..."
-                            : "Connectez AniList (OAuth) pour répondre..."
+                            ? tr("Répondre sur AniList...")
+                            : tr("Connectez AniList (OAuth) pour répondre...")
                         }
-                        className="flex-1 h-8 px-3 rounded-lg bg-obsidian border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-sky-400"
+                        className="flex-1 h-8 px-3 rounded-lg bg-obsidian border border-white/[0.09] text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-sky-400"
                       />
                       <button
                         type="submit"
@@ -682,7 +687,7 @@ export function AniListActivityFeed() {
                 className="px-5 py-2.5 rounded-full bg-white/[0.07] hover:bg-white/[0.13] border border-white/[0.12] text-xs font-semibold text-white inline-flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
               >
                 {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Charger plus d&apos;activités AniList</span>
+                <span>{tr("Charger plus d'activités AniList")}</span>
               </button>
             </div>
           )}

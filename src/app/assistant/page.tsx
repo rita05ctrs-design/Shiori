@@ -22,7 +22,7 @@ import { RoleBadge } from "@/components/ui/RoleBadge";
 
 export default function AssistantPage() {
   const { profile, isAuthenticated, isCreator, library, orderedFavorites, openAuthModal } = useShiori();
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
 
   const watchingCount = library.filter((e) => e.status === "WATCHING").length;
   const completedCount = library.filter((e) => e.status === "COMPLETED").length;
@@ -130,7 +130,7 @@ export default function AssistantPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0B95B]/12 hover:bg-[#F0B95B]/22 border border-[#F0B95B]/40 text-xs font-semibold text-[#FDE68A] whitespace-nowrap transition-colors"
           >
             <Heart className="w-3.5 h-3.5 text-[#F0B95B]" />
-            <span>Soutenir Shiori</span>
+            <span>{tr("Soutenir Shiori")}</span>
           </Link>
           {isCreator && (
             <Link
@@ -138,7 +138,7 @@ export default function AssistantPage() {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0B95B]/20 hover:bg-[#F0B95B]/30 border border-[#F0B95B]/60 text-xs font-bold text-[#FDE68A] whitespace-nowrap transition-colors"
             >
               <Crown className="w-3.5 h-3.5 text-[#F0B95B]" />
-              <span>Admin</span>
+              <span>{tr("Admin")}</span>
             </Link>
           )}
         </div>

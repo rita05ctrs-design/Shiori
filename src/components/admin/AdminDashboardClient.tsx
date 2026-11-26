@@ -23,10 +23,11 @@ import {
   X,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { SITE_CONFIG_UPDATED_EVENT } from "@/components/layout/GlobalAnnouncementBanner";
-import { cn, formatRelativeTime, getDisplayTitle } from "@/lib/utils";
+import { cn, getDisplayTitle } from "@/lib/utils";
 import type {
   ActivityCommentItem,
   CommunityActivityItem,
@@ -74,6 +75,7 @@ export function AdminDashboardClient({
   creator,
 }: AdminDashboardClientProps) {
   const { toast } = useShiori();
+  const { t, tr, tRelativeTime } = useTranslation();
   const [activeTab, setActiveTab] = useState<AdminTab>("spotlight");
 
   // --- Tab 1: Hero & Global Banner State ---
@@ -138,21 +140,21 @@ export function AdminDashboardClient({
     setModLoading(true);
     try {
       const res = await fetch("/api/admin/moderation", { cache: "no-store" });
-      if (!res.ok) throw new Error("Impossible de charger la modération");
+      if (!res.ok) throw new Error(tr("Impossible de charger la modération"));
       const data = await res.json();
       setModActivities(Array.isArray(data.activities) ? data.activities : []);
       setModComments(Array.isArray(data.comments) ? data.comments : []);
       setModReports(Array.isArray(data.reports) ? data.reports : []);
     } catch (err) {
       toast({
-        title: "Erreur modération",
-        description: err instanceof Error ? err.message : "Échec du chargement.",
+        title: tr("Erreur modération"),
+        description: err instanceof Error ? err.message : tr("Échec du chargement."),
         variant: "warning",
       });
     } finally {
       setModLoading(false);
     }
-  }, [toast]);
+  }, [toast, tr]);
 
   const loadUsers = useCallback(
     async (query = "") => {
@@ -160,7 +162,7 @@ export function AdminDashboardClient({
       try {
         const qs = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
         const res = await fetch(`/api/admin/users${qs}`, { cache: "no-store" });
-        if (!res.ok) throw new Error("Impossible de charger les utilisateurs");
+        if (!res.ok) throw new Error(tr("Impossible de charger les utilisateurs"));
         const data = await res.json();
         setUsersList(Array.isArray(data.users) ? data.users : []);
         if (Array.isArray(data.grantableBadges) && data.grantableBadges.length > 0) {
@@ -168,15 +170,15 @@ export function AdminDashboardClient({
         }
       } catch (err) {
         toast({
-          title: "Erreur utilisateurs",
-          description: err instanceof Error ? err.message : "Échec du chargement.",
+          title: tr("Erreur utilisateurs"),
+          description: err instanceof Error ? err.message : tr("Échec du chargement."),
           variant: "warning",
         });
       } finally {
         setUsersLoading(false);
       }
     },
-    [toast]
+    [toast, tr]
   );
 
   useEffect(() => {
@@ -239,7 +241,7 @@ export function AdminDashboardClient({
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de l'enregistrement.");
+        throw new Error(data.error || tr("Erreur lors de l'enregistrement."));
       }
       if (data.config) {
         setAnnouncement(data.config.announcement);
@@ -254,14 +256,14 @@ export function AdminDashboardClient({
         );
       }
       toast({
-        title: "Configuration enregistrée",
-        description: "Le Hero « Sélection Shiori » et la bannière globale sont à jour.",
+        title: tr("Configuration enregistrée"),
+        description: tr("Le Hero « Sélection Shiori » et la bannière globale sont à jour."),
         variant: "success",
       });
     } catch (err) {
       toast({
-        title: "Échec de l'enregistrement",
-        description: err instanceof Error ? err.message : "Une erreur est survenue.",
+        title: tr("Échec de l'enregistrement"),
+        description: err instanceof Error ? err.message : tr("Une erreur est survenue."),
         variant: "warning",
       });
     } finally {
@@ -283,7 +285,7 @@ export function AdminDashboardClient({
         body: JSON.stringify({ targetType, id, activityId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Suppression impossible.");
+      if (!res.ok) throw new Error(data.error || tr("Suppression impossible."));
 
       if (targetType === "activity") {
         setModActivities((prev) => prev.filter((a) => a.id !== id));
@@ -299,14 +301,17 @@ export function AdminDashboardClient({
       }
       setConfirmDeleteKey(null);
       toast({
-        title: targetType === "activity" ? "Avis / activité supprimé" : "Commentaire supprimé",
-        description: "Le contenu a été retiré de la communauté.",
+        title:
+          targetType === "activity"
+            ? tr("Avis / activité supprimé")
+            : tr("Commentaire supprimé"),
+        description: tr("Le contenu a été retiré de la communauté."),
         variant: "success",
       });
     } catch (err) {
       toast({
-        title: "Erreur suppression",
-        description: err instanceof Error ? err.message : "Échec de la modération.",
+        title: tr("Erreur suppression"),
+        description: err instanceof Error ? err.message : tr("Échec de la modération."),
         variant: "warning",
       });
     } finally {
@@ -332,7 +337,7 @@ export function AdminDashboardClient({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossible de modifier le badge.");
+      if (!res.ok) throw new Error(data.error || tr("Impossible de modifier le badge."));
 
       setUsersList((prev) =>
         prev.map((u) =>
@@ -341,17 +346,20 @@ export function AdminDashboardClient({
             : u
         )
       );
-      const badgeTitle =
-        grantableBadges.find((b) => b.id === badgeId)?.title ?? badgeId;
+      const badgeTitle = tr(
+        grantableBadges.find((b) => b.id === badgeId)?.title ?? badgeId
+      );
       toast({
-        title: hasBadge ? `Badge « ${badgeTitle} » retiré` : `Badge « ${badgeTitle} » attribué`,
-        description: `Mis à jour pour @${user.username}.`,
+        title: hasBadge
+          ? tr("Badge « {badge} » retiré", { badge: badgeTitle })
+          : tr("Badge « {badge} » attribué", { badge: badgeTitle }),
+        description: tr("Mis à jour pour @{user}.", { user: user.username }),
         variant: "success",
       });
     } catch (err) {
       toast({
-        title: "Erreur badge",
-        description: err instanceof Error ? err.message : "Échec de la mise à jour.",
+        title: tr("Erreur badge"),
+        description: err instanceof Error ? err.message : tr("Échec de la mise à jour."),
         variant: "warning",
       });
     } finally {
@@ -375,22 +383,27 @@ export function AdminDashboardClient({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Impossible de modifier le rôle.");
+      if (!res.ok) throw new Error(data.error || tr("Impossible de modifier le rôle."));
 
       setUsersList((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, role: nextRole } : u))
       );
       toast({
-        title: nextRole === "moderator" ? "Modérateur nommé" : "Rôle modérateur retiré",
-        description: `@${user.username} est maintenant ${
-          nextRole === "moderator" ? "Modérateur" : "Membre standard"
-        }.`,
+        title:
+          nextRole === "moderator"
+            ? tr("Modérateur nommé")
+            : tr("Rôle modérateur retiré"),
+        description: tr("@{user} est maintenant {role}.", {
+          user: user.username,
+          role:
+            nextRole === "moderator" ? tr("Modérateur") : tr("Membre standard"),
+        }),
         variant: "success",
       });
     } catch (err) {
       toast({
-        title: "Erreur rôle",
-        description: err instanceof Error ? err.message : "Échec de la mise à jour.",
+        title: tr("Erreur rôle"),
+        description: err instanceof Error ? err.message : tr("Échec de la mise à jour."),
         variant: "warning",
       });
     } finally {
@@ -412,18 +425,17 @@ export function AdminDashboardClient({
               <div className="flex flex-wrap items-center gap-2">
                 <RoleBadge role="creator" size="md" />
                 <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#F0B95B]/80">
-                  Administration Shiori
+                  {tr("Administration Shiori")}
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                Panneau Créateur
+                {tr("Panneau Créateur")}
               </h1>
               <p className="text-sm text-[#A5A9BA] max-w-2xl">
-                Connecté en tant que{" "}
+                {tr("Connecté en tant que")}{" "}
                 <span className="text-white font-semibold">{creator.displayName}</span>{" "}
-                <span className="text-[#8E93A4]">(@{creator.username})</span>. Pilotez la
-                sélection Hero, les annonces globales, la modération communautaire et les badges
-                exclusifs.
+                <span className="text-[#8E93A4]">(@{creator.username})</span>.{" "}
+                {tr("Pilotez la sélection Hero, les annonces globales, la modération communautaire et les badges exclusifs.")}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -431,7 +443,7 @@ export function AdminDashboardClient({
                 href="/"
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-[#E4E6F0] transition-colors"
               >
-                <span>Voir l&apos;accueil</span>
+                <span>{tr("Voir l'accueil")}</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </Link>
               <Link
@@ -439,7 +451,7 @@ export function AdminDashboardClient({
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#F0B95B]/15 hover:bg-[#F0B95B]/25 border border-[#F0B95B]/45 text-xs font-semibold text-[#FDE68A] transition-colors"
               >
                 <Heart className="w-3.5 h-3.5 text-[#F0B95B]" />
-                <span>Page Soutien</span>
+                <span>{tr("Page Soutien")}</span>
               </Link>
             </div>
           </div>
@@ -448,9 +460,9 @@ export function AdminDashboardClient({
           <div className="relative mt-6 flex flex-wrap gap-2">
             {(
               [
-                { id: "spotlight", label: "Hero & Annonce globale", icon: Sparkles },
-                { id: "moderation", label: "Modération communauté", icon: Shield },
-                { id: "users", label: "Utilisateurs & Badges", icon: Users },
+                { id: "spotlight", label: tr("Hero & Annonce globale"), icon: Sparkles },
+                { id: "moderation", label: tr("Modération communauté"), icon: Shield },
+                { id: "users", label: tr("Utilisateurs & Badges"), icon: Users },
               ] as const
             ).map((tab) => {
               const Icon = tab.icon;
@@ -484,13 +496,13 @@ export function AdminDashboardClient({
                 <div>
                   <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#F0B95B]">
                     <Star className="w-3.5 h-3.5 fill-current" />
-                    Sélection Shiori (Hero)
+                    {tr("Sélection Shiori (Hero)")}
                   </div>
                   <h2 className="text-lg font-bold text-white mt-1">
-                    Animé mis en avant sur l&apos;accueil
+                    {tr("Animé mis en avant sur l'accueil")}
                   </h2>
                   <p className="text-xs text-[#8D92A4] mt-0.5">
-                    Épinglez un animé en première position du carrousel Hero avec un badge doré.
+                    {tr("Épinglez un animé en première position du carrousel Hero avec un badge doré.")}
                   </p>
                 </div>
                 <button
@@ -503,7 +515,7 @@ export function AdminDashboardClient({
                       : "bg-white/[0.05] border-white/[0.12] text-[#9A9EAE]"
                   )}
                 >
-                  {heroEnabled ? "Actif" : "Désactivé"}
+                  {heroEnabled ? tr("Actif") : tr("Désactivé")}
                 </button>
               </div>
 
@@ -517,7 +529,7 @@ export function AdminDashboardClient({
                   />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-[#F0B95B] uppercase tracking-wider">
-                      ★ Sélection actuelle · #{heroMedia.id}
+                      ★ {tr("Sélection actuelle")} · #{heroMedia.id}
                     </p>
                     <p className="text-sm font-bold text-white truncate">
                       {getDisplayTitle(heroMedia)}
@@ -534,7 +546,7 @@ export function AdminDashboardClient({
                       setHeroMediaId(null);
                       setHeroEnabled(false);
                     }}
-                    aria-label="Retirer la sélection"
+                    aria-label={tr("Retirer la sélection")}
                     className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-[#E5484D]/25 text-[#A5A9BA] hover:text-white flex items-center justify-center cursor-pointer"
                   >
                     <X className="w-4 h-4" />
@@ -542,14 +554,14 @@ export function AdminDashboardClient({
                 </div>
               ) : (
                 <div className="p-4 rounded-xl border border-dashed border-white/[0.12] text-xs text-[#8D92A4] text-center">
-                  Aucun animé épinglé. Recherchez un animé ci-dessous pour activer la Sélection Shiori.
+                  {tr("Aucun animé épinglé. Recherchez un animé ci-dessous pour activer la Sélection Shiori.")}
                 </div>
               )}
 
               {/* Search AniList Picker */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-[#CFD3E0] block">
-                  Rechercher un animé (AniList)
+                  {tr("Rechercher un animé (AniList)")}
                 </label>
                 <div className="relative">
                   <Search className="w-4 h-4 text-[#8D92A4] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -557,8 +569,8 @@ export function AdminDashboardClient({
                     type="text"
                     value={animeQuery}
                     onChange={(e) => setAnimeQuery(e.target.value)}
-                    placeholder="Ex. Frieren, Dandadan, Attack on Titan..."
-                    className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-sm text-white placeholder:text-[#666B7D]"
+                    placeholder="Frieren, Dandadan, Attack on Titan..."
+                    className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-base sm:text-sm text-white placeholder:text-[#666B7D]"
                   />
                   {searchingAnime && (
                     <Loader2 className="w-4 h-4 text-[#F0B95B] animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
@@ -594,7 +606,7 @@ export function AdminDashboardClient({
                           </p>
                         </div>
                         <span className="text-[11px] font-semibold text-[#F0B95B] shrink-0">
-                          Choisir
+                          {tr("Choisir")}
                         </span>
                       </button>
                     ))}
@@ -605,15 +617,15 @@ export function AdminDashboardClient({
               {/* Optional Custom Tagline */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-[#CFD3E0] block">
-                  Mot du créateur (optionnel)
+                  {tr("Mot du créateur (optionnel)")}
                 </label>
                 <input
                   type="text"
                   maxLength={140}
                   value={heroTagline}
                   onChange={(e) => setHeroTagline(e.target.value)}
-                  placeholder="Ex. Le chef-d'œuvre immanquable de cette saison selon Shiori."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-sm text-white placeholder:text-[#666B7D]"
+                  placeholder={tr("Ex. Le chef-d'œuvre immanquable de cette saison selon Shiori.")}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-base sm:text-sm text-white placeholder:text-[#666B7D]"
                 />
               </div>
             </div>
@@ -624,13 +636,13 @@ export function AdminDashboardClient({
                 <div>
                   <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E5484D]">
                     <Megaphone className="w-3.5 h-3.5" />
-                    Bannière Globale
+                    {tr("Bannière Globale")}
                   </div>
                   <h2 className="text-lg font-bold text-white mt-1">
-                    Annonce en haut du site
+                    {tr("Annonce en haut du site")}
                   </h2>
                   <p className="text-xs text-[#8D92A4] mt-0.5">
-                    Informez toute la communauté d&apos;une nouveauté, d&apos;un événement ou d&apos;une maintenance.
+                    {tr("Informez toute la communauté d'une nouveauté, d'un événement ou d'une maintenance.")}
                   </p>
                 </div>
                 <button
@@ -645,21 +657,21 @@ export function AdminDashboardClient({
                       : "bg-white/[0.05] border-white/[0.12] text-[#9A9EAE]"
                   )}
                 >
-                  {announcement.enabled ? "Active" : "Désactivée"}
+                  {announcement.enabled ? tr("Active") : tr("Désactivée")}
                 </button>
               </div>
 
               {/* Tone Selector */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-[#CFD3E0] block">
-                  Style visuel
+                  {tr("Style visuel")}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
-                      { id: "gold", label: "Kinpaku Or", accent: "border-[#F0B95B]/60 text-[#FDE68A] bg-[#F0B95B]/15" },
-                      { id: "crimson", label: "Akane Rouge", accent: "border-[#E5484D]/60 text-[#FCA5A5] bg-[#E5484D]/15" },
-                      { id: "info", label: "Nuit Info", accent: "border-sky-400/60 text-sky-200 bg-sky-400/15" },
+                      { id: "gold", label: tr("Kinpaku Or"), accent: "border-[#F0B95B]/60 text-[#FDE68A] bg-[#F0B95B]/15" },
+                      { id: "crimson", label: tr("Akane Rouge"), accent: "border-[#E5484D]/60 text-[#FCA5A5] bg-[#E5484D]/15" },
+                      { id: "info", label: tr("Nuit Info"), accent: "border-sky-400/60 text-sky-200 bg-sky-400/15" },
                     ] as const
                   ).map((tone) => (
                     <button
@@ -685,7 +697,7 @@ export function AdminDashboardClient({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-[#CFD3E0]">
-                    Message d&apos;annonce
+                    {tr("Message d'annonce")}
                   </label>
                   <span className="text-[11px] font-mono text-[#7C8194]">
                     {announcement.message.length}/220
@@ -698,8 +710,8 @@ export function AdminDashboardClient({
                   onChange={(e) =>
                     setAnnouncement((prev) => ({ ...prev, message: e.target.value }))
                   }
-                  placeholder="Ex. Nouvelle mise à jour Shiori : guide de reprise Manga & espace Soutien !"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-sm text-white placeholder:text-[#666B7D] resize-none"
+                  placeholder={tr("Ex. Nouvelle mise à jour Shiori : guide de reprise Manga & espace Soutien !")}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-base sm:text-sm text-white placeholder:text-[#666B7D] resize-none"
                 />
               </div>
 
@@ -707,7 +719,7 @@ export function AdminDashboardClient({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#CFD3E0] block">
-                    Texte du bouton (optionnel)
+                    {tr("Texte du bouton (optionnel)")}
                   </label>
                   <input
                     type="text"
@@ -716,13 +728,13 @@ export function AdminDashboardClient({
                     onChange={(e) =>
                       setAnnouncement((prev) => ({ ...prev, ctaLabel: e.target.value }))
                     }
-                    placeholder="Ex. Soutenir Shiori"
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-sm text-white placeholder:text-[#666B7D]"
+                    placeholder={tr("Soutenir Shiori")}
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-base sm:text-sm text-white placeholder:text-[#666B7D]"
                   />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#CFD3E0] block">
-                    Lien cible (interne ou https)
+                    {tr("Lien cible (interne ou https)")}
                   </label>
                   <input
                     type="text"
@@ -730,8 +742,8 @@ export function AdminDashboardClient({
                     onChange={(e) =>
                       setAnnouncement((prev) => ({ ...prev, ctaHref: e.target.value }))
                     }
-                    placeholder="Ex. /support"
-                    className="w-full px-3.5 py-2 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-sm text-white placeholder:text-[#666B7D]"
+                    placeholder="/support"
+                    className="w-full px-3.5 py-2 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-base sm:text-sm text-white placeholder:text-[#666B7D]"
                   />
                 </div>
               </div>
@@ -740,7 +752,7 @@ export function AdminDashboardClient({
               {announcement.message.trim() && (
                 <div className="rounded-xl border border-white/[0.1] p-3 bg-[#07080C] space-y-1.5">
                   <p className="text-[10px] font-mono uppercase tracking-wider text-[#7C8194]">
-                    Aperçu en direct
+                    {tr("Aperçu en direct")}
                   </p>
                   <div
                     className={cn(
@@ -776,7 +788,7 @@ export function AdminDashboardClient({
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                <span>Enregistrer la configuration</span>
+                <span>{tr("Enregistrer la configuration")}</span>
               </button>
             </div>
           </div>
@@ -789,9 +801,9 @@ export function AdminDashboardClient({
               <div className="flex flex-wrap items-center gap-2">
                 {(
                   [
-                    { id: "comments", label: `Commentaires (${modComments.length})`, icon: MessageSquare },
-                    { id: "activities", label: `Activités & Avis (${modActivities.length})`, icon: Sparkles },
-                    { id: "reports", label: `Signalements (${modReports.length})`, icon: Flag },
+                    { id: "comments", label: `${tr("Commentaires")} (${modComments.length})`, icon: MessageSquare },
+                    { id: "activities", label: `${tr("Activités & Avis")} (${modActivities.length})`, icon: Sparkles },
+                    { id: "reports", label: `${tr("Signalements")} (${modReports.length})`, icon: Flag },
                   ] as const
                 ).map((sub) => {
                   const Icon = sub.icon;
@@ -820,19 +832,19 @@ export function AdminDashboardClient({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] text-xs font-medium text-[#CFD3E0] cursor-pointer"
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", modLoading && "animate-spin")} />
-                <span>Actualiser</span>
+                <span>{tr("Actualiser")}</span>
               </button>
             </div>
 
             {modLoading ? (
               <div className="py-12 flex items-center justify-center gap-2 text-sm text-[#8D92A4]">
                 <Loader2 className="w-4 h-4 animate-spin text-[#F0B95B]" />
-                <span>Chargement des contenus communautaires…</span>
+                <span>{tr("Chargement des contenus communautaires…")}</span>
               </div>
             ) : modSubTab === "comments" ? (
               modComments.length === 0 ? (
                 <p className="py-10 text-center text-sm text-[#8D92A4]">
-                  Aucun commentaire à modérer pour le moment.
+                  {tr("Aucun commentaire à modérer pour le moment.")}
                 </p>
               ) : (
                 <div className="space-y-2.5">
@@ -852,10 +864,10 @@ export function AdminDashboardClient({
                             <span className="text-[#858A9E]">@{c.authorUsername}</span>
                             <span className="text-[#666B7D]">·</span>
                             <span className="text-[#858A9E]">
-                              sur « {c.activityTitle} »
+                              {tr("sur « {title} »", { title: c.activityTitle })}
                             </span>
                             <span className="text-[#666B7D]">
-                              ({formatRelativeTime(c.createdAt)})
+                              ({tRelativeTime(c.createdAt)})
                             </span>
                           </div>
                           <p className="text-sm text-[#D7DAE6] break-words">{c.body}</p>
@@ -877,14 +889,14 @@ export function AdminDashboardClient({
                                 ) : (
                                   <Check className="w-3.5 h-3.5" />
                                 )}
-                                Confirmer
+                                {tr("Confirmer")}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteKey(null)}
                                 className="px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-xs text-[#A5A9BA] hover:text-white cursor-pointer"
                               >
-                                Annuler
+                                {t("common.cancel")}
                               </button>
                             </>
                           ) : (
@@ -894,7 +906,7 @@ export function AdminDashboardClient({
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#E5484D]/12 hover:bg-[#E5484D]/25 border border-[#E5484D]/35 text-xs font-semibold text-[#FCA5A5] cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                              Supprimer
+                              {tr("Supprimer")}
                             </button>
                           )}
                         </div>
@@ -906,7 +918,7 @@ export function AdminDashboardClient({
             ) : modSubTab === "activities" ? (
               modActivities.length === 0 ? (
                 <p className="py-10 text-center text-sm text-[#8D92A4]">
-                  Aucune activité ou avis à modérer.
+                  {tr("Aucune activité ou avis à modérer.")}
                 </p>
               ) : (
                 <div className="space-y-2.5">
@@ -928,7 +940,7 @@ export function AdminDashboardClient({
                               {act.kind}
                             </span>
                             <span className="text-[#666B7D]">
-                              {formatRelativeTime(act.createdAt)}
+                              {tRelativeTime(act.createdAt)}
                             </span>
                           </div>
                           <p className="text-sm text-[#D7DAE6]">
@@ -953,14 +965,14 @@ export function AdminDashboardClient({
                                 ) : (
                                   <Check className="w-3.5 h-3.5" />
                                 )}
-                                Confirmer
+                                {tr("Confirmer")}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteKey(null)}
                                 className="px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-xs text-[#A5A9BA] hover:text-white cursor-pointer"
                               >
-                                Annuler
+                                {t("common.cancel")}
                               </button>
                             </>
                           ) : (
@@ -970,7 +982,7 @@ export function AdminDashboardClient({
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#E5484D]/12 hover:bg-[#E5484D]/25 border border-[#E5484D]/35 text-xs font-semibold text-[#FCA5A5] cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
-                              Supprimer
+                              {tr("Supprimer")}
                             </button>
                           )}
                         </div>
@@ -981,7 +993,7 @@ export function AdminDashboardClient({
               )
             ) : modReports.length === 0 ? (
               <p className="py-10 text-center text-sm text-[#8D92A4]">
-                Aucun signalement en attente.
+                {tr("Aucun signalement en attente.")}
               </p>
             ) : (
               <div className="space-y-2.5">
@@ -995,11 +1007,11 @@ export function AdminDashboardClient({
                         {rep.targetType} · {rep.reason}
                       </span>
                       <span className="text-[#7C8194]">
-                        {formatRelativeTime(rep.createdAt)}
+                        {tRelativeTime(rep.createdAt)}
                       </span>
                     </div>
                     <p className="text-xs text-[#A5A9BA]">
-                      Cible ID : <code className="text-white">{rep.targetId}</code>
+                      {tr("Cible ID")} : <code className="text-white">{rep.targetId}</code>
                     </p>
                     {rep.details && (
                       <p className="text-sm text-[#D7DAE6]">{rep.details}</p>
@@ -1018,13 +1030,10 @@ export function AdminDashboardClient({
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <Award className="w-5 h-5 text-[#F0B95B]" />
-                  <span>Gestion des membres & badges spéciaux</span>
+                  <span>{tr("Gestion des membres & badges spéciaux")}</span>
                 </h2>
                 <p className="text-xs text-[#8D92A4] mt-0.5">
-                  Recherchez un membre inscrit pour lui attribuer ou retirer les distinctions{" "}
-                  <span className="text-[#FDE68A] font-medium">Bêta-testeur</span>,{" "}
-                  <span className="text-[#FDE68A] font-medium">Supporter</span> ou{" "}
-                  <span className="text-[#FDE68A] font-medium">VIP</span>.
+                  {tr("Recherchez un membre inscrit pour lui attribuer ou retirer les distinctions Bêta-testeur, Supporter ou VIP.")}
                 </p>
               </div>
               <div className="relative w-full sm:w-80">
@@ -1033,8 +1042,8 @@ export function AdminDashboardClient({
                   type="text"
                   value={userQuery}
                   onChange={(e) => setUserQuery(e.target.value)}
-                  placeholder="Rechercher par @pseudo ou nom..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-sm text-white placeholder:text-[#666B7D]"
+                  placeholder={tr("Rechercher par @pseudo ou nom...")}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-base sm:text-sm text-white placeholder:text-[#666B7D]"
                 />
               </div>
             </div>
@@ -1042,11 +1051,11 @@ export function AdminDashboardClient({
             {usersLoading ? (
               <div className="py-12 flex items-center justify-center gap-2 text-sm text-[#8D92A4]">
                 <Loader2 className="w-4 h-4 animate-spin text-[#F0B95B]" />
-                <span>Recherche des utilisateurs…</span>
+                <span>{tr("Recherche des utilisateurs…")}</span>
               </div>
             ) : usersList.length === 0 ? (
               <p className="py-10 text-center text-sm text-[#8D92A4]">
-                Aucun utilisateur trouvé pour cette recherche.
+                {tr("Aucun utilisateur trouvé pour cette recherche.")}
               </p>
             ) : (
               <div className="space-y-3">
@@ -1079,7 +1088,7 @@ export function AdminDashboardClient({
                             </span>
                           </div>
                           <p className="text-xs text-[#8D92A4] truncate">
-                            @{u.username} · {u.unlockedBadges.length} badges
+                            @{u.username} · {tr("{n} badges", { n: u.unlockedBadges.length })}
                           </p>
                         </div>
                       </div>
@@ -1088,6 +1097,7 @@ export function AdminDashboardClient({
                         {grantableBadges.map((badge) => {
                           const has = unlockedIds.has(badge.id);
                           const busy = mutatingUserKey === `${u.id}:${badge.id}`;
+                          const localizedBadgeTitle = tr(badge.title);
                           return (
                             <button
                               key={badge.id}
@@ -1096,8 +1106,8 @@ export function AdminDashboardClient({
                               onClick={() => void handleToggleUserBadge(u, badge.id, has)}
                               title={
                                 has
-                                  ? `Retirer ${badge.title}`
-                                  : `Attribuer ${badge.title}`
+                                  ? tr("Retirer {badge}", { badge: localizedBadgeTitle })
+                                  : tr("Attribuer {badge}", { badge: localizedBadgeTitle })
                               }
                               className={cn(
                                 "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer disabled:opacity-60",
@@ -1113,7 +1123,7 @@ export function AdminDashboardClient({
                               ) : (
                                 <Crown className="w-3 h-3 opacity-60" />
                               )}
-                              <span>{badge.title}</span>
+                              <span>{localizedBadgeTitle}</span>
                             </button>
                           );
                         })}
@@ -1132,7 +1142,7 @@ export function AdminDashboardClient({
                           >
                             <Shield className="w-3 h-3" />
                             <span>
-                              {u.role === "moderator" ? "Modérateur ✓" : "+ Mod"}
+                              {u.role === "moderator" ? `${tr("Modérateur")} ✓` : "+ Mod"}
                             </span>
                           </button>
                         )}

@@ -562,8 +562,8 @@ function LibraryPageInner() {
     a.click();
     URL.revokeObjectURL(url);
     toast({
-      title: "Export JSON téléchargé",
-      description: `${library.length} œuvres sauvegardées.`,
+      title: tr("Export JSON téléchargé"),
+      description: `${library.length} ${t("common.titles")}`,
       variant: "success",
     });
   };
@@ -578,8 +578,8 @@ function LibraryPageInner() {
     a.click();
     URL.revokeObjectURL(url);
     toast({
-      title: "Export CSV téléchargé",
-      description: `${filtered.length} œuvre(s) exportée(s).`,
+      title: tr("Export CSV téléchargé"),
+      description: `${filtered.length} ${t("common.titles")}`,
       variant: "success",
     });
   };
@@ -656,7 +656,7 @@ function LibraryPageInner() {
             <button
               type="button"
               onClick={() => setToolsMenuOpen((v) => !v)}
-              aria-label="Plus d'outils"
+              aria-label={tr("Outils")}
               aria-expanded={toolsMenuOpen}
               className={cn(
                 "inline-flex items-center gap-1.5 h-9 px-3 rounded-full border text-xs font-medium transition-colors cursor-pointer",
@@ -666,7 +666,7 @@ function LibraryPageInner() {
               )}
             >
               <MoreHorizontal className="w-4 h-4" />
-              <span className="hidden sm:inline">Outils</span>
+              <span className="hidden sm:inline">{tr("Outils")}</span>
             </button>
 
             <AnimatePresence>
@@ -687,7 +687,7 @@ function LibraryPageInner() {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   >
                     <ListOrdered className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Classer mes favoris</span>
+                    <span>{tr("Classer mes favoris")}</span>
                   </button>
                   <button
                     type="button"
@@ -698,7 +698,7 @@ function LibraryPageInner() {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   >
                     <FolderHeart className="w-3.5 h-3.5 text-violet-400" />
-                    <span>Collections ({collections.length})</span>
+                    <span>{tr("Collections")} ({collections.length})</span>
                   </button>
                   <div className="my-1 border-t border-white/[0.07]" />
                   <Link
@@ -707,7 +707,7 @@ function LibraryPageInner() {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white"
                   >
                     <Download className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Importer depuis AniList</span>
+                    <span>{tr("Importer depuis AniList")}</span>
                   </Link>
                   <button
                     type="button"
@@ -718,7 +718,7 @@ function LibraryPageInner() {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5 text-[#9A9EAE]" />
-                    <span>Exporter en JSON</span>
+                    <span>{tr("Exporter en JSON")}</span>
                   </button>
                   <button
                     type="button"
@@ -729,7 +729,7 @@ function LibraryPageInner() {
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-[#D8DBE5] hover:bg-white/[0.08] hover:text-white cursor-pointer"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Exporter en CSV</span>
+                    <span>{tr("Exporter en CSV")}</span>
                   </button>
                 </motion.div>
               )}
@@ -741,7 +741,7 @@ function LibraryPageInner() {
       {/* Reprendre la lecture — placé tout en haut de la Bibliothèque avec boutons rapides + Ép. / + Ch. */}
       <ContinueWatchingSection embeddedInLibrary />
 
-      {/* Category Tabs — 100% French clear statuses */}
+      {/* Category Tabs */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-white/[0.07]">
         {TABS.map((tab) => {
           const isActive = filters.status === tab.id;
@@ -794,7 +794,7 @@ function LibraryPageInner() {
             value={filters.search}
             onChange={(e) => updateFilters({ search: e.target.value })}
             placeholder={t("library.searchPlaceholder")}
-            className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.08] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/60"
+            className="w-full h-10 pl-10 pr-4 rounded-xl bg-surface border border-white/[0.08] text-base sm:text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/60"
           />
         </div>
 
@@ -842,7 +842,7 @@ function LibraryPageInner() {
           <LuxurySelect
             value={sortBy}
             onChange={(val) => setSortBy(val as LibrarySortKey)}
-            options={LIBRARY_SORTS}
+            options={librarySorts}
             defaultValue="UPDATED"
             align="right"
             className="flex-1 sm:flex-none min-w-[155px] sm:w-44"
@@ -852,9 +852,9 @@ function LibraryPageInner() {
           <div className="inline-flex items-center p-1 rounded-xl bg-surface border border-white/[0.08]">
             {(
               [
-                { id: "grid", label: "Vue grille", icon: LayoutGrid },
-                { id: "list", label: "Vue liste", icon: ListIcon },
-                { id: "table", label: "Vue tableau", icon: Table2 },
+                { id: "grid", label: tr("Vue grille"), icon: LayoutGrid },
+                { id: "list", label: tr("Vue liste"), icon: ListIcon },
+                { id: "table", label: tr("Vue tableau"), icon: Table2 },
               ] as const
             ).map((mode) => {
               const Icon = mode.icon;
@@ -904,12 +904,10 @@ function LibraryPageInner() {
                 </span>
                 <div>
                   <p className="text-xs font-semibold text-white">
-                    Affiner ma bibliothèque
+                    {tr("Affiner ma bibliothèque")}
                   </p>
                   <p className="text-[11px] text-[#858A9E]">
-                    {filtered.length.toLocaleString("fr-FR")} œuvre
-                    {filtered.length > 1 ? "s" : ""} correspondante
-                    {filtered.length > 1 ? "s" : ""}
+                    {filtered.length.toLocaleString(locale)} {t("common.titles")}
                   </p>
                 </div>
               </div>
@@ -922,13 +920,13 @@ function LibraryPageInner() {
                     className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-accent/14 hover:bg-accent/25 border border-accent/35 text-xs font-medium text-accent-soft hover:text-white transition-colors cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>Réinitialiser</span>
+                    <span>{tr("Réinitialiser")}</span>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setShowAdvancedFilters(false)}
-                  aria-label="Fermer les filtres"
+                  aria-label={t("common.close")}
                   className="w-8 h-8 rounded-full bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.08] flex items-center justify-center text-[#9A9EAE] hover:text-white transition-colors cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -942,10 +940,10 @@ function LibraryPageInner() {
               <div className="xl:col-span-6 rounded-xl bg-obsidian/70 border border-white/[0.07] p-3.5 space-y-2.5">
                 <span className="text-[11px] font-medium text-[#9A9EAE] flex items-center gap-1.5">
                   <Star className="w-3.5 h-3.5 text-[#F0B95B] fill-[#F0B95B]" />
-                  <span>Note personnelle</span>
+                  <span>{tr("Note personnelle")}</span>
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {SCORE_PILLS.map((opt) => {
+                  {scorePills.map((opt) => {
                     const active = filters.scoreFilter === opt.id;
                     return (
                       <button
@@ -962,7 +960,7 @@ function LibraryPageInner() {
                         {opt.id !== "ALL" && opt.id !== "UNRATED" && (
                           <Star className="w-3 h-3 fill-current" />
                         )}
-                        <span>{opt.short}</span>
+                        <span>{opt.id === "ALL" ? t("common.all") : opt.short}</span>
                       </button>
                     );
                   })}
@@ -973,10 +971,10 @@ function LibraryPageInner() {
               <div className="xl:col-span-6 rounded-xl bg-obsidian/70 border border-white/[0.07] p-3.5 space-y-2.5">
                 <span className="text-[11px] font-medium text-[#9A9EAE] flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Progression</span>
+                  <span>{tr("Progression")}</span>
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {PROGRESS_PILLS.map((opt) => {
+                  {progressPills.map((opt) => {
                     const active = filters.progressFilter === opt.id;
                     return (
                       <button
@@ -990,7 +988,7 @@ function LibraryPageInner() {
                             : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
                         )}
                       >
-                        {opt.short}
+                        {opt.id === "ALL" ? t("common.all") : opt.short}
                       </button>
                     );
                   })}
@@ -1047,12 +1045,12 @@ function LibraryPageInner() {
               )}
             >
               <LuxurySelect
-                label="Genre"
+                label={tr("Genre")}
                 value={filters.genre}
                 onChange={(val) => updateFilters({ genre: val })}
                 options={filterOptions.genreOptions}
                 icon={Tag}
-                searchPlaceholder="Chercher un genre..."
+                searchPlaceholder={tr("Chercher un genre...")}
               />
 
               <LuxurySelect
@@ -1065,24 +1063,24 @@ function LibraryPageInner() {
               />
 
               <LuxurySelect
-                label="Saison"
+                label={tr("Saison")}
                 value={filters.season}
                 onChange={(val) => updateFilters({ season: val })}
-                options={LIBRARY_SEASON_OPTIONS}
+                options={librarySeasonOptions}
                 icon={Sparkles}
               />
 
               <LuxurySelect
-                label="Studio / Auteur"
+                label={tr("Studio / Auteur")}
                 value={filters.studio}
                 onChange={(val) => updateFilters({ studio: val })}
                 options={filterOptions.studioOptions}
                 icon={Building2}
-                searchPlaceholder="Chercher un studio..."
+                searchPlaceholder={tr("Chercher un studio...")}
               />
 
               <LuxurySelect
-                label="Format"
+                label={tr("Format")}
                 value={filters.format}
                 onChange={(val) => updateFilters({ format: val })}
                 options={filterOptions.formatOptions}
@@ -1092,7 +1090,7 @@ function LibraryPageInner() {
 
               {collections.length > 0 && (
                 <LuxurySelect
-                  label="Collection"
+                  label={tr("Collection")}
                   value={filters.collectionId}
                   onChange={(val) => updateFilters({ collectionId: val })}
                   options={filterOptions.collectionOptions}
@@ -1114,16 +1112,16 @@ function LibraryPageInner() {
             exit={{ opacity: 0, y: -4 }}
             className="flex flex-wrap items-center gap-2"
           >
-            <span className="text-[11px] font-medium text-[#7D8296]">Filtres actifs :</span>
+            <span className="text-[11px] font-medium text-[#7D8296]">{tr("Filtres actifs :")}</span>
 
             {filters.genre !== "ALL" && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-white">
                 <Tag className="w-3 h-3 text-accent-soft" />
-                <span>{filters.genre}</span>
+                <span>{tGenre(filters.genre)}</span>
                 <button
                   type="button"
                   onClick={() => updateFilters({ genre: "ALL" })}
-                  aria-label="Retirer le filtre genre"
+                  aria-label={tr("Retirer")}
                   className="text-accent-soft hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1138,7 +1136,7 @@ function LibraryPageInner() {
                 <button
                   type="button"
                   onClick={() => updateFilters({ year: "ALL" })}
-                  aria-label="Retirer le filtre année"
+                  aria-label={tr("Retirer")}
                   className="text-[#9A9EAE] hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1148,14 +1146,11 @@ function LibraryPageInner() {
 
             {filters.season !== "ALL" && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.15] text-xs text-white">
-                <span>
-                  {LIBRARY_SEASON_OPTIONS.find((s) => s.id === filters.season)?.label ??
-                    filters.season}
-                </span>
+                <span>{tSeason(filters.season)}</span>
                 <button
                   type="button"
                   onClick={() => updateFilters({ season: "ALL" })}
-                  aria-label="Retirer le filtre saison"
+                  aria-label={tr("Retirer")}
                   className="text-[#9A9EAE] hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1170,7 +1165,7 @@ function LibraryPageInner() {
                 <button
                   type="button"
                   onClick={() => updateFilters({ studio: "ALL" })}
-                  aria-label="Retirer le filtre studio"
+                  aria-label={tr("Retirer")}
                   className="text-[#9A9EAE] hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1180,11 +1175,11 @@ function LibraryPageInner() {
 
             {filters.format !== "ALL" && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.15] text-xs text-white">
-                <span>{formatFormat(filters.format)}</span>
+                <span>{tFormat(filters.format)}</span>
                 <button
                   type="button"
                   onClick={() => updateFilters({ format: "ALL" })}
-                  aria-label="Retirer le filtre format"
+                  aria-label={tr("Retirer")}
                   className="text-[#9A9EAE] hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1195,13 +1190,13 @@ function LibraryPageInner() {
             {filters.scoreFilter !== "ALL" && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/40 text-xs font-mono text-[#F0B95B]">
                 <span>
-                  {SCORE_PILLS.find((s) => s.id === filters.scoreFilter)?.label ??
+                  {scorePills.find((s) => s.id === filters.scoreFilter)?.label ??
                     filters.scoreFilter}
                 </span>
                 <button
                   type="button"
                   onClick={() => updateFilters({ scoreFilter: "ALL" })}
-                  aria-label="Retirer le filtre note"
+                  aria-label={tr("Retirer")}
                   className="hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1212,13 +1207,13 @@ function LibraryPageInner() {
             {filters.progressFilter !== "ALL" && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/16 border border-emerald-400/40 text-xs text-emerald-200">
                 <span>
-                  {PROGRESS_PILLS.find((p) => p.id === filters.progressFilter)?.label ??
+                  {progressPills.find((p) => p.id === filters.progressFilter)?.label ??
                     filters.progressFilter}
                 </span>
                 <button
                   type="button"
                   onClick={() => updateFilters({ progressFilter: "ALL" })}
-                  aria-label="Retirer le filtre progression"
+                  aria-label={tr("Retirer")}
                   className="hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1230,12 +1225,12 @@ function LibraryPageInner() {
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/18 border border-violet-400/40 text-xs text-violet-100">
                 <FolderHeart className="w-3 h-3 text-violet-300" />
                 <span>
-                  {collections.find((c) => c.id === filters.collectionId)?.name ?? "Collection"}
+                  {collections.find((c) => c.id === filters.collectionId)?.name ?? tr("Collection")}
                 </span>
                 <button
                   type="button"
                   onClick={() => updateFilters({ collectionId: "ALL" })}
-                  aria-label="Retirer le filtre collection"
+                  aria-label={tr("Retirer")}
                   className="text-violet-300 hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -1249,7 +1244,7 @@ function LibraryPageInner() {
               className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white hover:bg-accent/18 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Tout effacer</span>
+              <span>{tr("Tout effacer")}</span>
             </button>
           </motion.div>
         )}
@@ -1268,7 +1263,7 @@ function LibraryPageInner() {
                 : "bg-surface border-white/[0.08] text-[#9A9EAE] hover:text-white"
             )}
           >
-            Toute la bibliothèque
+            {tr("Toute la bibliothèque")}
           </button>
           {collections.map((col) => {
             const active = filters.collectionId === col.id;
@@ -1315,7 +1310,7 @@ function LibraryPageInner() {
           <FavoritesOrganizer
             editable
             defaultEditMode
-            title="Mon Top Favoris (#1 → dernier)"
+            title={tr("Mon Top Favoris")}
           />
         </div>
       )}
@@ -1356,7 +1351,7 @@ function LibraryPageInner() {
               const cfg = STATUS_CONFIG[entry.status];
               const exactPct = getProgressPercent(entry);
               const barPct = exactPct ?? Math.min(85, Math.max(8, entry.progress * 3));
-              const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
+              const unit = entry.type === "MANGA" ? t("common.chShort") : t("common.epShort");
               const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
 
               return (
@@ -1393,14 +1388,14 @@ function LibraryPageInner() {
                           )}
                         >
                           <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
-                          {getStatusLabel(entry.status, entry.type)}
+                          {tStatus(entry.status, entry.type)}
                         </span>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => toggleFavorite(entry.mediaId)}
-                        aria-label="Basculer favori"
+                        aria-label={tr("Coup de cœur")}
                         className={cn(
                           "absolute top-3 right-3 z-10 w-8 h-8 rounded-full border flex items-center justify-center transition-colors cursor-pointer active:scale-90",
                           entry.isFavorite
@@ -1441,7 +1436,7 @@ function LibraryPageInner() {
                           ) : (
                             <Tv className="w-3 h-3 text-sky-400" />
                           )}
-                          <span>{entry.format ? formatFormat(entry.format) : entry.type}</span>
+                          <span>{entry.format ? tFormat(entry.format) : entry.type}</span>
                           {entry.seasonYear && <span>· {entry.seasonYear}</span>}
                           {entry.notes && (
                             <span title={entry.notes} className="ml-auto text-kinpaku">
@@ -1470,13 +1465,13 @@ function LibraryPageInner() {
                             {entry.type === "MANGA" &&
                               ((entry.progressVolumes ?? 0) > 0 || entry.totalVolumes) && (
                                 <span className="ml-1.5 text-violet-300">
-                                  · T.{entry.progressVolumes ?? 0}
+                                  · {tr("Tome")} {entry.progressVolumes ?? 0}
                                   {entry.totalVolumes ? `/${entry.totalVolumes}` : ""}
                                 </span>
                               )}
                           </span>
                           <span className="text-[11px] text-[#7D8296] shrink-0">
-                            {exactPct !== null ? `${exactPct}%` : "En cours"}
+                            {exactPct !== null ? `${exactPct}%` : t("home.inProgress")}
                           </span>
                         </div>
 
@@ -1492,7 +1487,7 @@ function LibraryPageInner() {
                             type="button"
                             onClick={() => incrementProgress(entry.mediaId, -1)}
                             disabled={entry.progress <= 0}
-                            aria-label="Retirer 1"
+                            aria-label="-1"
                             className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] disabled:opacity-35 border border-white/[0.08] flex items-center justify-center text-white cursor-pointer"
                           >
                             <Minus className="w-3.5 h-3.5" />
@@ -1504,7 +1499,7 @@ function LibraryPageInner() {
                             className="flex-1 h-8 px-2 rounded-xl bg-white/[0.06] hover:bg-accent disabled:opacity-40 border border-white/[0.09] hover:border-accent text-xs font-semibold text-white hover:text-accent-fg flex items-center justify-center gap-1 whitespace-nowrap transition-colors cursor-pointer"
                           >
                             <Plus className="w-3.5 h-3.5 shrink-0" />
-                            <span>+1 {entry.type === "MANGA" ? "ch." : "ép."}</span>
+                            <span>+1 {unit}</span>
                           </button>
                           {entry.type === "MANGA" && (
                             <button
@@ -1514,16 +1509,16 @@ function LibraryPageInner() {
                                 entry.totalVolumes &&
                                   (entry.progressVolumes ?? 0) >= entry.totalVolumes
                               )}
-                              title="Ajouter 1 tome lu"
+                              title={tr("+1 tome")}
                               className="h-8 px-2 rounded-xl bg-violet-500/16 hover:bg-violet-500/30 disabled:opacity-40 border border-violet-400/35 text-[11px] font-mono font-semibold text-violet-200 flex items-center justify-center gap-0.5 whitespace-nowrap transition-colors cursor-pointer"
                             >
-                              +1 T.
+                              {tr("+1 tome")}
                             </button>
                           )}
                           <button
                             type="button"
                             onClick={() => openQuickEdit(entry)}
-                            title="Éditer & collections"
+                            title={tr("Éditer & collections")}
                             className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center text-[#B2B6C6] hover:text-white cursor-pointer"
                           >
                             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -1542,7 +1537,7 @@ function LibraryPageInner() {
         <div className="rounded-2xl card-surface overflow-hidden divide-y divide-white/[0.06]">
           {visibleEntries.map((entry) => {
             const cfg = STATUS_CONFIG[entry.status];
-            const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
+            const unit = entry.type === "MANGA" ? t("common.chShort") : t("common.epShort");
             const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
 
             return (
@@ -1578,11 +1573,11 @@ function LibraryPageInner() {
                           cfg.color
                         )}
                       >
-                        {getStatusLabel(entry.status, entry.type)}
+                        {tStatus(entry.status, entry.type)}
                       </span>
                     </div>
                     <p className="text-xs text-[#83889C] mt-1 truncate">
-                      {entry.format ? formatFormat(entry.format) : entry.type}
+                      {entry.format ? tFormat(entry.format) : entry.type}
                       {entry.seasonYear ? ` · ${entry.seasonYear}` : ""}
                       {entry.studio ? ` · ${entry.studio}` : ""}
                       {entry.notes ? ` — ${entry.notes}` : ""}
@@ -1665,19 +1660,19 @@ function LibraryPageInner() {
             <table className="w-full text-left border-collapse min-w-[780px]">
               <thead>
                 <tr className="border-b border-white/[0.08] bg-obsidian/70 text-[10.5px] font-mono uppercase tracking-wider text-[#858A9E]">
-                  <th className="py-3 px-4">Œuvre</th>
-                  <th className="py-3 px-3">Format / Année</th>
-                  <th className="py-3 px-3">Statut</th>
-                  <th className="py-3 px-3">Progression</th>
-                  <th className="py-3 px-3 text-center">Note</th>
+                  <th className="py-3 px-4">{tr("Œuvre")}</th>
+                  <th className="py-3 px-3">{tr("Format / Année")}</th>
+                  <th className="py-3 px-3">{tr("Statut")}</th>
+                  <th className="py-3 px-3">{tr("Progression")}</th>
+                  <th className="py-3 px-3 text-center">{tr("Note")}</th>
                   <th className="py-3 px-3">Studio</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4 text-right">{tr("Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.05] text-xs">
                 {visibleEntries.map((entry) => {
                   const cfg = STATUS_CONFIG[entry.status];
-                  const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
+                  const unit = entry.type === "MANGA" ? t("common.chShort") : t("common.epShort");
                   const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
                   return (
                     <tr
@@ -1710,7 +1705,7 @@ function LibraryPageInner() {
                         </div>
                       </td>
                       <td className="px-3 font-mono text-[#A6AAB8] whitespace-nowrap">
-                        {entry.format ? formatFormat(entry.format) : entry.type}
+                        {entry.format ? tFormat(entry.format) : entry.type}
                         {entry.seasonYear ? ` · ${entry.seasonYear}` : ""}
                       </td>
                       <td className="px-3 whitespace-nowrap">
@@ -1722,7 +1717,7 @@ function LibraryPageInner() {
                             cfg.color
                           )}
                         >
-                          {getStatusLabel(entry.status, entry.type)}
+                          {tStatus(entry.status, entry.type)}
                         </span>
                       </td>
                       <td className="px-3 whitespace-nowrap">
@@ -1805,15 +1800,15 @@ function LibraryPageInner() {
       {remainingCount > 0 && (
         <div className="flex flex-col items-center gap-2 pt-2">
           <p className="text-xs font-mono text-[#7D8296]">
-            Affichage de {visibleEntries.length.toLocaleString("fr-FR")} sur{" "}
-            {filtered.length.toLocaleString("fr-FR")} œuvres
+            {visibleEntries.length.toLocaleString(locale)} /{" "}
+            {filtered.length.toLocaleString(locale)} {t("common.titles")}
           </p>
           <button
             type="button"
             onClick={() => setVisibleCount((c) => c + 40)}
             className="px-6 py-2.5 rounded-full bg-white/[0.06] hover:bg-white/[0.13] border border-white/[0.12] text-xs font-semibold text-white transition-colors cursor-pointer"
           >
-            Afficher plus ({Math.min(40, remainingCount)} suivantes)
+            {tr("Afficher plus (+{n})", { n: Math.min(40, remainingCount) })}
           </button>
         </div>
       )}

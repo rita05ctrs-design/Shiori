@@ -41,7 +41,10 @@ function formatVolumeValue(num: number, volumeLabel: string, lang: ContentLangua
 
 export function MangaContinuationSection({ media }: MangaContinuationSectionProps) {
   const { getEntry, upsertEntry, toast } = useShiori();
-  const { t, lang } = useTranslation();
+  const { t, tr, lang } = useTranslation();
+
+  const localizeRange = (range: string) =>
+    range.replace(/\(en cours\)/gi, `(${tr("en cours")})`);
 
   const eligible = useMemo(() => shouldShowMangaContinuation(media), [media]);
   const sourceRelation = useMemo(
@@ -299,7 +302,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
           </div>
           {activeInfo.coveredRange && (
             <span className="shrink-0 self-start sm:self-center px-3 py-1 rounded-lg bg-black/30 border border-emerald-400/25 font-mono text-xs text-emerald-200">
-              {activeInfo.coveredRange}
+              {localizeRange(activeInfo.coveredRange)}
             </span>
           )}
         </div>
@@ -339,7 +342,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
               </div>
               {activeInfo.coveredRange && (
                 <p className="text-[11px] font-mono text-[#7E8397] mt-0.5">
-                  {activeInfo.coveredRange}
+                  {localizeRange(activeInfo.coveredRange)}
                 </p>
               )}
             </div>
