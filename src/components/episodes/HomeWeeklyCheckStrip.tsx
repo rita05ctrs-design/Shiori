@@ -2,22 +2,22 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Check,
   X,
   Clock,
   ArrowRight,
   ListChecks,
-  CalendarDays,
   Sun,
   CalendarRange,
   CheckCircle2,
+  ChevronDown,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { getSettingsCopy } from "@/lib/settings-translations";
-import { RevealSection } from "@/components/motion/MotionPrimitives";
+import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import { cn, formatCountdown, getDisplayTitle } from "@/lib/utils";
 import type { AiringScheduleItem } from "@/types/media";
 
@@ -47,6 +47,7 @@ export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps)
   const { library, hydrated, getEntry, upsertEntry, contentLanguage } = useShiori();
   const { t } = useTranslation();
   const copy = getSettingsCopy(contentLanguage).quickEp;
+  const [expanded, setExpanded] = useState(false);
   const [nowMs, setNowMs] = useState<number | null>(null);
   const [tab, setTab] = useState<StripTab>("today");
   const [tabInitialized, setTabInitialized] = useState(false);
@@ -121,260 +122,294 @@ export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps)
     setTimeout(() => setFlashId((prev) => (prev === mediaId ? null : prev)), 620);
   };
 
+  const previewCovers = visibleSlots.slice(0, 3);
+
   return (
-    <RevealSection className="rounded-3xl card-surface p-4 sm:p-6 relative overflow-hidden shadow-[0_18px_48px_rgba(0,0,0,0.42)]">
-      {/* Subtle Ambient Corner Glow */}
+    <section className="w-full max-w-full rounded-2xl card-surface border border-white/[0.09] relative overflow-hidden shadow-[0_12px_34px_rgba(0,0,0,0.36)]">
+      {/* Subtle top hairline */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -top-24 w-72 h-72 rounded-full opacity-20 blur-3xl"
-        style={{ background: "radial-gradient(circle, var(--shiori-accent), transparent 70%)" }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"
+        className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/18 to-transparent"
       />
 
-      {/* Header + Day/Week Segmented Switcher */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 mb-4 relative z-10">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-kinpaku flex items-center gap-1.5">
-              <ListChecks className="w-3.5 h-3.5" />
-              <span>{copy.eyebrow}</span>
-            </p>
-            {summary.total > 0 && summary.watched === summary.total && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-[10.5px] font-semibold text-emerald-300">
-                <CheckCircle2 className="w-3 h-3" />
-                <span>{copy.caughtUp}</span>
-              </span>
-            )}
+      {/* Sleek 1-Row Collapsible Trigger Bar (unobtrusive on mobile Home, expands in 1 tap!) */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="w-full px-3.5 py-3 flex items-center justify-between gap-2.5 text-left active:bg-white/[0.04] transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-accent/16 border border-accent/35 flex items-center justify-center shrink-0">
+            <ListChecks className="w-4 h-4 text-accent-soft" />
           </div>
-          <h2 className="text-lg sm:text-xl font-semibold text-white mt-0.5 tracking-tight">
-            {copy.title}
-          </h2>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Today vs Week Spring Segmented Switch */}
-          <div className="inline-flex items-center p-1 rounded-full bg-obsidian/85 border border-white/[0.09]">
-            {(
-              [
-                {
-                  id: "today" as const,
-                  label: copy.today,
-                  count: todaySlots.length,
-                  icon: Sun,
-                },
-                {
-                  id: "week" as const,
-                  label: copy.week,
-                  count: allWeekSlots.length,
-                  icon: CalendarRange,
-                },
-              ] as const
-            ).map((opt) => {
-              const active = tab === opt.id;
-              const Icon = opt.icon;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setTab(opt.id)}
-                  className={cn(
-                    "relative px-3 py-1.5 rounded-full text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5",
-                    active ? "text-accent-fg" : "text-[#9A9EAE] hover:text-white"
-                  )}
-                >
-                  {active && (
-                    <motion.span
-                      layoutId="home-ep-scope"
-                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-full bg-accent shadow-accent"
-                    />
-                  )}
-                  <Icon className="w-3.5 h-3.5 relative z-10" />
-                  <span className="relative z-10">{opt.label}</span>
-                  <span
-                    className={cn(
-                      "relative z-10 font-mono text-[10px] px-1.5 py-0.2 rounded-full",
-                      active ? "bg-black/20 text-accent-fg" : "bg-white/[0.08] text-[#B8BCCB]"
-                    )}
-                  >
-                    {opt.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <Link
-            href="/episodes"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-white px-3.5 py-2 rounded-full bg-white/[0.07] hover:bg-white/[0.14] border border-white/[0.11] transition-all active:scale-95"
-          >
-            <span>{copy.seeAll}</span>
-            <ArrowRight className="w-3.5 h-3.5 text-accent-soft" />
-          </Link>
-
-          <Link
-            href="/calendar"
-            aria-label={t("footer.releasesCalendar")}
-            title={t("footer.releasesCalendar")}
-            className="hidden sm:inline-flex items-center justify-center w-8.5 h-8.5 rounded-full bg-white/[0.05] hover:bg-white/[0.12] border border-white/[0.09] text-kinpaku transition-all active:scale-95"
-          >
-            <CalendarDays className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
-
-      {/* Progress Hairline */}
-      <div className="mb-4 relative z-10 space-y-1.5">
-        <div className="flex items-center justify-between text-[11px] font-mono text-[#8C91A6]">
-          <span>
-            <strong className="text-white">{summary.watched}</strong> / {summary.total}{" "}
-            {copy.watchedUnit}
-          </span>
-          <span className={summary.pct === 100 ? "text-emerald-400 font-semibold" : ""}>
-            {summary.pct}%
-          </span>
-        </div>
-        <div className="h-1.5 w-full rounded-full bg-white/[0.07] overflow-hidden">
-          <motion.div
-            initial={false}
-            animate={{ width: `${summary.pct}%` }}
-            transition={{ type: "spring", stiffness: 220, damping: 26 }}
-            className="h-full rounded-full bg-gradient-to-r from-accent via-accent-hover to-emerald-400"
-          />
-        </div>
-      </div>
-
-      {/* Empty today helper fallback message if user selected "Aujourd'hui" with 0 releases today */}
-      {tab === "today" && todaySlots.length === 0 && (
-        <p className="text-[11.5px] text-[#9A9EAE] mb-3 relative z-10">
-          {copy.noTodayHome}
-        </p>
-      )}
-
-      {/* Mobile: Silky Swipeable Horizontal Rail (.touch-rail) | Desktop: Clean 4-col Grid */}
-      <div className="flex gap-3 overflow-x-auto touch-rail no-scrollbar pb-1 -mx-1 px-1 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible sm:mx-0 sm:px-0 sm:pb-0 relative z-10">
-        {visibleSlots.map((slot) => {
-          const entry = getEntry(slot.media.id);
-          const isAired = nowSec !== null ? slot.airingAt <= nowSec : false;
-          const targetEp = isAired ? slot.episode : Math.max(1, slot.episode - 1);
-          const isWatched = Boolean(entry && entry.progress >= targetEp);
-          const title = getDisplayTitle(slot.media);
-          const isFlashing = flashId === slot.media.id;
-
-          return (
-            <div
-              key={slot.id}
-              className={cn(
-                "w-[248px] shrink-0 sm:w-auto rounded-2xl p-3 border transition-all duration-200 flex flex-col justify-between gap-3",
-                isWatched
-                  ? "bg-emerald-500/[0.07] border-emerald-500/38"
-                  : "bg-white/[0.035] hover:bg-white/[0.06] border-white/[0.08] hover:border-white/[0.18]",
-                isFlashing && "ring-2 ring-emerald-400/75"
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-[13px] font-semibold text-white truncate">
+                {copy.title}
+              </p>
+              {summary.total > 0 && summary.watched === summary.total && (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-            >
-              <Link href={`/media/${slot.media.id}`} className="flex items-center gap-3 group">
-                <div className="relative shrink-0">
-                  <img
-                    src={slot.media.coverImage.large}
-                    alt={title}
-                    loading="lazy"
-                    decoding="async"
-                    draggable={false}
-                    className={cn(
-                      "w-12 h-16 rounded-xl object-cover border transition-transform duration-300 group-hover:scale-105",
-                      isWatched ? "border-emerald-400/50" : "border-white/12"
-                    )}
-                  />
-                  {isWatched && (
-                    <span className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 rounded-full bg-emerald-500 text-[#07080C] flex items-center justify-center shadow">
-                      <Check className="w-2.5 h-2.5 stroke-[3.2]" />
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-md border font-semibold",
-                      isWatched
-                        ? "bg-emerald-500/18 text-emerald-300 border-emerald-400/35"
-                        : "bg-accent/18 text-accent-soft border-accent/35"
-                    )}
-                  >
-                    {t("common.epShort")} {targetEp}{" "}
-                    {isWatched
-                      ? `${copy.watched} ✓`
-                      : isAired
-                        ? copy.aired
-                        : copy.available}
-                  </span>
-                  <p className="text-[13px] font-semibold text-[#F4F3EE] group-hover:text-white truncate mt-1">
-                    {title}
-                  </p>
-                  <p className="text-[11px] font-mono text-[#8C91A6] flex items-center gap-1 mt-0.5 truncate">
-                    <Clock className="w-3 h-3 text-kinpaku shrink-0" />
-                    <span suppressHydrationWarning className="truncate">
-                      {nowSec !== null
-                        ? formatCountdown(slot.airingAt, nowSec, contentLanguage)
-                        : copy.week}
-                    </span>
-                  </p>
-                </div>
-              </Link>
+            </div>
+            <p className="text-[11px] font-mono text-[#8C91A6] truncate mt-0.5">
+              <strong className="text-white">{summary.watched}</strong>/{summary.total}{" "}
+              {copy.watchedUnit} ·{" "}
+              {todaySlots.length > 0
+                ? `${copy.today} (${todaySlots.length})`
+                : `${copy.week} (${allWeekSlots.length})`}
+            </p>
+          </div>
+        </div>
 
-              {/* Large 1-tap Pas vu / Vu toggle (thumb-friendly on mobile) */}
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-obsidian/85 border border-white/[0.09]">
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.94 }}
-                  onClick={() => {
-                    if (isWatched) {
-                      upsertEntry(slot.media, {
-                        status: "WATCHING",
-                        progress: Math.max(0, targetEp - 1),
-                      });
-                    }
-                  }}
-                  className={cn(
-                    "h-8 rounded-lg text-[11.5px] font-semibold inline-flex items-center justify-center gap-1 transition-all cursor-pointer",
-                    !isWatched
-                      ? "bg-white/[0.12] text-white shadow-sm"
-                      : "text-[#8A8FA4] hover:text-rose-300 hover:bg-rose-500/12"
-                  )}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Tiny overlapping poster peeks */}
+          {!expanded && previewCovers.length > 0 && (
+            <div className="flex items-center -space-x-2">
+              {previewCovers.map((slot) => (
+                <img
+                  key={slot.id}
+                  src={slot.media.coverImage.large}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                  decoding="async"
+                  className="w-6 h-8 rounded-md object-cover border border-obsidian ring-1 ring-white/15"
+                />
+              ))}
+            </div>
+          )}
+
+          <span
+            className={cn(
+              "w-7 h-7 rounded-full border flex items-center justify-center transition-all",
+              expanded
+                ? "bg-accent/20 border-accent/45 text-accent-soft"
+                : "bg-white/[0.05] border-white/[0.1] text-[#A8ADBE]"
+            )}
+          >
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 transition-transform duration-200",
+                expanded && "rotate-180"
+              )}
+            />
+          </span>
+        </div>
+      </button>
+
+      {/* Smoothly Expanding Quick Check-In Drawer */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.24, ease: CINEMA_EASE }}
+            className="overflow-hidden"
+          >
+            <div className="px-3.5 pb-3.5 pt-1 border-t border-white/[0.07] space-y-3">
+              {/* Today / Week Switch + See All */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5">
+                <div className="inline-flex items-center p-0.5 rounded-full bg-obsidian/85 border border-white/[0.09]">
+                  {(
+                    [
+                      {
+                        id: "today" as const,
+                        label: copy.today,
+                        count: todaySlots.length,
+                        icon: Sun,
+                      },
+                      {
+                        id: "week" as const,
+                        label: copy.week,
+                        count: allWeekSlots.length,
+                        icon: CalendarRange,
+                      },
+                    ] as const
+                  ).map((opt) => {
+                    const active = tab === opt.id;
+                    const Icon = opt.icon;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setTab(opt.id)}
+                        className={cn(
+                          "relative px-2.5 py-1 rounded-full text-[11.5px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1",
+                          active ? "text-accent-fg" : "text-[#9A9EAE] hover:text-white"
+                        )}
+                      >
+                        {active && (
+                          <motion.span
+                            layoutId="home-ep-scope"
+                            transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                            className="absolute inset-0 rounded-full bg-accent shadow-accent"
+                          />
+                        )}
+                        <Icon className="w-3 h-3 relative z-10" />
+                        <span className="relative z-10">{opt.label}</span>
+                        <span
+                          className={cn(
+                            "relative z-10 font-mono text-[10px] px-1 rounded-full",
+                            active ? "bg-black/20 text-accent-fg" : "bg-white/[0.08] text-[#B8BCCB]"
+                          )}
+                        >
+                          {opt.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Link
+                  href="/episodes"
+                  className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-accent-soft hover:text-white transition-colors shrink-0"
                 >
-                  <X className="w-3.5 h-3.5" />
-                  <span>{copy.notWatched}</span>
-                </motion.button>
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.94 }}
-                  onClick={() => {
-                    if (!isWatched) {
-                      const total = slot.media.episodes;
-                      upsertEntry(slot.media, {
-                        status: total && targetEp >= total ? "COMPLETED" : "WATCHING",
-                        progress: targetEp,
-                      });
-                      triggerFlash(slot.media.id);
-                    }
-                  }}
-                  className={cn(
-                    "h-8 rounded-lg text-[11.5px] font-bold inline-flex items-center justify-center gap-1 transition-all cursor-pointer",
-                    isWatched
-                      ? "bg-emerald-500 text-[#07080C] shadow-[0_4px_14px_rgba(16,185,129,0.38)]"
-                      : "text-[#D4D7E4] hover:bg-accent hover:text-accent-fg"
-                  )}
-                >
-                  <Check className="w-3.5 h-3.5 stroke-[2.8]" />
-                  <span>{copy.watched}</span>
-                </motion.button>
+                  <span>{copy.seeAll}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+
+              {/* Slim Progress Bar */}
+              <div className="h-1 w-full rounded-full bg-white/[0.07] overflow-hidden">
+                <motion.div
+                  initial={false}
+                  animate={{ width: `${summary.pct}%` }}
+                  transition={{ type: "spring", stiffness: 220, damping: 26 }}
+                  className="h-full rounded-full bg-gradient-to-r from-accent via-accent-hover to-emerald-400"
+                />
+              </div>
+
+              {tab === "today" && todaySlots.length === 0 && (
+                <p className="text-[11px] text-[#9A9EAE]">{copy.noTodayHome}</p>
+              )}
+
+              {/* Silky Swipeable Horizontal Rail (.touch-rail) */}
+              <div className="flex gap-2.5 overflow-x-auto touch-rail no-scrollbar pb-0.5 -mx-0.5 px-0.5">
+                {visibleSlots.map((slot) => {
+                  const entry = getEntry(slot.media.id);
+                  const isAired = nowSec !== null ? slot.airingAt <= nowSec : false;
+                  const targetEp = isAired ? slot.episode : Math.max(1, slot.episode - 1);
+                  const isWatched = Boolean(entry && entry.progress >= targetEp);
+                  const title = getDisplayTitle(slot.media);
+                  const isFlashing = flashId === slot.media.id;
+
+                  return (
+                    <div
+                      key={slot.id}
+                      className={cn(
+                        "w-[236px] shrink-0 rounded-2xl p-2.5 border transition-all duration-200 flex flex-col justify-between gap-2.5",
+                        isWatched
+                          ? "bg-emerald-500/[0.07] border-emerald-500/38"
+                          : "bg-white/[0.035] border-white/[0.08]",
+                        isFlashing && "ring-2 ring-emerald-400/75"
+                      )}
+                    >
+                      <Link href={`/media/${slot.media.id}`} className="flex items-center gap-2.5 group">
+                        <div className="relative shrink-0">
+                          <img
+                            src={slot.media.coverImage.large}
+                            alt={title}
+                            loading="lazy"
+                            decoding="async"
+                            draggable={false}
+                            className={cn(
+                              "w-11 h-15 rounded-xl object-cover border",
+                              isWatched ? "border-emerald-400/50" : "border-white/12"
+                            )}
+                          />
+                          {isWatched && (
+                            <span className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 rounded-full bg-emerald-500 text-[#07080C] flex items-center justify-center shadow">
+                              <Check className="w-2.5 h-2.5 stroke-[3.2]" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-md border font-semibold",
+                              isWatched
+                                ? "bg-emerald-500/18 text-emerald-300 border-emerald-400/35"
+                                : "bg-accent/18 text-accent-soft border-accent/35"
+                            )}
+                          >
+                            {t("common.epShort")} {targetEp}{" "}
+                            {isWatched
+                              ? `${copy.watched} ✓`
+                              : isAired
+                                ? copy.aired
+                                : copy.available}
+                          </span>
+                          <p className="text-[12.5px] font-semibold text-[#F4F3EE] truncate mt-1">
+                            {title}
+                          </p>
+                          <p className="text-[10.5px] font-mono text-[#8C91A6] flex items-center gap-1 mt-0.5 truncate">
+                            <Clock className="w-3 h-3 text-kinpaku shrink-0" />
+                            <span suppressHydrationWarning className="truncate">
+                              {nowSec !== null
+                                ? formatCountdown(slot.airingAt, nowSec, contentLanguage)
+                                : copy.week}
+                            </span>
+                          </p>
+                        </div>
+                      </Link>
+
+                      {/* 1-tap Pas vu / Vu toggle */}
+                      <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-obsidian/85 border border-white/[0.09]">
+                        <motion.button
+                          type="button"
+                          whileTap={{ scale: 0.94 }}
+                          onClick={() => {
+                            if (isWatched) {
+                              upsertEntry(slot.media, {
+                                status: "WATCHING",
+                                progress: Math.max(0, targetEp - 1),
+                              });
+                            }
+                          }}
+                          className={cn(
+                            "h-8 rounded-lg text-[11.5px] font-semibold inline-flex items-center justify-center gap-1 transition-all cursor-pointer",
+                            !isWatched
+                              ? "bg-white/[0.12] text-white shadow-sm"
+                              : "text-[#8A8FA4] hover:text-rose-300 hover:bg-rose-500/12"
+                          )}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>{copy.notWatched}</span>
+                        </motion.button>
+                        <motion.button
+                          type="button"
+                          whileTap={{ scale: 0.94 }}
+                          onClick={() => {
+                            if (!isWatched) {
+                              const total = slot.media.episodes;
+                              upsertEntry(slot.media, {
+                                status: total && targetEp >= total ? "COMPLETED" : "WATCHING",
+                                progress: targetEp,
+                              });
+                              triggerFlash(slot.media.id);
+                            }
+                          }}
+                          className={cn(
+                            "h-8 rounded-lg text-[11.5px] font-bold inline-flex items-center justify-center gap-1 transition-all cursor-pointer",
+                            isWatched
+                              ? "bg-emerald-500 text-[#07080C] shadow-[0_4px_14px_rgba(16,185,129,0.38)]"
+                              : "text-[#D4D7E4] hover:bg-accent hover:text-accent-fg"
+                          )}
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[2.8]" />
+                          <span>{copy.watched}</span>
+                        </motion.button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          );
-        })}
-      </div>
-    </RevealSection>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
   );
 }

@@ -346,16 +346,19 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
         <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24" />
       )}
 
-      {/* Immersive Daily/Weekly Check-In + Horizontal 2:3 Poster Carousels directly beneath Hero */}
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-9 sm:space-y-12 mt-5 sm:mt-6">
-        {/* Instant 1-tap Today & Week Episode Tracker right on Home (Mobile & Desktop) */}
-        <HomeWeeklyCheckStrip airingSlots={data.airingToday} />
+      {/* Horizontal 2:3 Poster Carousels directly beneath Hero (plus compact collapsible mobile episode bar) */}
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 mt-4 sm:mt-6">
+        {/* Mobile-only compact collapsible Today & Week Episode Check-In (PC keeps unobstructed cinema flow + top navbar quick drawer) */}
+        <div className="md:hidden mb-6">
+          <HomeWeeklyCheckStrip airingSlots={data.airingToday} />
+        </div>
 
-        {nonHeroSections
-          .filter((s) => s.visible)
-          .map((s) => renderSection(s.id))}
+        <div className="space-y-9 sm:space-y-12">
+          {nonHeroSections
+            .filter((s) => s.visible)
+            .map((s) => renderSection(s.id))}
 
-        {/* Discreet Home Customization Control at the bottom */}
+          {/* Discreet Home Customization Control at the bottom */}
         <div className="pt-2 flex flex-col items-end gap-4">
           <button
             type="button"
@@ -467,6 +470,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
