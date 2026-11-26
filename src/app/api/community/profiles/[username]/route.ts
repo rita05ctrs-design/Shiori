@@ -7,6 +7,7 @@ import {
   resolveServerActor,
 } from "@/lib/server/social-store";
 import { sanitizeSafeImageUrl } from "@/lib/server/rate-limit";
+import { normalizeRole } from "@/lib/server/role-resolver";
 import type {
   BadgeRarity,
   CommunityActivityItem,
@@ -54,6 +55,10 @@ export async function GET(
           avatarInitials: displayName.slice(0, 2).toUpperCase(),
           bio: String(row.bio ?? ""),
           accentColor: String(row.accent_color || "#E5484D"),
+          role:
+            requesterId && String(row.id) === requesterId && requester.role === "creator"
+              ? "creator"
+              : normalizeRole(row.role),
           isActivityPublic: row.is_activity_public !== false,
           joinedAt: row.joined_at ?? new Date().toISOString(),
           favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
@@ -139,6 +144,7 @@ export async function GET(
                 actorDisplayName: String(r.actor_display_name || profile!.displayName),
                 actorAvatarUrl: sanitizeSafeImageUrl(r.actor_avatar_url),
                 actorAccentColor: typeof meta.accentColor === "string" ? meta.accentColor : profile!.accentColor,
+                actorRole: profile!.role ?? normalizeRole(meta.actorRole),
                 actorPinnedBadges: livePinned.length > 0 ? livePinned : undefined,
                 kind: (r.event_kind || "UPDATE") as CommunityActivityKind,
                 mediaId: Number(r.media_id ?? 0),
@@ -172,7 +178,11 @@ export async function GET(
               a.actorUsername.toLowerCase() === profile!.username.toLowerCase())
         )
         .slice(0, 20)
-        .map((a) => (livePinned.length > 0 ? { ...a, actorPinnedBadges: livePinned } : a));
+        .map((a) => ({
+          ...a,
+          actorRole: profile!.role ?? a.actorRole,
+          ...(livePinned.length > 0 ? { actorPinnedBadges: livePinned } : {}),
+        }));
     }
   }
 

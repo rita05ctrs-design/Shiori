@@ -22,6 +22,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import type { UiMessageKey } from "@/lib/ui-translations";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { RoleBadge } from "@/components/ui/RoleBadge";
 import { ActivityCard } from "@/components/social/ActivityCard";
 import { AniListActivityFeed } from "@/components/social/AniListActivityFeed";
 import { FriendActionButton } from "@/components/social/FriendActionButton";
@@ -569,9 +570,12 @@ export function CommunityClient() {
                               size="sm"
                             />
                             <div className="min-w-0">
-                              <p className="text-xs font-semibold text-white truncate">
-                                {m.displayName}
-                              </p>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-xs font-semibold text-white truncate">
+                                  {m.displayName}
+                                </p>
+                                <RoleBadge role={m.role} size="xs" />
+                              </div>
                               <p className="text-[10.5px] font-mono text-[#7D8296] truncate">
                                 @{m.username} · {m.stats.totalEntries} titres
                               </p>
@@ -820,12 +824,15 @@ export function CommunityClient() {
                         />
                       </Link>
                       <div className="min-w-0">
-                        <Link
-                          href={`/profile/${encodeURIComponent(f.username)}`}
-                          className="text-sm font-bold text-white hover:text-accent-hover truncate block"
-                        >
-                          {f.displayName}
-                        </Link>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Link
+                            href={`/profile/${encodeURIComponent(f.username)}`}
+                            className="text-sm font-bold text-white hover:text-accent-hover truncate block"
+                          >
+                            {f.displayName}
+                          </Link>
+                          <RoleBadge role={f.role} size="xs" />
+                        </div>
                         <p className="text-xs font-mono text-[#7D8296] truncate">
                           @{f.username} · {f.stats.totalEntries} titres
                         </p>
@@ -959,13 +966,14 @@ export function CommunityClient() {
                           />
                         </Link>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                             <Link
                               href={`/profile/${encodeURIComponent(m.username)}`}
                               className="text-base font-bold text-white hover:text-accent-hover transition-colors truncate"
                             >
                               {m.displayName}
                             </Link>
+                            <RoleBadge role={m.role} size="xs" />
                             {(m.source === "community" || m.id.startsWith("community-")) && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-400/30 font-mono text-[9.5px] uppercase text-amber-200 shrink-0">
                                 Exemple

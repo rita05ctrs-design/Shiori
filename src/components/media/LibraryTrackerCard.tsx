@@ -108,7 +108,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
     openQuickEdit,
     openTrailer,
   } = useShiori();
-  const { t, tStatus } = useTranslation();
+  const { t, tr, tStatus } = useTranslation();
 
   const entry = getEntry(media.id);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -119,8 +119,8 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const totalUnits = media.type === "MANGA" ? media.chapters : media.episodes;
-  const unitLabel = media.type === "MANGA" ? "chapitre" : "épisode";
-  const unitShort = media.type === "MANGA" ? "Ch." : "Ép.";
+  const unitLabel = media.type === "MANGA" ? tr("chapitre") : tr("épisode");
+  const unitShort = media.type === "MANGA" ? tr("Ch.") : tr("Ép.");
 
   useEffect(() => {
     const onOutside = (e: MouseEvent) => {
@@ -413,7 +413,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                         {tStatus(item.id, media.type)}
                       </p>
                       <p className="text-[10.5px] text-[#7F8499] mt-0.5 truncate">
-                        {media.type === "MANGA" ? item.mangaHint : item.hint}
+                        {tr(media.type === "MANGA" ? item.mangaHint : item.hint)}
                       </p>
                     </div>
                     {isSelected && <Check className={cn("w-4 h-4 shrink-0", cfg.color)} />}
@@ -432,7 +432,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                     className="w-full px-3 py-2 rounded-xl flex items-center gap-2.5 text-xs font-medium text-rose-400 hover:bg-rose-500/12 transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Retirer de la bibliothèque</span>
+                    <span>{tr("Retirer de la bibliothèque")}</span>
                   </button>
                 </div>
               )}
@@ -453,7 +453,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
           >
             <p className="text-[10.5px] font-mono uppercase tracking-wider text-[#7A7F94] flex items-center gap-1.5">
               <Sparkles className="w-3 h-3 text-[#F0B95B]" />
-              <span>Ajout rapide en 1 clic</span>
+              <span>{tr("Ajout rapide en 1 clic")}</span>
             </p>
             <div className="grid grid-cols-3 gap-1.5">
               {(["WATCHING", "PLAN_TO_WATCH", "COMPLETED"] as LibraryStatus[]).map((s) => {
@@ -527,7 +527,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                   whileTap={{ scale: 0.88 }}
                   onClick={() => handleIncrement(-1)}
                   disabled={entry.progress <= 0}
-                  aria-label="Diminuer la progression"
+                  aria-label={tr("Diminuer la progression")}
                   className="w-9 h-9 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
                 >
                   <Minus className="w-4 h-4" />
@@ -566,9 +566,9 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
               {media.type === "MANGA" && (
                 <div className="pt-2.5 mt-1 border-t border-white/[0.07] space-y-2">
                   <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-[#8E93A6]">Tomes / Volumes</span>
+                    <span className="text-[#8E93A6]">{tr("Tomes / Volumes")}</span>
                     <span className="text-violet-200 font-semibold flex items-center gap-1">
-                      <span>Tome</span>
+                      <span>{tr("Tome")}</span>
                       <span>{entry.progressVolumes ?? 0}</span>
                       {(media.volumes ?? entry.totalVolumes) ? (
                         <span className="text-[#787D91]">
@@ -583,7 +583,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                       whileTap={{ scale: 0.88 }}
                       onClick={() => incrementVolumeProgress(media.id, -1)}
                       disabled={(entry.progressVolumes ?? 0) <= 0}
-                      aria-label="Retirer 1 tome"
+                      aria-label={tr("Retirer 1 tome")}
                       className="w-8 h-8 rounded-xl bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
                     >
                       <Minus className="w-3.5 h-3.5" />
@@ -600,7 +600,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                       className="flex-1 h-8 rounded-xl bg-violet-500/20 hover:bg-violet-500/32 disabled:opacity-40 border border-violet-400/35 text-violet-100 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+1 tome</span>
+                      <span>{tr("+1 tome")}</span>
                     </motion.button>
                   </div>
                 </div>
@@ -616,8 +616,8 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                 </span>
                 <span className="font-mono font-semibold text-[#F0B95B] truncate text-[11.5px]">
                   {activeScorePreview
-                    ? `${hoverScore ?? entry.score}/10 · ${SCORE_VERDICT[activeScorePreview] ?? ""}`
-                    : "Noter"}
+                    ? `${hoverScore ?? entry.score}/10 · ${SCORE_VERDICT[activeScorePreview] ? tr(SCORE_VERDICT[activeScorePreview]) : ""}`
+                    : tr("Noter")}
                 </span>
               </div>
 
@@ -636,7 +636,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
                       whileTap={{ scale: 0.92 }}
                       onMouseEnter={() => setHoverScore(val)}
                       onClick={() => handleQuickScore(val)}
-                      title={`Noter ${val}/10 — ${SCORE_VERDICT[val]}`}
+                      title={tr("Noter {val}/10 — {verdict}", { val, verdict: tr(SCORE_VERDICT[val]) })}
                       className={cn(
                         "h-7 rounded-lg font-mono text-[11.5px] font-semibold border transition-colors cursor-pointer flex items-center justify-center",
                         isExact
@@ -666,7 +666,7 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
           className="w-full h-9 rounded-xl bg-white/[0.045] hover:bg-white/[0.1] border border-white/[0.08] text-xs font-medium text-[#D6D9E5] hover:text-white flex items-center justify-center gap-2 transition-colors cursor-pointer"
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>{entry ? "Notes, demi-points & dates" : "Personnaliser avant d'ajouter"}</span>
+          <span>{entry ? tr("Notes, demi-points & dates") : tr("Personnaliser avant d'ajouter")}</span>
         </motion.button>
 
         {media.trailer && (

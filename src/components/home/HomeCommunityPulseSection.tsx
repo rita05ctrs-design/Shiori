@@ -12,11 +12,12 @@ import {
   Globe,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
 import { BADGE_BY_ID, RARITY_META } from "@/lib/badges";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { CommunityActivityItem, FavoriteVoiceActor } from "@/types/media";
 import type { AniListFeedItem } from "@/app/api/anilist/activity/route";
 
@@ -28,6 +29,7 @@ export function HomeCommunityPulseSection() {
     anilistConnection,
     recordSocialInteraction,
   } = useShiori();
+  const { t, tr, tRelativeTime } = useTranslation();
   const [source, setSource] = useState<"anilist" | "shiori">("anilist");
   const [anilistFeed, setAnilistFeed] = useState<AniListFeedItem[]>([]);
   const [shioriFeed, setShioriFeed] = useState<CommunityActivityItem[]>([]);
@@ -110,7 +112,7 @@ export function HomeCommunityPulseSection() {
           <div>
             <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-sky-400 flex items-center gap-1.5">
               <Radio className="w-3.5 h-3.5" />
-              <span>{source === "anilist" ? "Fil d'actualités AniList" : "Communauté Shiori"}</span>
+              <span>{source === "anilist" ? tr("Fil d'actualités AniList") : tr("Communauté Shiori")}</span>
             </p>
             <h2 className="text-lg sm:text-xl font-semibold text-white mt-0.5 flex items-center gap-2">
               {source === "anilist" ? (
@@ -118,7 +120,7 @@ export function HomeCommunityPulseSection() {
               ) : (
                 <Activity className="w-4 h-4 text-accent" />
               )}
-              <span>Activité en direct</span>
+              <span>{tr("Activité en direct")}</span>
             </h2>
           </div>
 
@@ -154,7 +156,7 @@ export function HomeCommunityPulseSection() {
               href="/community"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-white transition-colors shrink-0"
             >
-              <span>Tout voir</span>
+              <span>{t("common.viewAll")}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -206,7 +208,7 @@ export function HomeCommunityPulseSection() {
                     <p className="text-xs text-[#D8DBE6] line-clamp-1 mt-0.5">{item.text}</p>
                   )}
                   <p suppressHydrationWarning className="text-[10.5px] text-[#7D8296] mt-0.5">
-                    {formatRelativeTime(new Date(item.createdAt * 1000).toISOString())}
+                    {tRelativeTime(new Date(item.createdAt * 1000).toISOString())}
                   </p>
                 </div>
 
@@ -271,7 +273,7 @@ export function HomeCommunityPulseSection() {
                       {item.mediaTitle}
                     </p>
                     <p suppressHydrationWarning className="text-[10.5px] text-[#7D8296] mt-0.5">
-                      {formatRelativeTime(item.createdAt)}
+                      {tRelativeTime(item.createdAt)}
                     </p>
                   </div>
 
@@ -335,10 +337,10 @@ export function HomeCommunityPulseSection() {
           <div>
             <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-kinpaku flex items-center gap-1.5">
               <Mic2 className="w-3.5 h-3.5" />
-              <span>Seiyuu à l&apos;honneur</span>
+              <span>{tr("Seiyuu à l'honneur")}</span>
             </p>
             <h2 className="text-lg sm:text-xl font-semibold text-white mt-0.5">
-              Voice Actors cultes
+              {tr("Voice Actors cultes")}
             </h2>
           </div>
 
@@ -346,7 +348,7 @@ export function HomeCommunityPulseSection() {
             href="/settings#voice-actors"
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] text-xs font-medium text-white transition-colors shrink-0"
           >
-            <span>Rechercher</span>
+            <span>{tr("Rechercher")}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -385,7 +387,7 @@ export function HomeCommunityPulseSection() {
                 <button
                   type="button"
                   onClick={() => toggleFavoriteStaff(staff)}
-                  title={isFav ? "Retirer des favoris" : "Ajouter en Voice Actor favori"}
+                  title={isFav ? tr("Retirer des favoris") : tr("Ajouter aux favoris")}
                   className={cn(
                     "w-7 h-7 rounded-lg border flex items-center justify-center transition-colors cursor-pointer shrink-0",
                     isFav

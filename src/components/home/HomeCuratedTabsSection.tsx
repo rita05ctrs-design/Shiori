@@ -14,12 +14,11 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
 import {
   cn,
-  formatFormat,
   formatScore,
-  formatSeason,
   getDisplayTitle,
 } from "@/lib/utils";
 import type { MediaItem } from "@/types/media";
@@ -40,6 +39,7 @@ export function HomeCuratedTabsSection({
   shortBinge,
 }: HomeCuratedTabsSectionProps) {
   const { getEntry, quickAdd } = useShiori();
+  const { t, tr, tGenre, tFormat, tSeasonYear } = useTranslation();
   const [activeTab, setActiveTab] = useState<CuratedTabId>("movies");
 
   const tabs: {
@@ -53,43 +53,43 @@ export function HomeCuratedTabsSection({
   }[] = [
     {
       id: "movies",
-      label: "Films d'Animation",
-      subtitle: "Les chefs-d'œuvre du grand écran à voir absolument",
+      label: tr("Films d'Animation"),
+      subtitle: tr("Les chefs-d'œuvre du grand écran à voir absolument"),
       icon: Film,
       href: "/discover?format=MOVIE&sort=SCORE_DESC",
-      cta: "Tous les films",
+      cta: tr("Tous les films"),
       items: movies,
     },
     {
       id: "upcoming",
-      label: "Prochainement",
-      subtitle: "Les sorties les plus attendues des prochaines saisons",
+      label: tr("Prochainement"),
+      subtitle: tr("Les sorties les plus attendues des prochaines saisons"),
       icon: Rocket,
       href: "/calendar#seasonal-browser",
-      cta: "Calendrier des saisons",
+      cta: tr("Calendrier des saisons"),
       items: upcoming,
     },
     {
       id: "hiddenGems",
-      label: "Pépites Cachées",
-      subtitle: "Des séries acclamées (8.1+) hors des sentiers battus",
+      label: tr("Pépites Cachées"),
+      subtitle: tr("Des séries acclamées (8.1+) hors des sentiers battus"),
       icon: Gem,
       href: "/discover?minScore=80&sort=SCORE_DESC",
-      cta: "Plus de pépites",
+      cta: tr("Plus de pépites"),
       items: hiddenGems,
     },
     {
       id: "shortBinge",
-      label: "Courts (≤ 13 ép.)",
-      subtitle: "Des chefs-d'œuvre parfaits à dévorer en un week-end",
+      label: tr("Courts (≤ 13 ép.)"),
+      subtitle: tr("Des chefs-d'œuvre parfaits à dévorer en un week-end"),
       icon: Zap,
       href: "/discover?format=TV&maxEpisodes=13&minScore=80&sort=POPULARITY_DESC",
-      cta: "Explorer le catalogue",
+      cta: t("library.exploreCatalog"),
       items: shortBinge,
     },
   ];
 
-  const current = tabs.find((t) => t.id === activeTab) ?? tabs[0];
+  const current = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
 
   return (
     <RevealSection className="space-y-5">
@@ -97,7 +97,7 @@ export function HomeCuratedTabsSection({
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1">
-            Collections par onglets
+            {tr("Sélections thématiques")}
           </p>
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F4F3EE]">
             {current.label}
@@ -109,19 +109,19 @@ export function HomeCuratedTabsSection({
           <div className="w-full sm:w-auto max-w-full overflow-x-auto touch-rail no-scrollbar pb-0.5">
             <div
               role="tablist"
-              aria-label="Collections curatées"
+              aria-label={tr("Sélections thématiques")}
               className="inline-flex flex-nowrap items-center gap-1 p-1 rounded-2xl bg-surface border border-white/[0.08]"
             >
-              {tabs.map((t) => {
-                const Icon = t.icon;
-                const active = t.id === activeTab;
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const active = tab.id === activeTab;
                 return (
                   <button
-                    key={t.id}
+                    key={tab.id}
                     type="button"
                     role="tab"
                     aria-selected={active}
-                    onClick={() => setActiveTab(t.id)}
+                    onClick={() => setActiveTab(tab.id)}
                     className={cn(
                       "px-3 sm:px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
                       active
@@ -130,7 +130,7 @@ export function HomeCuratedTabsSection({
                     )}
                   >
                     <Icon className="w-3.5 h-3.5 shrink-0" />
-                    <span>{t.label}</span>
+                    <span>{tab.label}</span>
                   </button>
                 );
               })}
@@ -154,7 +154,7 @@ export function HomeCuratedTabsSection({
           const entry = getEntry(m.id);
           const seasonLabel =
             m.season && m.seasonYear
-              ? formatSeason(m.season, m.seasonYear)
+              ? tSeasonYear(m.season, m.seasonYear)
               : m.startYear
                 ? String(m.startYear)
                 : null;
@@ -182,12 +182,12 @@ export function HomeCuratedTabsSection({
                   {activeTab === "upcoming" ? (
                     <>
                       <CalendarClock className="w-2.5 h-2.5 text-kinpaku" />
-                      {seasonLabel || "À venir"}
+                      {seasonLabel || tr("À venir")}
                     </>
                   ) : m.episodes ? (
-                    `${m.episodes} ép.`
+                    `${m.episodes} ${t("common.epShort")}`
                   ) : (
-                    formatFormat(m.format)
+                    tFormat(m.format)
                   )}
                 </span>
 
@@ -207,7 +207,7 @@ export function HomeCuratedTabsSection({
                     e.stopPropagation();
                     if (!entry) quickAdd(m, "PLAN_TO_WATCH");
                   }}
-                  title={entry ? "Dans votre bibliothèque" : "Ajouter en Plan to Watch"}
+                  title={entry ? tr("Déjà dans votre liste") : tr("Ajouter en À voir")}
                   className={cn(
                     "absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer shadow-lg",
                     entry
@@ -231,7 +231,7 @@ export function HomeCuratedTabsSection({
                   {title}
                 </Link>
                 <p className="text-[10.5px] text-[#7D8296] truncate">
-                  {m.genres.slice(0, 2).join(" · ") || formatFormat(m.format)}
+                  {m.genres.slice(0, 2).map((g) => tGenre(g)).join(" · ") || tFormat(m.format)}
                 </p>
               </div>
             </div>

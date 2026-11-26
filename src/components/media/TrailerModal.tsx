@@ -4,9 +4,11 @@ import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Play } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export function TrailerModal() {
   const { trailerVideo, closeTrailer } = useShiori();
+  const { tr } = useTranslation();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -38,7 +40,7 @@ export function TrailerModal() {
               <div className="flex items-center gap-2 min-w-0">
                 <Play className="w-4 h-4 text-accent fill-current shrink-0" />
                 <span className="text-sm font-medium text-white truncate">
-                  Bande-annonce — {trailerVideo.title}
+                  {tr("Bande-annonce — {title}", { title: trailerVideo.title })}
                 </span>
               </div>
               <button

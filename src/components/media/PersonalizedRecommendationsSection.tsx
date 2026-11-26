@@ -17,6 +17,7 @@ import {
   Bot,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { cn, formatScore, getDisplayTitle } from "@/lib/utils";
@@ -24,6 +25,7 @@ import type { PersonalizedRecommendation } from "@/types/media";
 
 export function PersonalizedRecommendationsSection() {
   const { library, hydrated, getEntry, quickAdd } = useShiori();
+  const { tr, tGenre } = useTranslation();
   const [items, setItems] = useState<PersonalizedRecommendation[]>([]);
   const [analyzedGenres, setAnalyzedGenres] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,18 +109,20 @@ export function PersonalizedRecommendationsSection() {
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Sélection sur mesure</span>
+            <span>{tr("Sélection sur mesure")}</span>
           </p>
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F4F3EE]">
-            Recommandés pour toi
+            {tr("Recommandés pour toi")}
           </h2>
           {analyzedGenres.length > 0 ? (
             <p className="text-xs sm:text-sm text-[#868B9F] mt-0.5">
-              Basé sur tes affinités ({analyzedGenres.join(" · ")}) — absents de ta liste
+              {tr("Basé sur tes affinités ({genres}) — absents de ta liste", {
+                genres: analyzedGenres.map((g) => tGenre(g)).join(" · "),
+              })}
             </p>
           ) : (
             <p className="text-xs sm:text-sm text-[#868B9F] mt-0.5">
-              Des pépites calibrées sur tes meilleures notes
+              {tr("Des pépites calibrées sur tes meilleures notes")}
             </p>
           )}
         </div>
@@ -133,7 +137,7 @@ export function PersonalizedRecommendationsSection() {
             )}
           >
             <MoveHorizontal className="w-3 h-3" />
-            <span>{isDragging ? "Défilement..." : "Glisser"}</span>
+            <span>{isDragging ? tr("Défilement...") : tr("Glisser")}</span>
           </span>
 
           <Link
@@ -141,7 +145,7 @@ export function PersonalizedRecommendationsSection() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/14 hover:bg-accent/25 border border-accent/35 text-xs font-semibold text-accent-soft hover:text-white transition-colors"
           >
             <Bot className="w-3.5 h-3.5" />
-            <span>Shiori IA</span>
+            <span>Shiori AI</span>
           </Link>
 
           <button
@@ -151,7 +155,7 @@ export function PersonalizedRecommendationsSection() {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.045] hover:bg-white/[0.1] border border-white/[0.08] text-xs font-medium text-[#CFD3E2] hover:text-white transition-colors cursor-pointer disabled:opacity-50"
           >
             <RefreshCw className={cn("w-3.5 h-3.5 text-kinpaku", loading && "animate-spin")} />
-            <span className="hidden sm:inline">Rafraîchir</span>
+            <span className="hidden sm:inline">{tr("Rafraîchir")}</span>
           </button>
 
           <button
@@ -267,7 +271,7 @@ export function PersonalizedRecommendationsSection() {
                           e.stopPropagation();
                           if (!entry) quickAdd(m, "PLAN_TO_WATCH");
                         }}
-                        title={entry ? "Déjà dans votre liste" : "Ajouter en À voir"}
+                        title={entry ? tr("Déjà dans votre liste") : tr("Ajouter en À voir")}
                         className={cn(
                           "w-8 h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer shadow-lg",
                           entry

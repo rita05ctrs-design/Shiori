@@ -27,7 +27,7 @@ import { HomeCommunityPulseSection } from "@/components/home/HomeCommunityPulseS
 import { MediaRail } from "@/components/media/MediaRail";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
 import { computeLibraryAnalytics } from "@/lib/stats";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { HomeData } from "@/lib/anilist";
 import type { HomeSectionId, MediaItem } from "@/types/media";
 
@@ -74,10 +74,18 @@ const SECTION_LABELS: Record<HomeSectionId, { title: string; hint: string }> = {
 interface HomeDashboardClientProps {
   data: HomeData;
   surprisePool: MediaItem[];
+  featuredHero?: {
+    mediaId: number;
+    customTagline?: string;
+  } | null;
 }
 
-export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientProps) {
-  const { t, locale } = useTranslation();
+export function HomeDashboardClient({
+  data,
+  surprisePool,
+  featuredHero,
+}: HomeDashboardClientProps) {
+  const { t, tr, locale, tRelativeTime } = useTranslation();
   const {
     library,
     orderedFavorites,
@@ -210,12 +218,12 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                 className="p-4 rounded-2xl card-surface border border-white/[0.08] hover:border-kinpaku/40 transition-colors flex items-center justify-between gap-3"
               >
                 <div>
-                  <p className="text-xs text-[#8D92A6]">Note moyenne</p>
+                  <p className="text-xs text-[#8D92A6]">{tr("Note moyenne")}</p>
                   <p className="text-2xl font-bold font-mono text-kinpaku mt-0.5">
                     {stats.meanScore !== null ? `${stats.meanScore.toFixed(1)}/10` : "—"}
                   </p>
                   <p className="text-[11px] text-[#7A7F94] mt-0.5">
-                    Voir les statistiques →
+                    {tr("Voir les statistiques →")}
                   </p>
                 </div>
                 <Star className="w-5 h-5 text-kinpaku fill-current shrink-0" />
@@ -231,17 +239,17 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
             <div className="flex items-end justify-between gap-3">
               <div>
                 <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F4F3EE]">
-                  Mes favoris
+                  {tr("Mes favoris")}
                 </h2>
                 <p className="text-xs text-[#8A8FA4] mt-0.5">
-                  Vos titres coups de cœur en accès direct
+                  {tr("Vos titres coups de cœur en accès direct")}
                 </p>
               </div>
               <Link
                 href="/library?favorites=1"
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-[#B8BCCB] hover:text-white transition-colors shrink-0"
               >
-                <span>Tout voir ({orderedFavorites.length})</span>
+                <span>{tr("Tout voir ({n})", { n: orderedFavorites.length })}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
@@ -291,13 +299,13 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <Activity className="w-4 h-4 text-accent" />
-                <span>Activité récente</span>
+                <span>{tr("Activité récente")}</span>
               </h2>
               <Link
                 href="/stats"
                 className="text-xs text-[#9A9EAE] hover:text-white transition-colors"
               >
-                Statistiques →
+                {tr("Statistiques →")}
               </Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -320,7 +328,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                     </p>
                     <p className="text-[11px] text-[#9A9EAE] truncate mt-0.5">{ev.action}</p>
                     <p suppressHydrationWarning className="text-[10px] font-mono text-[#6E7387] mt-0.5">
-                      {formatRelativeTime(ev.createdAt)}
+                      {tRelativeTime(ev.createdAt)}
                     </p>
                   </div>
                 </Link>
@@ -341,7 +349,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
     <div className="pb-24 md:pb-12">
       {/* Compact Cinematic Hero Showcase */}
       {heroVisible ? (
-        <HeroShowcase items={data.hero} />
+        <HeroShowcase items={data.hero} featuredHero={featuredHero} />
       ) : (
         <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24" />
       )}
@@ -381,10 +389,10 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm sm:text-base font-semibold text-white">
-                    Afficher, masquer ou réordonner les sections
+                    {tr("Afficher, masquer ou réordonner les sections")}
                   </h3>
                   <p className="text-xs text-[#858A9E]">
-                    Activez les sections secondaires si vous souhaitez un accueil plus détaillé.
+                    {tr("Activez les sections secondaires si vous souhaitez un accueil plus détaillé.")}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -394,12 +402,12 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-[#D6D9E6] cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>Par défaut</span>
+                    <span>{tr("Par défaut")}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setCustomizing(false)}
-                    aria-label="Fermer"
+                    aria-label={t("common.close")}
                     className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.14] flex items-center justify-center text-white cursor-pointer"
                   >
                     <X className="w-4 h-4" />
@@ -411,6 +419,8 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                 {homeSections.map((sec, idx) => {
                   const meta = SECTION_LABELS[sec.id];
                   if (!meta) return null;
+                  const labelTitle = tr(meta.title);
+                  const labelHint = tr(meta.hint);
                   return (
                     <div
                       key={sec.id}
@@ -423,16 +433,16 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                     >
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-white truncate">
-                          {meta.title}
+                          {labelTitle}
                         </p>
-                        <p className="text-[11px] text-[#858A9E] truncate">{meta.hint}</p>
+                        <p className="text-[11px] text-[#858A9E] truncate">{labelHint}</p>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
                           disabled={idx === 0}
                           onClick={() => moveHomeSection(sec.id, "up")}
-                          aria-label={`Monter ${meta.title}`}
+                          aria-label={`↑ ${labelTitle}`}
                           className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/[0.14] disabled:opacity-30 flex items-center justify-center text-white cursor-pointer"
                         >
                           <ArrowUp className="w-3.5 h-3.5" />
@@ -441,7 +451,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                           type="button"
                           disabled={idx === homeSections.length - 1}
                           onClick={() => moveHomeSection(sec.id, "down")}
-                          aria-label={`Descendre ${meta.title}`}
+                          aria-label={`↓ ${labelTitle}`}
                           className="w-7 h-7 rounded-lg bg-white/[0.05] hover:bg-white/[0.14] disabled:opacity-30 flex items-center justify-center text-white cursor-pointer"
                         >
                           <ArrowDown className="w-3.5 h-3.5" />
@@ -449,7 +459,7 @@ export function HomeDashboardClient({ data, surprisePool }: HomeDashboardClientP
                         <button
                           type="button"
                           onClick={() => toggleHomeSection(sec.id)}
-                          aria-label={sec.visible ? `Masquer ${meta.title}` : `Afficher ${meta.title}`}
+                          aria-label={labelTitle}
                           className={cn(
                             "h-7 px-2 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer",
                             sec.visible

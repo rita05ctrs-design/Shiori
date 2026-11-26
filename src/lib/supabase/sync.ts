@@ -13,6 +13,7 @@ import type {
   PublicProfileStatsSummary,
   SharedPublicCollection,
   UnlockedBadgeRecord,
+  UserRole,
 } from "@/types/media";
 import { normalizeContentLanguage } from "@/lib/i18n";
 
@@ -71,6 +72,7 @@ export interface CloudProfileSnapshot {
   bannerUrl: string | null;
   bio: string;
   accentColor: string;
+  role?: UserRole;
   isActivityPublic: boolean;
   preferredLanguage: ContentLanguage;
   favoriteStaff: FavoriteVoiceActor[];
@@ -100,14 +102,25 @@ export async function ensureSupabaseProfile(
       .replace(/^_+|_+$/g, "")
       .slice(0, 24) || `user_${user.id.slice(0, 6)}`;
 
+  const selectColsWithRole =
+    "id, username, display_name, avatar_url, banner_url, bio, accent_color, role, is_activity_public, preferred_language, favorite_staff, unlocked_badges, pinned_badges, created_at";
   const selectCols =
     "id, username, display_name, avatar_url, banner_url, bio, accent_color, is_activity_public, preferred_language, favorite_staff, unlocked_badges, pinned_badges, created_at";
 
-  const { data: existing } = await supabase
+  let existingRes = await supabase
     .from("profiles")
-    .select(selectCols)
+    .select(selectColsWithRole)
     .eq("id", user.id)
     .maybeSingle();
+
+  if (existingRes.error) {
+    existingRes = await supabase
+      .from("profiles")
+      .select(selectCols)
+      .eq("id", user.id)
+      .maybeSingle();
+  }
+  const existing = existingRes.data;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRow = (row: any): CloudProfileSnapshot => ({
@@ -118,6 +131,8 @@ export async function ensureSupabaseProfile(
     bannerUrl: row.banner_url ?? null,
     bio: String(row.bio ?? ""),
     accentColor: String(row.accent_color || "#E5484D"),
+    role:
+      row.role === "creator" || row.role === "moderator" ? row.role : "user",
     isActivityPublic: row.is_activity_public !== false,
     preferredLanguage: normalizeContentLanguage(row.preferred_language),
     favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],

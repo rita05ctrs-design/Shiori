@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { RoleBadge } from "@/components/ui/RoleBadge";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
 import { BADGE_BY_ID, RARITY_META } from "@/lib/badges";
@@ -217,6 +218,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
               >
                 {item.actorDisplayName}
               </Link>
+              <RoleBadge role={item.actorRole} size="xs" />
               <Link
                 href={`/profile/${encodeURIComponent(item.actorUsername)}`}
                 className="text-xs font-mono text-[#7D8296] hover:text-white transition-colors truncate"
@@ -475,13 +477,14 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
                     />
                   </Link>
                   <div className="flex-1 min-w-0 rounded-xl bg-obsidian/70 border border-white/[0.06] px-3 py-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <Link
                         href={`/profile/${encodeURIComponent(c.authorUsername)}`}
                         className="text-xs font-semibold text-white hover:text-accent-hover"
                       >
                         {c.authorDisplayName}
                       </Link>
+                      <RoleBadge role={c.authorRole} size="xs" />
                       <span className="text-[10px] text-[#7D8296]">
                         {formatRelativeTime(c.createdAt)}
                       </span>

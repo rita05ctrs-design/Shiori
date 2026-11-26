@@ -34,7 +34,16 @@ export function SeasonChronologySection({
   prevSeason,
   nextSeason,
 }: SeasonChronologySectionProps) {
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
+  const localizeSeasonShortLabel = (raw: string): string => {
+    const m = /^Saison\s+(\d+)(.*)$/i.exec(raw.trim());
+    if (m) return `${tr("Saison")} ${m[1]}${m[2]}`;
+    if (raw === "Film") return tr("Film");
+    if (raw === "Spécial") return tr("Spécial");
+    if (raw === "Suite") return tr("Suite");
+    if (raw === "Préquelle") return tr("Préquelle");
+    return raw;
+  };
   const activeCardRef = useRef<HTMLDivElement | null>(null);
   const {
     ref: scrollRef,
@@ -239,10 +248,10 @@ export function SeasonChronologySection({
             const unitCount =
               item.type === "MANGA"
                 ? item.chapters
-                  ? `${item.chapters} ch.`
+                  ? `${item.chapters} ${t("common.chShort")}`
                   : null
                 : item.episodes
-                  ? `${item.episodes} ép.`
+                  ? `${item.episodes} ${t("common.epShort")}`
                   : null;
 
             const cardInner = (
@@ -280,7 +289,7 @@ export function SeasonChronologySection({
                         isCurrent ? "text-kinpaku" : "text-accent-soft"
                       )}
                     >
-                      {item.shortLabel}
+                      {localizeSeasonShortLabel(item.shortLabel)}
                     </span>
                     {isCurrent && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-accent text-accent-fg text-[9.5px] font-bold uppercase tracking-wider">
@@ -302,7 +311,7 @@ export function SeasonChronologySection({
                   <p className="text-[10.5px] font-mono text-[#8A8FA4] truncate">
                     {[item.seasonYear ? String(item.seasonYear) : null, unitCount]
                       .filter(Boolean)
-                      .join(" · ") || "Série liée"}
+                      .join(" · ") || tr("Série liée")}
                   </p>
                 </div>
               </div>

@@ -55,6 +55,8 @@ export interface BadgeDefinition {
   iconKey: BadgeIconKey;
   target: number;
   unitLabel: string;
+  /** True for exclusive honors granted manually by the Shiori Creator (Supporter, Bêta-testeur, VIP) */
+  grantOnly?: boolean;
 }
 
 export const BADGE_DEFINITIONS: BadgeDefinition[] = [
@@ -467,7 +469,46 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     target: 50,
     unitLabel: "interactions",
   },
+  // ============================================================================
+  // 8. Distinctions exclusives attribuées par le Créateur (Admin)
+  // ============================================================================
+  {
+    id: "beta_tester",
+    title: "Bêta-testeur",
+    description: "Pionnier ayant aidé à tester et façonner Shiori dès ses débuts.",
+    category: "social",
+    rarity: "gold",
+    iconKey: "sparkles",
+    target: 1,
+    unitLabel: "distinction",
+    grantOnly: true,
+  },
+  {
+    id: "supporter",
+    title: "Supporter",
+    description: "Soutien généreux contribuant aux serveurs et à l'indépendance de Shiori.",
+    category: "social",
+    rarity: "gold",
+    iconKey: "heart",
+    target: 1,
+    unitLabel: "distinction",
+    grantOnly: true,
+  },
+  {
+    id: "vip",
+    title: "VIP",
+    description: "Membre d'honneur distingué par le créateur de Shiori.",
+    category: "social",
+    rarity: "legendary",
+    iconKey: "crown",
+    target: 1,
+    unitLabel: "distinction",
+    grantOnly: true,
+  },
 ];
+
+export const ADMIN_GRANTABLE_BADGE_IDS = ["beta_tester", "supporter", "vip"] as const;
+export type AdminGrantableBadgeId = (typeof ADMIN_GRANTABLE_BADGE_IDS)[number];
 
 export const BADGE_BY_ID = new Map<string, BadgeDefinition>(
   BADGE_DEFINITIONS.map((b) => [b.id, b])
@@ -729,8 +770,11 @@ export function evaluateAllBadges(
     }
 
     const storedDate = unlockedMap.get(def.id) ?? null;
-    const unlocked = current >= def.target || Boolean(storedDate);
-    const clampedCurrent = Math.min(current, def.target);
+    const unlocked = def.grantOnly
+      ? Boolean(storedDate)
+      : current >= def.target || Boolean(storedDate);
+    const effectiveCurrent = def.grantOnly ? (unlocked ? 1 : 0) : current;
+    const clampedCurrent = Math.min(effectiveCurrent, def.target);
     const progressPct = unlocked
       ? 100
       : Math.min(99, Math.round((clampedCurrent / Math.max(1, def.target)) * 100));
@@ -742,7 +786,7 @@ export function evaluateAllBadges(
       category: def.category,
       rarity: def.rarity,
       iconKey: def.iconKey,
-      current,
+      current: effectiveCurrent,
       target: def.target,
       unitLabel: def.unitLabel,
       unlocked,

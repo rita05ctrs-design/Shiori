@@ -10,6 +10,7 @@ import {
   FolderHeart,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 
 const COLLECTION_COLORS = [
@@ -33,6 +34,7 @@ export function CollectionsManagerPanel({
   onClose,
 }: CollectionsManagerPanelProps) {
   const { collections, createCollection, updateCollection, deleteCollection } = useShiori();
+  const { tr } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(COLLECTION_COLORS[0]);
@@ -53,20 +55,20 @@ export function CollectionsManagerPanel({
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-accent flex items-center gap-1.5">
             <FolderHeart className="w-3.5 h-3.5" />
-            <span>Collections personnalisées</span>
+            <span>{tr("Collections personnalisées")}</span>
           </p>
           <h2 className="text-base sm:text-lg font-bold text-white mt-0.5">
-            Créez vos propres sélections thématiques
+            {tr("Créez vos propres sélections thématiques")}
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-0.5">
-            Regroupez vos œuvres par thème (ex. « Chefs-d&apos;œuvre automne », « À voir entre amis ») et partagez-les sur votre profil public si vous le souhaitez.
+            {tr("Regroupez vos œuvres par thème et partagez-les sur votre profil public si vous le souhaitez.")}
           </p>
         </div>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            aria-label="Fermer les collections"
+            aria-label={tr("Fermer")}
             className="w-8 h-8 rounded-full bg-white/[0.06] hover:bg-white/[0.14] flex items-center justify-center text-white cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
@@ -85,16 +87,16 @@ export function CollectionsManagerPanel({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={80}
-            placeholder="Nom de la collection (ex: Pépites Seinen)..."
-            className="h-10 px-3.5 rounded-xl bg-surface border border-white/[0.09] text-xs sm:text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+            placeholder={tr("Nom de la collection (ex: Pépites Seinen)...")}
+            className="h-10 px-3.5 rounded-xl bg-surface border border-white/[0.09] text-base sm:text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
           />
           <input
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={240}
-            placeholder="Description courte (optionnel)..."
-            className="h-10 px-3.5 rounded-xl bg-surface border border-white/[0.09] text-xs sm:text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+            placeholder={tr("Description courte (optionnel)...")}
+            className="h-10 px-3.5 rounded-xl bg-surface border border-white/[0.09] text-base sm:text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
           />
         </div>
 
@@ -106,7 +108,7 @@ export function CollectionsManagerPanel({
                   key={c}
                   type="button"
                   onClick={() => setColor(c)}
-                  aria-label={`Couleur ${c}`}
+                  aria-label={c}
                   className={cn(
                     "w-6 h-6 rounded-full border-2 transition-transform cursor-pointer",
                     color === c ? "border-white scale-110" : "border-transparent opacity-70 hover:opacity-100"
@@ -127,7 +129,7 @@ export function CollectionsManagerPanel({
               )}
             >
               {isPublic ? <Globe className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-              <span>{isPublic ? "Partagée sur mon profil" : "Privée"}</span>
+              <span>{isPublic ? tr("Partagée sur mon profil") : tr("Privée")}</span>
             </button>
           </div>
 
@@ -137,7 +139,7 @@ export function CollectionsManagerPanel({
             className="h-9 px-4 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-45 text-accent-fg text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer shadow-accent"
           >
             <FolderPlus className="w-3.5 h-3.5" />
-            <span>Créer la collection</span>
+            <span>{tr("Créer la collection")}</span>
           </button>
         </div>
       </form>
@@ -145,7 +147,7 @@ export function CollectionsManagerPanel({
       {/* Existing Collections Grid */}
       {collections.length === 0 ? (
         <p className="text-xs text-[#858A9E]">
-          Aucune collection créée pour le moment. Une fois créée, ajoutez-y vos œuvres via le bouton d&apos;édition rapide de n&apos;importe quel titre.
+          {tr("Aucune collection créée pour le moment. Ajoutez-y vos œuvres via le bouton d'édition rapide.")}
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -196,12 +198,12 @@ export function CollectionsManagerPanel({
                     {col.isPublic ? (
                       <>
                         <Globe className="w-3 h-3 text-emerald-400" />
-                        <span>Publique</span>
+                        <span>{tr("Publique")}</span>
                       </>
                     ) : (
                       <>
                         <Lock className="w-3 h-3 text-amber-400" />
-                        <span>Privée</span>
+                        <span>{tr("Privée")}</span>
                       </>
                     )}
                   </button>
@@ -217,7 +219,7 @@ export function CollectionsManagerPanel({
                           : "bg-white/[0.06] hover:bg-white/[0.12] text-white"
                       )}
                     >
-                      {active ? "Filtrée ✓" : "Filtrer"}
+                      {active ? tr("Filtrée ✓") : tr("Filtrer")}
                     </button>
                     <button
                       type="button"
@@ -225,7 +227,7 @@ export function CollectionsManagerPanel({
                         if (active) onSelectCollection("ALL");
                         deleteCollection(col.id);
                       }}
-                      title="Supprimer la collection"
+                      title={tr("Supprimer la collection")}
                       className="p-1.5 rounded-lg text-[#7D8296] hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

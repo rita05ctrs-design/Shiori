@@ -67,6 +67,7 @@ create table if not exists public.profiles (
   stats_summary jsonb not null default '{}'::jsonb,
   unlocked_badges jsonb not null default '[]'::jsonb,
   pinned_badges text[] not null default '{}',
+  role text not null default 'user' check (role in ('user', 'moderator', 'creator')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -88,6 +89,57 @@ alter table public.profiles add column if not exists preferred_language text def
 alter table public.profiles add column if not exists unlocked_badges jsonb not null default '[]'::jsonb;
 alter table public.profiles add column if not exists pinned_badges text[] not null default '{}';
 alter table public.profiles add column if not exists ui_preferences jsonb not null default '{}'::jsonb;
+alter table public.profiles add column if not exists role text not null default 'user' check (role in ('user', 'moderator', 'creator'));
+
+-- Helper sécurisé pour vérifier le rôle Créateur / Modérateur dans les policies RLS
+create or replace function public.is_shiori_creator()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'creator'
+  );
+$$;
+
+create or replace function public.is_shiori_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role in ('creator', 'moderator')
+  );
+$$;
+
+-- Sécurité : empêcher un utilisateur standard d'auto-escalader son propre rôle via le client
+create or replace function public.prevent_role_self_escalation()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.role is distinct from old.role then
+    if current_setting('request.jwt.claim.role', true) <> 'service_role'
+       and not public.is_shiori_creator() then
+      new.role := old.role;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists guard_profiles_role_change on public.profiles;
+create trigger guard_profiles_role_change
+  before update on public.profiles
+  for each row execute function public.prevent_role_self_escalation();
 
 -- Sécurité : ne jamais exposer anilist_access_token au rôle anon
 revoke select (anilist_access_token) on public.profiles from anon;
@@ -128,7 +180,8 @@ select
   end as stats_summary,
   created_at as joined_at,
   coalesce(unlocked_badges, '[]'::jsonb) as unlocked_badges,
-  coalesce(pinned_badges, '{}'::text[]) as pinned_badges
+  coalesce(pinned_badges, '{}'::text[]) as pinned_badges,
+  coalesce(role, 'user') as role
 from public.profiles;
 
 grant select on public.public_profiles to anon, authenticated;
@@ -171,8 +224,8 @@ create policy "Users can insert their own profile"
 drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
   on public.profiles for update
-  using (auth.uid() = id)
-  with check (auth.uid() = id);
+  using (auth.uid() = id or public.is_shiori_creator())
+  with check (auth.uid() = id or public.is_shiori_creator());
 
 drop policy if exists "Users can delete their own profile" on public.profiles;
 create policy "Users can delete their own profile"
@@ -357,7 +410,7 @@ create policy "Users can insert their own activity"
 
 drop policy if exists "Users can delete their own activity" on public.activity_events;
 create policy "Users can delete their own activity"
-  on public.activity_events for delete using (auth.uid() = user_id);
+  on public.activity_events for delete using (auth.uid() = user_id or public.is_shiori_staff());
 
 -- ----------------------------------------------------------------------------
 -- 5B. SOCIAL INTERACTIONS : LIKES & COMMENTAIRES SUR L'ACTIVITÉ
@@ -438,7 +491,7 @@ create policy "Authenticated users can comment on activity"
 
 drop policy if exists "Users can delete their own comments" on public.activity_comments;
 create policy "Users can delete their own comments"
-  on public.activity_comments for delete using (auth.uid() = user_id);
+  on public.activity_comments for delete using (auth.uid() = user_id or public.is_shiori_staff());
 
 -- ----------------------------------------------------------------------------
 -- 5C. MESSAGERIE PRIVÉE (DIRECT MESSAGES) ENTRE UTILISATEURS
@@ -520,15 +573,15 @@ create policy "Anyone can view unlocked badges on public profiles"
 
 drop policy if exists "Users can insert their own badges" on public.user_badges;
 create policy "Users can insert their own badges"
-  on public.user_badges for insert with check (auth.uid() = user_id);
+  on public.user_badges for insert with check (auth.uid() = user_id or public.is_shiori_creator());
 
 drop policy if exists "Users can update their own badges" on public.user_badges;
 create policy "Users can update their own badges"
-  on public.user_badges for update using (auth.uid() = user_id);
+  on public.user_badges for update using (auth.uid() = user_id or public.is_shiori_creator());
 
 drop policy if exists "Users can delete their own badges" on public.user_badges;
 create policy "Users can delete their own badges"
-  on public.user_badges for delete using (auth.uid() = user_id);
+  on public.user_badges for delete using (auth.uid() = user_id or public.is_shiori_creator());
 
 -- ----------------------------------------------------------------------------
 -- 5E. SYSTÈME D'AMIS (friendships — demandes & amis acceptés)
@@ -602,11 +655,39 @@ create policy "Authenticated users can refresh cached media translations"
   using (lang in ('fr', 'es', 'it'))
   with check (lang in ('fr', 'es', 'it') and char_length(translated_description) between 1 and 20000);
 
+-- ----------------------------------------------------------------------------
+-- 5G. PARAMÈTRES GLOBAUX DU SITE (site_settings : Sélection Hero & Bannière)
+-- ----------------------------------------------------------------------------
+create table if not exists public.site_settings (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_by uuid references public.profiles(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.site_settings enable row level security;
+
+drop policy if exists "Anyone can read site settings" on public.site_settings;
+create policy "Anyone can read site settings"
+  on public.site_settings for select using (true);
+
+drop policy if exists "Only creator can insert site settings" on public.site_settings;
+create policy "Only creator can insert site settings"
+  on public.site_settings for insert with check (public.is_shiori_creator());
+
+drop policy if exists "Only creator can update site settings" on public.site_settings;
+create policy "Only creator can update site settings"
+  on public.site_settings for update using (public.is_shiori_creator());
+
+drop policy if exists "Only creator can delete site settings" on public.site_settings;
+create policy "Only creator can delete site settings"
+  on public.site_settings for delete using (public.is_shiori_creator());
+
 grant usage on schema public to anon, authenticated;
-grant select on public.public_profiles, public.activity_events, public.activity_likes, public.activity_comments, public.user_badges to anon, authenticated;
+grant select on public.public_profiles, public.activity_events, public.activity_likes, public.activity_comments, public.user_badges, public.site_settings to anon, authenticated;
 grant select, insert on public.media_translations to anon, authenticated;
 grant update on public.media_translations to authenticated;
-grant select, insert, update, delete on public.profiles, public.library_entries, public.user_anilist_stats, public.notifications, public.activity_events, public.activity_likes, public.activity_comments, public.direct_messages, public.user_badges, public.friendships to authenticated;
+grant select, insert, update, delete on public.profiles, public.library_entries, public.user_anilist_stats, public.notifications, public.activity_events, public.activity_likes, public.activity_comments, public.direct_messages, public.user_badges, public.friendships, public.site_settings to authenticated;
 revoke all on public.direct_messages, public.friendships from anon;
 
 -- ----------------------------------------------------------------------------

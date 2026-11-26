@@ -240,6 +240,7 @@ interface ShioriContextValue {
   // Profile & Auth (Built-in Shiori Server Accounts + Supabase Cloud Ready)
   profile: UserProfile;
   isAuthenticated: boolean;
+  isCreator: boolean;
   supabaseReady: boolean;
   updateProfile: (updates: Partial<UserProfile>) => void;
   uploadAvatar: (file: File) => Promise<{ ok: boolean; url?: string; storage?: string; error?: string }>;
@@ -446,6 +447,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
 
   const supabaseReady = isSupabaseConfigured();
   const isAuthenticated = profile.mode === "account" || profile.mode === "supabase";
+  const isCreator = isAuthenticated && profile.role === "creator";
 
   const openAuthModal = useCallback((tab: "signin" | "signup" = "signup") => {
     setAuthModalTab(tab);
@@ -477,7 +479,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       const savedProfile = localStorage.getItem(STORAGE_KEYS.profile);
       if (savedProfile) {
         const parsedProfile = JSON.parse(savedProfile);
-        setProfile((prev) => ({ ...prev, ...parsedProfile }));
+        // Security: never trust cached client-side role; always resolve authoritatively from server
+        setProfile((prev) => ({ ...prev, ...parsedProfile, role: "user" }));
         if (parsedProfile?.preferredLanguage) {
           setContentLanguageState(normalizeContentLanguage(parsedProfile.preferredLanguage));
         }
@@ -618,6 +621,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           bannerUrl:
             cloudProf?.bannerUrl !== undefined ? cloudProf.bannerUrl : prev.bannerUrl ?? null,
           accentColor: cloudProf?.accentColor || prev.accentColor,
+          role: cloudProf?.role ?? prev.role ?? "user",
           isActivityPublic:
             cloudProf?.isActivityPublic !== undefined
               ? cloudProf.isActivityPublic
@@ -769,6 +773,31 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         // stay in guest mode on network error
       });
   }, []);
+
+  // Authoritatively sync role from server (covers ADMIN_EMAIL, ADMIN_ANILIST_ID & DB role)
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) {
+      setProfile((prev) => (prev.role && prev.role !== "user" ? { ...prev, role: "user" } : prev));
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/auth/role", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        const resolvedRole =
+          data.authenticated && (data.role === "creator" || data.role === "moderator")
+            ? data.role
+            : "user";
+        setProfile((prev) => (prev.role === resolvedRole ? prev : { ...prev, role: resolvedRole }));
+      })
+      .catch(() => {
+        // non-fatal
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, isAuthenticated, profile.id]);
 
   // Automatically sync signed-in Shiori server account changes to disk
   const lastSyncWarnRef = useRef<number>(0);
@@ -3832,6 +3861,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     disconnectAniList,
     profile,
     isAuthenticated,
+    isCreator,
     supabaseReady,
     updateProfile,
     uploadAvatar,

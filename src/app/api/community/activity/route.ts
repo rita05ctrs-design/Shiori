@@ -14,12 +14,14 @@ import {
   rateLimitResponse,
   sanitizeSafeImageUrl,
 } from "@/lib/server/rate-limit";
+import { normalizeRole } from "@/lib/server/role-resolver";
 import type {
   ActivityCommentItem,
   BadgeRarity,
   CommunityActivityItem,
   CommunityActivityKind,
   MediaType,
+  UserRole,
 } from "@/types/media";
 
 export const runtime = "nodejs";
@@ -36,12 +38,19 @@ export async function GET(request: NextRequest) {
   const merged = new Map<string, CommunityActivityItem>();
   const privateUserIds = new Set<string>();
   const privateUsernames = new Set<string>();
+  const roleByUserId = new Map<string, UserRole>();
+  const roleByUsername = new Map<string, UserRole>();
+
+  if (requesterId && requester.role !== "user") {
+    roleByUserId.set(requesterId, requester.role);
+    roleByUsername.set(requester.username.toLowerCase(), requester.role);
+  }
 
   // 1) Fetch public realtime activity from Supabase if tables exist
   try {
     const supabase = await getSupabaseServerClient();
     if (supabase) {
-      const [{ data: rows, error }, { data: privateProfs }] = await Promise.all([
+      const [{ data: rows, error }, { data: privateProfs }, { data: roleProfs }] = await Promise.all([
         supabase
           .from("activity_events")
           .select("*")
@@ -53,11 +62,23 @@ export async function GET(request: NextRequest) {
           .select("id, username")
           .eq("is_activity_public", false)
           .limit(200),
+        supabase
+          .from("public_profiles")
+          .select("id, username, role")
+          .in("role", ["creator", "moderator"])
+          .limit(50),
       ]);
 
       for (const pp of privateProfs ?? []) {
         if (pp.id) privateUserIds.add(String(pp.id));
         if (pp.username) privateUsernames.add(String(pp.username).toLowerCase());
+      }
+      for (const rp of roleProfs ?? []) {
+        const r = normalizeRole(rp.role);
+        if (r !== "user") {
+          if (rp.id) roleByUserId.set(String(rp.id), r);
+          if (rp.username) roleByUsername.set(String(rp.username).toLowerCase(), r);
+        }
       }
 
       if (!error && Array.isArray(rows) && rows.length > 0) {
@@ -108,6 +129,10 @@ export async function GET(request: NextRequest) {
             actorDisplayName: String(r.actor_display_name || r.actor_username || "Membre"),
             actorAvatarUrl: sanitizeSafeImageUrl(r.actor_avatar_url),
             actorAccentColor: typeof meta.accentColor === "string" ? meta.accentColor : "#E5484D",
+            actorRole:
+              roleByUserId.get(String(r.user_id)) ??
+              roleByUsername.get(String(r.actor_username || "").toLowerCase()) ??
+              normalizeRole(meta.actorRole),
             actorPinnedBadges: Array.isArray(meta.pinnedBadges)
               ? meta.pinnedBadges.slice(0, 3)
               : undefined,
@@ -160,19 +185,38 @@ export async function GET(request: NextRequest) {
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // Hydrate latest pinnedBadges onto each activity author from community profiles
+  // Hydrate latest pinnedBadges and authoritative roles onto each activity & comment author
   const pinnedByUsername = new Map<string, string[]>();
   for (const p of localProfiles) {
     if (Array.isArray(p.pinnedBadges) && p.pinnedBadges.length > 0) {
       pinnedByUsername.set(p.username.toLowerCase(), p.pinnedBadges.slice(0, 3));
     }
+    if (p.role && p.role !== "user") {
+      roleByUserId.set(p.id, p.role);
+      roleByUsername.set(p.username.toLowerCase(), p.role);
+    }
   }
   items = items.map((a) => {
     const livePinned = pinnedByUsername.get(a.actorUsername.toLowerCase());
-    if (livePinned) {
-      return { ...a, actorPinnedBadges: livePinned };
-    }
-    return a;
+    const resolvedActorRole =
+      roleByUserId.get(a.userId) ??
+      roleByUsername.get(a.actorUsername.toLowerCase()) ??
+      a.actorRole;
+    const enrichedComments = a.comments.map((c) => {
+      const cRole =
+        roleByUserId.get(c.userId) ??
+        roleByUsername.get(c.authorUsername.toLowerCase()) ??
+        c.authorRole;
+      return cRole && cRole !== "user" ? { ...c, authorRole: cRole } : c;
+    });
+    return {
+      ...a,
+      ...(livePinned ? { actorPinnedBadges: livePinned } : {}),
+      ...(resolvedActorRole && resolvedActorRole !== "user"
+        ? { actorRole: resolvedActorRole }
+        : {}),
+      comments: enrichedComments,
+    };
   });
 
   if (kind && kind !== "ALL") {
@@ -254,6 +298,7 @@ export async function POST(request: NextRequest) {
                 pinnedBadges: actorPinnedBadges,
                 score: typeof body?.score === "number" ? body.score : null,
                 accentColor: actor.accentColor,
+                actorRole: actor.role,
               },
             })
             .select("id")
@@ -278,6 +323,7 @@ export async function POST(request: NextRequest) {
       actorDisplayName: actor.displayName,
       actorAvatarUrl: sanitizeSafeImageUrl(actor.avatarUrl),
       actorAccentColor: actor.accentColor,
+      actorRole: actor.role,
       actorPinnedBadges,
       kind,
       mediaId: Number(body?.mediaId ?? 0),

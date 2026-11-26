@@ -11,6 +11,7 @@ import {
   rateLimitResponse,
   sanitizeSafeImageUrl,
 } from "@/lib/server/rate-limit";
+import { normalizeRole } from "@/lib/server/role-resolver";
 import type { PublicUserProfile } from "@/types/media";
 
 export const runtime = "nodejs";
@@ -49,6 +50,7 @@ function mapSupabasePublicProfile(row: any): PublicUserProfile {
     accentColor: typeof row.accent_color === "string" && HEX_COLOR_RE.test(row.accent_color)
       ? row.accent_color
       : "#E5484D",
+    role: normalizeRole(row.role),
     isActivityPublic: isPublic,
     joinedAt: row.joined_at ?? row.created_at ?? new Date().toISOString(),
     favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
@@ -91,6 +93,9 @@ export async function GET(request: NextRequest) {
       if (!error && Array.isArray(data)) {
         for (const row of data) {
           const mapped = redactPrivateProfile(mapSupabasePublicProfile(row), requesterId);
+          if (requesterId && mapped.id === requesterId && requester.role === "creator") {
+            mapped.role = "creator";
+          }
           byKey.set(mapped.username.toLowerCase(), mapped);
         }
       }
@@ -172,6 +177,7 @@ export async function POST(request: NextRequest) {
       avatarInitials: displayName.slice(0, 2).toUpperCase(),
       bio: typeof body?.bio === "string" ? body.bio.trim().slice(0, 400) : "",
       accentColor,
+      role: actor.role,
       isActivityPublic,
       joinedAt: typeof body?.joinedAt === "string" ? body.joinedAt : new Date().toISOString(),
       favoriteStaff: Array.isArray(body?.favoriteStaff) ? body.favoriteStaff.slice(0, 30) : [],

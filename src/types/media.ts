@@ -315,6 +315,32 @@ export interface ContentReportRecord {
   createdAt: string;
 }
 
+export type UserRole = "user" | "moderator" | "creator";
+
+export type SpecialBadgeId = "beta_tester" | "supporter" | "vip";
+
+export interface SiteAnnouncement {
+  enabled: boolean;
+  message: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  tone: "gold" | "crimson" | "info";
+}
+
+export interface FeaturedHeroConfig {
+  enabled: boolean;
+  mediaId: number | null;
+  customTagline?: string;
+  media?: MediaItem | null;
+}
+
+export interface SiteConfig {
+  announcement: SiteAnnouncement;
+  featuredHero: FeaturedHeroConfig;
+  updatedAt: string;
+  updatedBy?: string | null;
+}
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -325,6 +351,7 @@ export interface UserProfile {
   avatarUrl?: string | null;
   bannerUrl?: string | null;
   accentColor: string;
+  role?: UserRole;
   isActivityPublic?: boolean;
   preferredLanguage?: ContentLanguage;
   mode: "local" | "account" | "supabase";
@@ -388,6 +415,7 @@ export interface PublicUserProfile {
   avatarInitials: string;
   bio: string;
   accentColor: string;
+  role?: UserRole;
   isActivityPublic: boolean;
   joinedAt: string;
   favoriteStaff: FavoriteVoiceActor[];
@@ -417,6 +445,7 @@ export interface ActivityCommentItem {
   authorDisplayName: string;
   authorAvatarUrl: string | null;
   authorAccentColor?: string;
+  authorRole?: UserRole;
   body: string;
   createdAt: string;
 }
@@ -428,6 +457,7 @@ export interface CommunityActivityItem {
   actorDisplayName: string;
   actorAvatarUrl: string | null;
   actorAccentColor?: string;
+  actorRole?: UserRole;
   actorPinnedBadges?: string[];
   kind: CommunityActivityKind;
   mediaId: number;

@@ -13,12 +13,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
 import { MOOD_PRESETS } from "@/lib/discover-taxonomy";
 import {
   cn,
-  formatFormat,
   formatScore,
   getDisplayTitle,
 } from "@/lib/utils";
@@ -32,6 +32,7 @@ export function HomeMoodAndRouletteSection({
   surprisePool,
 }: HomeMoodAndRouletteSectionProps) {
   const { getEntry, quickAdd } = useShiori();
+  const { t, tr, tFormat, tGenre, tStatus } = useTranslation();
   const [picked, setPicked] = useState<MediaItem | null>(null);
 
   const featuredMoods = useMemo(() => MOOD_PRESETS.slice(0, 6), []);
@@ -66,14 +67,13 @@ export function HomeMoodAndRouletteSection({
         <div>
           <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-accent mb-1 flex items-center gap-1.5">
             <Compass className="w-3.5 h-3.5" />
-            <span>Explorer par ambiance</span>
+            <span>{tr("Explorer par ambiance")}</span>
           </p>
           <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-[#F4F3EE]">
-            Quelle est ton envie ce soir ?
+            {tr("Quelle est votre envie ce soir ?")}
           </h2>
           <p className="text-xs text-[#8A8FA4] mt-1">
-            Choisis une atmosphère en un clic ou laisse la roulette choisir un chef-d&apos;œuvre
-            absent de ta liste.
+            {tr("Choisissez une atmosphère en un clic ou lancez la roulette pour découvrir un chef-d'œuvre hors de votre liste.")}
           </p>
         </div>
 
@@ -84,13 +84,13 @@ export function HomeMoodAndRouletteSection({
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent transition-all cursor-pointer"
           >
             <Dices className="w-3.5 h-3.5" />
-            <span>{picked ? "Relancer la roulette" : "Surprends-moi"}</span>
+            <span>{picked ? tr("Relancer la roulette") : tr("Surprends-moi")}</span>
           </button>
           <Link
             href="/discover"
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.09] text-xs font-medium text-white transition-colors"
           >
-            <span>Toutes les envies</span>
+            <span>{tr("Toutes les envies")}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -121,7 +121,7 @@ export function HomeMoodAndRouletteSection({
                 <div>
                   <span className="inline-flex items-center gap-1 text-[10.5px] font-mono uppercase tracking-wider text-accent-soft">
                     <Sparkles className="w-3 h-3 text-accent" />
-                    Coup de dé du soir
+                    {tr("Coup de dé du soir")}
                   </span>
                   <Link
                     href={`/media/${picked.id}`}
@@ -133,7 +133,7 @@ export function HomeMoodAndRouletteSection({
                 <button
                   type="button"
                   onClick={() => setPicked(null)}
-                  aria-label="Fermer la suggestion surprise"
+                  aria-label={t("common.close")}
                   className="w-7 h-7 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-[#9A9EAE] hover:text-white flex items-center justify-center cursor-pointer shrink-0"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -148,15 +148,15 @@ export function HomeMoodAndRouletteSection({
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded-md bg-white/[0.06] border border-white/[0.08] font-mono text-[10.5px] text-[#C8CCE0]">
-                  {formatFormat(picked.format)}
-                  {picked.episodes ? ` · ${picked.episodes} ép.` : ""}
+                  {tFormat(picked.format)}
+                  {picked.episodes ? ` · ${picked.episodes} ${t("common.epShort")}` : ""}
                 </span>
                 {picked.genres.slice(0, 3).map((g) => (
                   <span
                     key={g}
                     className="px-2 py-0.5 rounded-md bg-accent/14 border border-accent/30 text-[10.5px] text-accent-soft"
                   >
-                    {g}
+                    {tGenre(g)}
                   </span>
                 ))}
               </div>
@@ -174,7 +174,7 @@ export function HomeMoodAndRouletteSection({
                   href={`/media/${picked.id}`}
                   className="h-8 px-4 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
                 >
-                  <span>Voir la fiche</span>
+                  <span>{tr("Voir la fiche")}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
                 <button
@@ -192,12 +192,12 @@ export function HomeMoodAndRouletteSection({
                   {pickedEntry ? (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>Ajouté</span>
+                      <span>{tr("Ajouté")}</span>
                     </>
                   ) : (
                     <>
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Plan to Watch</span>
+                      <span>{tStatus("PLAN_TO_WATCH", picked.type)}</span>
                     </>
                   )}
                 </button>
@@ -217,7 +217,7 @@ export function HomeMoodAndRouletteSection({
           >
             <img
               src={mood.image}
-              alt={mood.label}
+              alt={tr(mood.label)}
               loading="lazy"
               decoding="async"
               className="absolute inset-0 w-full h-full object-cover opacity-55 group-hover:opacity-75 group-hover:scale-105 transition-all duration-500"
@@ -237,10 +237,10 @@ export function HomeMoodAndRouletteSection({
             />
             <div className="relative z-10">
               <p className="text-xs sm:text-[13px] font-bold text-white leading-tight group-hover:text-accent-soft transition-colors">
-                {mood.label}
+                {tr(mood.label)}
               </p>
               <p className="text-[10px] text-[#B5B9C9] line-clamp-1 mt-0.5">
-                {mood.subtitle}
+                {tr(mood.subtitle)}
               </p>
             </div>
           </Link>

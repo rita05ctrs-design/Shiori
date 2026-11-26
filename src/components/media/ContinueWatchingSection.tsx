@@ -16,7 +16,7 @@ export function ContinueWatchingSection({
   embeddedInLibrary = false,
 }: ContinueWatchingSectionProps) {
   const { library, incrementProgress, openQuickEdit, setCommandOpen } = useShiori();
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const [pulseMap, setPulseMap] = useState<Record<number, number>>({});
   const [mediaFilter, setMediaFilter] = useState<"ALL" | "ANIME" | "MANGA">("ALL");
 
@@ -134,7 +134,7 @@ export function ContinueWatchingSection({
             const pct = entry.totalUnits
               ? Math.min(100, Math.round((entry.progress / entry.totalUnits) * 100))
               : 62;
-            const unit = entry.type === "MANGA" ? "Ch." : "Ép.";
+            const unit = entry.type === "MANGA" ? t("common.chShort") : t("common.epShort");
             const pulseKey = pulseMap[entry.mediaId];
 
             return (
@@ -168,7 +168,7 @@ export function ContinueWatchingSection({
                       ) : (
                         <Tv className="w-3 h-3 text-sky-400" />
                       )}
-                      {entry.type === "MANGA" ? "Manga" : "Anime"}
+                      {entry.type === "MANGA" ? t("common.manga") : t("common.anime")}
                     </span>
 
                     {entry.score && (
@@ -211,7 +211,7 @@ export function ContinueWatchingSection({
                         {entry.totalUnits ? ` / ${entry.totalUnits}` : ""}
                       </span>
                       <span className="text-[11px] text-[#7D8296]">
-                        {entry.totalUnits ? `${pct}%` : "En cours"}
+                        {entry.totalUnits ? `${pct}%` : t("home.inProgress")}
                       </span>
                     </div>
                     {/* Progress Bar */}
@@ -262,7 +262,7 @@ export function ContinueWatchingSection({
                       whileHover={{ scale: 1.06 }}
                       whileTap={{ scale: 0.92 }}
                       onClick={() => openQuickEdit(entry)}
-                      title="Modifier la fiche"
+                      title={tr("Modifier dans Shiori")}
                       className="w-8 h-8 rounded-xl bg-white/[0.04] hover:bg-white/[0.11] border border-white/[0.08] flex items-center justify-center text-[#A5A9BB] hover:text-white transition-colors cursor-pointer"
                     >
                       <SlidersHorizontal className="w-3.5 h-3.5" />

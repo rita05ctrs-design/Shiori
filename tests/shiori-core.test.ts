@@ -16,7 +16,23 @@ import {
   buildMonthCalendarGrid,
 } from "../src/lib/calendar-utils.ts";
 import { computeProfileAffinity } from "../src/lib/affinity.ts";
-import { evaluateAllBadges, extractBadgeMetrics } from "../src/lib/badges.ts";
+import {
+  ADMIN_GRANTABLE_BADGE_IDS,
+  evaluateAllBadges,
+  extractBadgeMetrics,
+} from "../src/lib/badges.ts";
+import {
+  isCreatorRole,
+  isStaffRole,
+  normalizeRole,
+  resolveEffectiveRole,
+} from "../src/lib/server/role-resolver.ts";
+import {
+  DEFAULT_SITE_CONFIG,
+  sanitizeCtaHref,
+  sanitizeSiteConfigInput,
+} from "../src/lib/site-config-utils.ts";
+import { resolveDonationLink } from "../src/lib/donation.ts";
 import { CONTENT_LANGUAGES, normalizeContentLanguage } from "../src/lib/i18n.ts";
 import {
   CURATED_CONTINUATION_COUNT,
@@ -1351,4 +1367,167 @@ test("manga-continuation: resolves verified Manga & Manhwa breakpoints, detects 
     },
   ]);
   assert.equal(picked?.id, 20);
+});
+
+test("admin-roles: resolveEffectiveRole honors ADMIN_EMAIL, ADMIN_ANILIST_ID, DB roles & rejects spoofing", () => {
+  assert.equal(normalizeRole("creator"), "creator");
+  assert.equal(normalizeRole("MODERATOR"), "moderator");
+  assert.equal(normalizeRole("superadmin"), "user");
+  assert.equal(normalizeRole(null), "user");
+
+  // ADMIN_EMAIL match (case-insensitive, comma-separated)
+  assert.equal(
+    resolveEffectiveRole({
+      dbRole: "user",
+      email: "Founder@Shiori.app",
+      adminEmailsEnv: "other@test.com, founder@shiori.app",
+      adminAnilistIdsEnv: "",
+    }),
+    "creator"
+  );
+
+  // ADMIN_ANILIST_ID match
+  assert.equal(
+    resolveEffectiveRole({
+      dbRole: "user",
+      email: "user@example.com",
+      anilistUserId: 987654,
+      adminEmailsEnv: "",
+      adminAnilistIdsEnv: "111, 987654",
+    }),
+    "creator"
+  );
+
+  // DB moderator role preserved when not in creator envs
+  assert.equal(
+    resolveEffectiveRole({
+      dbRole: "moderator",
+      email: "mod@example.com",
+      anilistUserId: 42,
+      adminEmailsEnv: "boss@shiori.app",
+      adminAnilistIdsEnv: "99999",
+    }),
+    "moderator"
+  );
+
+  // Non-matching user stays 'user'
+  assert.equal(
+    resolveEffectiveRole({
+      dbRole: "hacker",
+      email: "guest@example.com",
+      anilistUserId: 123,
+      adminEmailsEnv: "boss@shiori.app",
+      adminAnilistIdsEnv: "99999",
+    }),
+    "user"
+  );
+
+  assert.equal(isCreatorRole("creator"), true);
+  assert.equal(isCreatorRole("moderator"), false);
+  assert.equal(isStaffRole("moderator"), true);
+  assert.equal(isStaffRole("user"), false);
+});
+
+test("badges: grantOnly admin distinctions (Bêta-testeur, Supporter, VIP) require explicit grant", () => {
+  assert.deepEqual([...ADMIN_GRANTABLE_BADGE_IDS], ["beta_tester", "supporter", "vip"]);
+
+  const extremeMetrics = {
+    completedAnimeCount: 2000,
+    mangaCount: 500,
+    episodesWatched: 50000,
+    chaptersRead: 30000,
+    moviesCompletedCount: 100,
+    uniqueGenresCount: 25,
+    totalLibraryCount: 2500,
+    scoredCount: 1000,
+    perfectScoresCount: 50,
+    favoriteMediaCount: 40,
+    favoriteStaffCount: 20,
+    hasCustomAvatar: true,
+    socialInteractionsCount: 500,
+  };
+
+  // Without explicit grant records, grantOnly badges MUST stay locked
+  const withoutGrant = evaluateAllBadges(extremeMetrics, []);
+  for (const id of ADMIN_GRANTABLE_BADGE_IDS) {
+    const b = withoutGrant.find((x) => x.id === id);
+    assert.ok(b, `Expected badge ${id}`);
+    assert.equal(b.unlocked, false);
+    assert.equal(b.progressPct, 0);
+  }
+
+  // With explicit grant record for supporter, only supporter unlocks
+  const withSupporter = evaluateAllBadges(extremeMetrics, [
+    { badgeId: "supporter", unlockedAt: "2026-11-26T12:00:00.000Z" },
+  ]);
+  assert.equal(withSupporter.find((x) => x.id === "supporter")?.unlocked, true);
+  assert.equal(withSupporter.find((x) => x.id === "beta_tester")?.unlocked, false);
+  assert.equal(withSupporter.find((x) => x.id === "vip")?.unlocked, false);
+});
+
+test("site-config: sanitizeSiteConfigInput blocks javascript: URLs and disables empty banners", () => {
+  assert.equal(sanitizeCtaHref("/support"), "/support");
+  assert.equal(sanitizeCtaHref("https://ko-fi.com/shiori"), "https://ko-fi.com/shiori");
+  assert.equal(sanitizeCtaHref("javascript:alert(1)"), "");
+  assert.equal(sanitizeCtaHref("//evil.example/phish"), "");
+
+  // Empty announcement message forces enabled=false
+  const emptyBanner = sanitizeSiteConfigInput(
+    {
+      announcement: {
+        enabled: true,
+        message: "   ",
+        ctaHref: "javascript:alert(1)",
+        tone: "gold",
+      },
+    },
+    DEFAULT_SITE_CONFIG
+  );
+  assert.equal(emptyBanner.announcement.enabled, false);
+  assert.equal(emptyBanner.announcement.ctaHref, "");
+
+  // Valid banner + invalid Hero (without media snapshot) disables hero safely
+  const validBanner = sanitizeSiteConfigInput(
+    {
+      announcement: {
+        enabled: true,
+        message: "Bienvenue sur Shiori !",
+        ctaLabel: "Soutenir",
+        ctaHref: "/support",
+        tone: "crimson",
+      },
+      featuredHero: {
+        enabled: true,
+        mediaId: 154587,
+        customTagline: "Sélection du créateur",
+      },
+    },
+    DEFAULT_SITE_CONFIG,
+    null
+  );
+  assert.equal(validBanner.announcement.enabled, true);
+  assert.equal(validBanner.announcement.tone, "crimson");
+  assert.equal(validBanner.featuredHero.enabled, false);
+});
+
+test("donation: resolveDonationLink classifies Ko-fi, Buy Me a Coffee, PayPal and rejects unsafe URLs", () => {
+  assert.equal(resolveDonationLink("").configured, false);
+  assert.equal(resolveDonationLink(undefined).configured, false);
+  assert.equal(resolveDonationLink("javascript:alert(1)").configured, false);
+  assert.equal(resolveDonationLink("not-a-url").configured, false);
+
+  const kofi = resolveDonationLink("https://ko-fi.com/shiori_app");
+  assert.equal(kofi.configured, true);
+  assert.equal(kofi.platform, "kofi");
+  assert.equal(kofi.platformLabel, "Ko-fi");
+
+  const bmc = resolveDonationLink("https://buymeacoffee.com/shiori");
+  assert.equal(bmc.configured, true);
+  assert.equal(bmc.platform, "buymeacoffee");
+  assert.equal(bmc.platformLabel, "Buy Me a Coffee");
+
+  const paypal = resolveDonationLink("https://paypal.me/shioriproject");
+  assert.equal(paypal.configured, true);
+  assert.equal(paypal.platform, "paypal");
+  assert.equal(paypal.platformLabel, "PayPal");
 });

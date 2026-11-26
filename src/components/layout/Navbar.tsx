@@ -24,6 +24,7 @@ import {
   UserCircle2,
   Heart,
   Languages,
+  Crown,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -33,6 +34,8 @@ import { NotificationsPopover } from "@/components/notifications/NotificationsPo
 import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
 import { LanguageQuickPopover } from "@/components/layout/LanguageQuickPopover";
 import { QuickEpisodesPopover } from "@/components/episodes/QuickEpisodesPopover";
+import { GlobalAnnouncementBanner } from "@/components/layout/GlobalAnnouncementBanner";
+import { RoleBadge } from "@/components/ui/RoleBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { cn } from "@/lib/utils";
 
@@ -127,6 +130,7 @@ export function Navbar() {
   const {
     profile,
     isAuthenticated,
+    isCreator,
     library,
     orderedFavorites,
     ambiance,
@@ -347,7 +351,12 @@ export function Navbar() {
                 onClick={() => setProfileMenuOpen((v) => !v)}
                 aria-label="Menu profil et paramètres"
                 aria-expanded={profileMenuOpen}
-                className="flex items-center gap-2 h-8.5 sm:h-9 px-1 sm:px-1.5 xl:pr-2.5 rounded-full bg-white/[0.045] hover:bg-white/[0.09] border border-white/[0.08] hover:border-white/[0.18] transition-all cursor-pointer"
+                className={cn(
+                  "flex items-center gap-2 h-8.5 sm:h-9 px-1 sm:px-1.5 xl:pr-2.5 rounded-full transition-all cursor-pointer border",
+                  isCreator
+                    ? "bg-[#F0B95B]/10 hover:bg-[#F0B95B]/18 border-[#F0B95B]/45 hover:border-[#F0B95B]/70"
+                    : "bg-white/[0.045] hover:bg-white/[0.09] border-white/[0.08] hover:border-white/[0.18]"
+                )}
               >
                 <UserAvatar
                   avatarUrl={profile.avatarUrl}
@@ -360,6 +369,11 @@ export function Navbar() {
                 <span className="hidden 2xl:inline text-[13px] font-medium text-[#ECEBE6] max-w-[78px] truncate">
                   {profile.displayName}
                 </span>
+                <RoleBadge
+                  role={profile.role}
+                  size="xs"
+                  className="hidden xl:inline-flex"
+                />
               </button>
 
               <AnimatePresence>
@@ -382,9 +396,12 @@ export function Navbar() {
                           size="md"
                         />
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">
-                            {profile.displayName}
-                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-semibold text-white truncate">
+                              {profile.displayName}
+                            </p>
+                            <RoleBadge role={profile.role} size="xs" />
+                          </div>
                           <p className="text-xs text-[#8D92A4] truncate">
                             @{profile.username}
                           </p>
@@ -407,6 +424,16 @@ export function Navbar() {
 
                     {/* Streamlined Localized Profile Menu */}
                     <div className="p-2 space-y-0.5">
+                      {isCreator && (
+                        <Link
+                          href="/admin"
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-semibold text-[#FDE68A] bg-[#F0B95B]/14 hover:bg-[#F0B95B]/22 border border-[#F0B95B]/40 transition-colors mb-1"
+                        >
+                          <Crown className="w-4 h-4 text-[#F0B95B]" />
+                          <span>Espace Créateur</span>
+                        </Link>
+                      )}
                       <Link
                         href={`/profile/${encodeURIComponent(profile.username)}`}
                         onClick={() => setProfileMenuOpen(false)}
@@ -472,6 +499,14 @@ export function Navbar() {
                       >
                         <Settings className="w-4 h-4 text-[#9A9EAE]" />
                         <span>{t("nav.settings")}</span>
+                      </Link>
+                      <Link
+                        href="/support"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#FDE68A] hover:bg-[#F0B95B]/12 transition-colors"
+                      >
+                        <Heart className="w-4 h-4 text-[#F0B95B]" />
+                        <span>Soutenir Shiori</span>
                       </Link>
 
                       {/* Inline Quick Preferences: Language (7 languages) + Ambiance */}
@@ -571,6 +606,7 @@ export function Navbar() {
             </div>
           </div>
         </div>
+        <GlobalAnnouncementBanner />
       </header>
 
       {/* Mobile Floating Frosted-Glass Dock — 5 clear tabs (Accueil + Semaine + Ma Liste + Découvrir + Profil/IA) */}

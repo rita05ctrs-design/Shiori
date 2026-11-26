@@ -4,7 +4,7 @@ import type {
   LibraryStatus,
   MediaType,
 } from "@/types/media";
-import { matchesYearFilter } from "@/lib/year-eras";
+import { matchesYearFilter } from "./year-eras.ts";
 
 export type ProgressFilter =
   | "ALL"

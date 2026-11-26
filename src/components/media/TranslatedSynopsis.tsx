@@ -46,7 +46,7 @@ export function TranslatedSynopsis({
   className,
 }: TranslatedSynopsisProps) {
   const { contentLanguage, setContentLanguage, hydrated } = useShiori();
-  const { t } = useTranslation();
+  const { t, tr } = useTranslation();
   const [showOriginal, setShowOriginal] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [inView, setInView] = useState(!lazy);
@@ -289,7 +289,7 @@ export function TranslatedSynopsis({
               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/35 text-[10.5px] font-medium text-amber-200 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Réessayer ({langMeta?.code ?? contentLanguage.toUpperCase()})</span>
+              <span>{tr("Réessayer ({code})", { code: langMeta?.code ?? contentLanguage.toUpperCase() })}</span>
             </button>
           )}
         </div>

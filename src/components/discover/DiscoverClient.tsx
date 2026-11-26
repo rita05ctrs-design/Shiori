@@ -178,7 +178,61 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
   const { library, contentLanguage } = useShiori();
-  const { t, tGenre } = useTranslation();
+  const { t, tr, locale, tGenre, tFormat, tSeason, tMediaStatus } = useTranslation();
+
+  const animeFormatOptions = useMemo<LuxurySelectOption[]>(
+    () =>
+      ANIME_FORMATS.map((o) => ({
+        ...o,
+        label: o.id === "ALL" ? tr("Tous les formats") : tFormat(o.id),
+        hint: o.hint ? tr(o.hint) : undefined,
+      })),
+    [tFormat, tr]
+  );
+  const mangaFormatOptions = useMemo<LuxurySelectOption[]>(
+    () =>
+      MANGA_FORMATS.map((o) => ({
+        ...o,
+        label: o.id === "ALL" ? tr("Tous les formats") : tFormat(o.id),
+        hint: o.hint ? tr(o.hint) : undefined,
+      })),
+    [tFormat, tr]
+  );
+  const seasonOptions = useMemo<LuxurySelectOption[]>(
+    () =>
+      SEASON_OPTIONS.map((o) => ({
+        ...o,
+        label: o.id === "ALL" ? tr("Toutes les saisons") : tSeason(o.id),
+        hint: o.hint ? tr(o.hint) : undefined,
+      })),
+    [tSeason, tr]
+  );
+  const statusOptions = useMemo<LuxurySelectOption[]>(
+    () =>
+      STATUS_OPTIONS.map((o) => ({
+        ...o,
+        label: o.id === "ALL" ? tr("Tous statuts") : tMediaStatus(o.id),
+        hint: o.hint ? tr(o.hint) : undefined,
+      })),
+    [tMediaStatus, tr]
+  );
+  const minScoreOptions = useMemo<LuxurySelectOption[]>(
+    () =>
+      MIN_SCORE_OPTIONS.map((o) => ({
+        ...o,
+        label: tr(o.label),
+      })),
+    [tr]
+  );
+  const sortOptions = useMemo<LuxurySelectOption[]>(
+    () =>
+      SORT_OPTIONS.map((o) => ({
+        ...o,
+        label: tr(o.label),
+        hint: o.hint ? tr(o.hint) : undefined,
+      })),
+    [tr]
+  );
 
   const yearCopy = useMemo(() => getYearFilterCopy(contentLanguage), [contentLanguage]);
   const yearEraOptions = useMemo(() => getYearEraOptions(contentLanguage), [contentLanguage]);
@@ -1095,8 +1149,22 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   };
 
   const hasUnitFilter = Boolean(debouncedMinUnits || debouncedMaxUnits);
-  const lengthPresets = type === "ANIME" ? ANIME_LENGTH_PRESETS : MANGA_LENGTH_PRESETS;
-  const unitShortLabel = type === "ANIME" ? "ép." : "ch.";
+  const unitShortLabel = type === "ANIME" ? t("common.epShort") : t("common.chShort");
+  const lengthPresets = useMemo<LengthPreset[]>(() => {
+    const raw = type === "ANIME" ? ANIME_LENGTH_PRESETS : MANGA_LENGTH_PRESETS;
+    return raw.map((p) => ({
+      ...p,
+      label:
+        p.id === "ALL"
+          ? tr("Tous")
+          : p.min && p.max
+            ? `${p.min} – ${p.max} ${unitShortLabel}`
+            : p.max
+              ? `≤ ${p.max} ${unitShortLabel}`
+              : `${p.min}+ ${unitShortLabel}`,
+      hint: tr(p.hint),
+    }));
+  }, [type, tr, unitShortLabel]);
 
   const activeLengthPresetId = useMemo(() => {
     const match = lengthPresets.find(
@@ -1139,7 +1207,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     (hasUnitFilter ? 1 : 0);
 
   const hasActiveFilters = Boolean(debouncedSearch.trim()) || activeFilterCount > 0;
-  const formats = type === "ANIME" ? ANIME_FORMATS : MANGA_FORMATS;
+  const formats = type === "ANIME" ? animeFormatOptions : mangaFormatOptions;
 
   // Compute counts per category tab
   const categoryCounts = useMemo(() => {
@@ -1167,21 +1235,23 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     const matches: { id: string; label: string; isGenre: boolean; catLabel: string }[] = [];
     for (const cat of FILTER_CATEGORIES) {
       for (const item of cat.items) {
+        const displayLabel = cat.id === "genres" ? tGenre(item.id) : contentLanguage === "fr" ? item.label : item.id;
         if (
+          displayLabel.toLowerCase().includes(tagSearchTrimmed) ||
           item.label.toLowerCase().includes(tagSearchTrimmed) ||
           item.id.toLowerCase().includes(tagSearchTrimmed)
         ) {
           matches.push({
             id: item.id,
-            label: item.label,
+            label: displayLabel,
             isGenre: cat.id === "genres",
-            catLabel: cat.label,
+            catLabel: tr(cat.label),
           });
         }
       }
     }
     return matches;
-  }, [tagSearchTrimmed]);
+  }, [contentLanguage, tGenre, tagSearchTrimmed, tr]);
 
   const libraryIds = useMemo(
     () => new Set(library.map((e) => e.mediaId)),
@@ -1263,14 +1333,14 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("discover.searchPlaceholder")}
-              className="w-full h-10 pl-10 pr-9 rounded-xl bg-[#080A10] border border-white/[0.09] text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/70 transition-all"
+              className="w-full h-10 pl-10 pr-9 rounded-xl bg-[#080A10] border border-white/[0.09] text-base sm:text-sm text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent/70 transition-all"
             />
             {search && (
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.85 }}
                 onClick={() => setSearch("")}
-                aria-label="Effacer la recherche"
+                aria-label={tr("Effacer")}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-white/[0.08] text-[#7D8296] hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1282,7 +1352,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
             <LuxurySelect
               value={sort}
               onChange={setSort}
-              options={SORT_OPTIONS}
+              options={sortOptions}
               defaultValue="TRENDING_DESC"
               align="right"
               className="flex-1 sm:flex-none min-w-[155px] sm:w-44"
@@ -1299,7 +1369,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               )}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Envies</span>
+              <span>{tr("Envies")}</span>
             </button>
 
             <motion.button
@@ -1336,7 +1406,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-kinpaku/10 border border-kinpaku/25 text-xs text-[#F5D68E]">
             <Wand2 className="w-3.5 h-3.5 text-kinpaku shrink-0" />
             <span className="truncate">
-              Alias détecté :{" "}
+              {tr("Alias détecté :")}{" "}
               <strong className="text-white">{searchAliasPreview.canonicalLabel}</strong>
             </span>
           </div>
@@ -1386,7 +1456,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               className="ml-auto px-2.5 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Effacer</span>
+              <span>{tr("Effacer")}</span>
             </button>
           )}
         </div>
@@ -1405,7 +1475,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.14em] text-[#9A9EAE]">
                     <Gauge className="w-3.5 h-3.5 text-kinpaku shrink-0" />
-                    <span>Intensité minimale par genre</span>
+                    <span>{tr("Intensité minimale par genre")}</span>
                   </span>
                   {hasAnyLiveGenreRank && (
                     <button
@@ -1414,14 +1484,14 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                       className="inline-flex items-center gap-1 text-[11px] font-medium text-accent-soft hover:text-white transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      <span>Réinitialiser</span>
+                      <span>{tr("Réinitialiser")}</span>
                     </button>
                   )}
                 </div>
 
                 <div className="space-y-2">
                   {selectedGenres.map((genreId) => {
-                    const label = getTaxonomyLabel(genreId);
+                    const label = tGenre(genreId);
                     const value = genreMinRanks[genreId] ?? 0;
                     const isActive = value > 0;
 
@@ -1459,7 +1529,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                             onChange={(e) =>
                               updateGenreMinRank(genreId, Number(e.target.value))
                             }
-                            aria-label={`Intensité minimale pour ${label} (${value}%)`}
+                            aria-label={`${label} (${value}%)`}
                             className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-white/[0.12] accent-[#E5484D]"
                           />
                           <span className="font-mono text-[10px] text-kinpaku shrink-0">
@@ -1469,8 +1539,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                             <button
                               type="button"
                               onClick={() => updateGenreMinRank(genreId, 0)}
-                              title={`Réinitialiser ${label} à 0%`}
-                              aria-label={`Réinitialiser l'intensité de ${label}`}
+                              title={`${tr("Réinitialiser")} ${label}`}
+                              aria-label={`${tr("Réinitialiser")} ${label}`}
                               className="p-1 rounded-md bg-white/[0.05] hover:bg-white/[0.12] text-[#9A9EAE] hover:text-white transition-colors cursor-pointer shrink-0"
                             >
                               <X className="w-3 h-3" />
@@ -1520,7 +1590,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                   )}
                 >
                   <LuxurySelect
-                    label="Format"
+                    label={tr("Format")}
                     value={format}
                     onChange={setFormat}
                     options={formats}
@@ -1536,25 +1606,25 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                   />
                   {type === "ANIME" && (
                     <LuxurySelect
-                      label="Saison"
+                      label={tr("Saison")}
                       value={season}
                       onChange={setSeason}
-                      options={SEASON_OPTIONS}
+                      options={seasonOptions}
                       icon={Sparkles}
                     />
                   )}
                   <LuxurySelect
-                    label="Diffusion"
+                    label={tr("Diffusion")}
                     value={status}
                     onChange={setStatus}
-                    options={STATUS_OPTIONS}
+                    options={statusOptions}
                     icon={Radio}
                   />
                   <LuxurySelect
-                    label="Note minimale"
+                    label={tr("Note minimale")}
                     value={minScore}
                     onChange={setMinScore}
-                    options={MIN_SCORE_OPTIONS}
+                    options={minScoreOptions}
                     icon={Star}
                     align="right"
                   />
@@ -1636,7 +1706,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
                         <Tv className="w-3.5 h-3.5 text-accent" />
                         <span>
-                          {type === "ANIME" ? "Nombre d'épisodes" : "Nombre de chapitres"}
+                          {type === "ANIME" ? tr("Nombre d'épisodes") : tr("Nombre de chapitres")}
                         </span>
                       </span>
 
@@ -1649,10 +1719,10 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                           value={minUnits}
                           onChange={(e) => setMinUnits(e.target.value)}
                           placeholder="Min"
-                          aria-label={type === "ANIME" ? "Épisodes minimum" : "Chapitres minimum"}
+                          aria-label="Min"
                           className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                         />
-                        <span className="text-[#656A7E]">à</span>
+                        <span className="text-[#656A7E]">–</span>
                         <input
                           type="number"
                           min={1}
@@ -1660,7 +1730,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                           value={maxUnits}
                           onChange={(e) => setMaxUnits(e.target.value)}
                           placeholder="Max"
-                          aria-label={type === "ANIME" ? "Épisodes maximum" : "Chapitres maximum"}
+                          aria-label="Max"
                           className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                         />
                         <span className="font-mono text-[#7D8296]">{unitShortLabel}</span>
@@ -1698,7 +1768,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
                         <Star className="w-3.5 h-3.5 text-kinpaku fill-current" />
-                        <span>Filtrer par note (/10)</span>
+                        <span>{tr("Filtrer par note (/10)")}</span>
                       </span>
 
                       <div className="flex items-center gap-1.5 text-[11px] font-mono">
@@ -1715,7 +1785,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                                 : "bg-white/[0.03] border-white/[0.08] text-[#8E93A6] hover:text-white"
                             )}
                           >
-                            {cap === "ALL" ? "Aucun" : `≤ ${Number(cap) / 10}`}
+                            {cap === "ALL" ? tr("Aucun") : `≤ ${Number(cap) / 10}`}
                           </button>
                         ))}
                       </div>
@@ -1737,7 +1807,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                             )}
                           >
                             {pill.id !== "ALL" && <Star className="w-3 h-3 fill-current" />}
-                            <span>{pill.label}</span>
+                            <span>{pill.id === "ALL" ? t("common.all") : pill.label}</span>
                           </button>
                         );
                       })}
@@ -1775,7 +1845,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                                 className="absolute inset-0 rounded-lg bg-white/[0.11] border border-white/[0.12]"
                               />
                             )}
-                            <span className="relative z-10">{cat.label}</span>
+                            <span className="relative z-10">{tr(cat.label)}</span>
                             {count > 0 && (
                               <span className="relative z-10 text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-accent text-accent-fg">
                                 {count}
@@ -1793,8 +1863,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                         type="text"
                         value={tagSearch}
                         onChange={(e) => setTagSearch(e.target.value)}
-                        placeholder="Chercher un genre ou situation..."
-                        className="w-full h-9 pl-8 pr-8 rounded-lg bg-[#0F121C] border border-white/[0.08] text-xs text-white placeholder:text-[#63687B] focus:outline-none focus:border-accent/60"
+                        placeholder={tr("Chercher un genre ou situation...")}
+                        className="w-full h-9 pl-8 pr-8 rounded-lg bg-[#0F121C] border border-white/[0.08] text-base sm:text-xs text-white placeholder:text-[#63687B] focus:outline-none focus:border-accent/60"
                       />
                       {tagSearch && (
                         <button
@@ -1812,8 +1882,8 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                   <div className="space-y-3">
                     <p className="text-[11.5px] text-[#7D8296]">
                       {tagSearchTrimmed
-                        ? `Résultats pour « ${tagSearch.trim()} » dans toutes les catégories (${searchedAllItems?.length ?? 0})`
-                        : visibleCategory.description}
+                        ? `${tr("Résultats")} « ${tagSearch.trim()} » (${searchedAllItems?.length ?? 0})`
+                        : tr(visibleCategory.description)}
                     </p>
 
                     {!tagSearchTrimmed && activeCategory === "situations" && (
@@ -1844,7 +1914,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                                   : "bg-white/[0.02] border-white/[0.06] text-[#8E93A6] hover:text-white hover:bg-white/[0.06]"
                               )}
                             >
-                              <span>{grp.label}</span>
+                              <span>{grp.id === "ALL" ? t("common.all") : tr(grp.label)}</span>
                               <span className="font-mono text-[10px] opacity-65">
                                 {grpCount}
                               </span>
@@ -1877,7 +1947,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                       {searchedAllItems ? (
                         searchedAllItems.length === 0 ? (
                           <span className="text-xs text-[#6E7387] py-2">
-                            Aucun genre ou situation ne correspond à &laquo; {tagSearch} &raquo;.
+                            {tr("Aucun résultat trouvé")} « {tagSearch} »
                           </span>
                         ) : (
                           searchedAllItems.map((m) => {
@@ -1923,6 +1993,11 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                             const selected = isGenreCat
                               ? selectedGenres.includes(item.id)
                               : selectedTags.includes(item.id);
+                            const pillLabel = isGenreCat
+                              ? tGenre(item.id)
+                              : contentLanguage === "fr"
+                                ? item.label
+                                : item.id;
 
                             return (
                               <motion.button
@@ -1943,7 +2018,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                                 )}
                               >
                                 {selected && <Check className="w-3 h-3" />}
-                                <span>{item.label}</span>
+                                <span>{pillLabel}</span>
                               </motion.button>
                             );
                           })
@@ -1966,7 +2041,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-white/[0.07]"
             >
               <span className="text-[11px] font-medium text-[#7A7F94] mr-0.5">
-                Filtres actifs :
+                {tr("Filtres actifs :")}
               </span>
 
               {selectedGenres.map((g) => {
@@ -1980,7 +2055,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     exit={{ scale: 0.85, opacity: 0 }}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/40 text-xs font-medium text-white"
                   >
-                    <span>{getTaxonomyLabel(g)}</span>
+                    <span>{tGenre(g)}</span>
                     {rankVal > 0 && (
                       <span className="font-mono text-[10.5px] font-bold text-kinpaku">
                         ≥ {rankVal}%
@@ -1989,7 +2064,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     <button
                       type="button"
                       onClick={() => toggleGenre(g)}
-                      aria-label={`Retirer ${getTaxonomyLabel(g)}`}
+                      aria-label={`${tr("Retirer")} ${tGenre(g)}`}
                       className="text-accent-soft hover:text-white cursor-pointer"
                     >
                       <X className="w-3 h-3" />
@@ -1998,30 +2073,33 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 );
               })}
 
-              {selectedTags.map((t) => (
-                <motion.span
-                  key={`active-t-${t}`}
-                  layout
-                  initial={{ scale: 0.85, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.85, opacity: 0 }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/18 border border-violet-400/40 text-xs font-medium text-violet-100"
-                >
-                  <span>{getTaxonomyLabel(t)}</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleTag(t)}
-                    aria-label={`Retirer ${getTaxonomyLabel(t)}`}
-                    className="text-violet-300 hover:text-white cursor-pointer"
+              {selectedTags.map((tagId) => {
+                const tagLabel = contentLanguage === "fr" ? getTaxonomyLabel(tagId) : tagId;
+                return (
+                  <motion.span
+                    key={`active-t-${tagId}`}
+                    layout
+                    initial={{ scale: 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.85, opacity: 0 }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-500/18 border border-violet-400/40 text-xs font-medium text-violet-100"
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </motion.span>
-              ))}
+                    <span>{tagLabel}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleTag(tagId)}
+                      aria-label={`${tr("Retirer")} ${tagLabel}`}
+                      className="text-violet-300 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </motion.span>
+                );
+              })}
 
               {format !== "ALL" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
-                  <span>{formats.find((f) => f.id === format)?.label ?? format}</span>
+                  <span>{formats.find((f) => f.id === format)?.label ?? tFormat(format)}</span>
                   <button type="button" onClick={() => setFormat("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
                     <X className="w-3 h-3" />
                   </button>
@@ -2044,7 +2122,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
               {season !== "ALL" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
-                  <span>{SEASON_OPTIONS.find((s) => s.id === season)?.label}</span>
+                  <span>{tSeason(season)}</span>
                   <button type="button" onClick={() => setSeason("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
                     <X className="w-3 h-3" />
                   </button>
@@ -2053,7 +2131,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
               {status !== "ALL" && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08] border border-white/[0.14] text-xs text-white">
-                  <span>{STATUS_OPTIONS.find((s) => s.id === status)?.label}</span>
+                  <span>{tMediaStatus(status)}</span>
                   <button type="button" onClick={() => setStatus("ALL")} className="text-[#9A9EAE] hover:text-white cursor-pointer">
                     <X className="w-3 h-3" />
                   </button>
@@ -2100,7 +2178,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium text-accent-soft hover:text-white hover:bg-accent/20 transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>Tout effacer</span>
+                <span>{tr("Tout effacer")}</span>
               </button>
             </motion.div>
           )}
@@ -2113,15 +2191,16 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
           {loading ? (
             <span className="inline-flex items-center gap-2 text-white">
               <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
-              Actualisation du catalogue...
+              {t("common.loading")}
             </span>
           ) : (
             <span>
-              <strong className="text-white font-mono">{visibleItems.length}</strong> affichés
-              {total > items.length ? ` sur ${total.toLocaleString("fr-FR")} œuvres` : ""}
+              <strong className="text-white font-mono">{visibleItems.length}</strong>{" "}
+              {tr("{count} affichés", { count: "" }).trim()}
+              {total > items.length ? ` / ${total.toLocaleString(locale)} ${t("common.titles")}` : ""}
               {hideInLibrary && hiddenCount > 0 && (
                 <span className="ml-1.5 text-accent-soft">
-                  ({hiddenCount} déjà dans ma bibliothèque masqué{hiddenCount > 1 ? "s" : ""})
+                  ({hiddenCount} {tr("masqué(s)")})
                 </span>
               )}
             </span>
@@ -2130,7 +2209,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         <div className="flex items-center gap-3">
           {selectedGenres.length + selectedTags.length > 1 && (
             <span className="text-[11px] font-mono text-[#7D8296] hidden sm:inline">
-              Mode combiné : {selectedGenres.length + selectedTags.length} critères actifs
+              {tr("Mode combiné : {n} critères actifs", {
+                n: selectedGenres.length + selectedTags.length,
+              })}
             </span>
           )}
           <button
@@ -2144,7 +2225,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
             )}
           >
             {hideInLibrary ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            <span>Masquer ma bibliothèque</span>
+            <span>{tr("Masquer ma bibliothèque")}</span>
           </button>
         </div>
       </div>
@@ -2163,11 +2244,11 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       ) : visibleItems.length === 0 ? (
         <div className="rounded-2xl card-surface py-16 px-6 text-center">
           <Sparkles className="w-8 h-8 text-[#52576B] mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-white">Aucun résultat trouvé</h3>
+          <h3 className="text-base font-semibold text-white">{tr("Aucun résultat trouvé")}</h3>
           <p className="text-sm text-[#868B9F] mt-1 max-w-md mx-auto">
             {hideInLibrary && items.length > 0
-              ? "Toutes les œuvres de cette page figurent déjà dans votre bibliothèque. Chargez la suite ou désactivez le filtre."
-              : "Cette combinaison de filtres est très précise. Retirez un critère ou réinitialisez pour élargir les résultats."}
+              ? tr("Toutes les œuvres de cette page figurent déjà dans votre bibliothèque. Chargez la suite ou désactivez le filtre.")
+              : tr("Cette combinaison de filtres est très précise. Retirez un critère ou réinitialisez pour élargir les résultats.")}
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             {hideInLibrary && items.length > 0 && (
@@ -2176,7 +2257,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 onClick={() => setHideInLibrary(false)}
                 className="px-5 py-2 rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-white/[0.12] text-white text-xs font-semibold cursor-pointer"
               >
-                Afficher ma bibliothèque
+                {tr("Afficher ma bibliothèque")}
               </button>
             )}
             <button
@@ -2184,7 +2265,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               onClick={resetAll}
               className="px-5 py-2 rounded-full bg-accent text-accent-fg text-xs font-semibold hover:bg-accent-hover cursor-pointer"
             >
-              Tout réinitialiser
+              {tr("Tout réinitialiser")}
             </button>
           </div>
         </div>
@@ -2212,10 +2293,10 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 {loadingMore ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-accent" />
-                    <span>Chargement...</span>
+                    <span>{t("common.loading")}</span>
                   </>
                 ) : (
-                  <span>Charger plus de titres</span>
+                  <span>{t("discover.loadMore")}</span>
                 )}
               </motion.button>
             </div>

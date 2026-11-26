@@ -47,86 +47,87 @@ import {
 import {
   cn,
   formatCompactNumber,
-  formatCountdown,
-  formatFormat,
   formatScore,
-  formatSeason,
   getDisplayTitle,
   STATUS_CONFIG,
 } from "@/lib/utils";
 import type { SeasonalBucket } from "@/lib/anilist";
-import type { AiringScheduleItem, MediaItem } from "@/types/media";
+import type { AiringScheduleItem, ContentLanguage, MediaItem } from "@/types/media";
 
-const DAY_NAMES_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
-const DAY_NAMES_FULL = [
-  "Dimanche",
-  "Lundi",
-  "Mardi",
-  "Mercredi",
-  "Jeudi",
-  "Vendredi",
-  "Samedi",
-];
-const MONTHS_FR = [
-  "janv.",
-  "févr.",
-  "mars",
-  "avr.",
-  "mai",
-  "juin",
-  "juil.",
-  "août",
-  "sept.",
-  "oct.",
-  "nov.",
-  "déc.",
-];
+function capitalizeFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+function getLocalizedCalendarNames(locale: string) {
+  const shortDayFmt = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
+  const longDayFmt = new Intl.DateTimeFormat(locale, { weekday: "long", timeZone: "UTC" });
+  const shortMonthFmt = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" });
+  const longMonthFmt = new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" });
+
+  // 2023-01-01 is Sunday (day index 0)
+  const dayNamesShort = Array.from({ length: 7 }, (_, i) =>
+    capitalizeFirst(shortDayFmt.format(new Date(Date.UTC(2023, 0, 1 + i))).replace(/\.$/, ""))
+  );
+  const dayNamesFull = Array.from({ length: 7 }, (_, i) =>
+    capitalizeFirst(longDayFmt.format(new Date(Date.UTC(2023, 0, 1 + i))))
+  );
+  const weekdayHeadersMon = [
+    dayNamesShort[1],
+    dayNamesShort[2],
+    dayNamesShort[3],
+    dayNamesShort[4],
+    dayNamesShort[5],
+    dayNamesShort[6],
+    dayNamesShort[0],
+  ];
+  const monthsShort = Array.from({ length: 12 }, (_, m) =>
+    shortMonthFmt.format(new Date(Date.UTC(2023, m, 15)))
+  );
+  const monthsFull = Array.from({ length: 12 }, (_, m) =>
+    capitalizeFirst(longMonthFmt.format(new Date(Date.UTC(2023, m, 15))))
+  );
+  return { dayNamesShort, dayNamesFull, weekdayHeadersMon, monthsShort, monthsFull };
+}
 
 function formatReleaseDate(
   media: MediaItem,
-  nowMs: number | null
+  nowMs: number | null,
+  monthsShort: string[],
+  tSeasonYear: (s: string | null | undefined, y: number | null | undefined) => string,
+  tbaLabel: string,
+  lang: ContentLanguage
 ): { label: string; daysUntil: number | null } {
   const d = media.startDate;
   if (d?.year && d?.month && d?.day) {
     const dt = new Date(d.year, d.month - 1, d.day);
     const diffDays =
       nowMs && nowMs > 0 ? Math.ceil((dt.getTime() - nowMs) / 86400000) : null;
+    const label =
+      lang === "ja"
+        ? `${d.year}年${d.month}月${d.day}日`
+        : `${d.day} ${monthsShort[d.month - 1]} ${d.year}`;
     return {
-      label: `${d.day} ${MONTHS_FR[d.month - 1]} ${d.year}`,
+      label,
       daysUntil: diffDays !== null && diffDays > 0 ? diffDays : null,
     };
   }
   if (media.season && media.seasonYear) {
-    return { label: formatSeason(media.season, media.seasonYear), daysUntil: null };
+    return { label: tSeasonYear(media.season, media.seasonYear), daysUntil: null };
   }
   if (d?.year && d?.month) {
-    return { label: `${MONTHS_FR[d.month - 1]} ${d.year}`, daysUntil: null };
+    return {
+      label: lang === "ja" ? `${d.year}年${d.month}月` : `${monthsShort[d.month - 1]} ${d.year}`,
+      daysUntil: null,
+    };
   }
   if (d?.year || media.seasonYear) {
     return { label: String(d?.year ?? media.seasonYear), daysUntil: null };
   }
-  return { label: "Date à confirmer", daysUntil: null };
+  return { label: tbaLabel, daysUntil: null };
 }
 
 type SeasonFormatFilter = "ALL" | "TV" | "MOVIE" | "ONA_OVA" | "MYLIST";
 type CalendarViewMode = "day" | "week" | "month";
-
-const MONTH_NAMES_FULL_FR = [
-  "Janvier",
-  "Février",
-  "Mars",
-  "Avril",
-  "Mai",
-  "Juin",
-  "Juillet",
-  "Août",
-  "Septembre",
-  "Octobre",
-  "Novembre",
-  "Décembre",
-];
-
-const WEEKDAY_HEADERS_MON = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 interface CalendarClientProps {
   schedule: AiringScheduleItem[];
@@ -135,7 +136,22 @@ interface CalendarClientProps {
 
 export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
   const { getEntry, quickAdd, upsertEntry, openQuickEdit, incrementProgress, openTrailer } = useShiori();
-  const { t } = useTranslation();
+  const { t, tr, lang, locale, tStatus, tGenre, tFormat, tSeasonYear, tCountdown } = useTranslation();
+
+  const calNames = useMemo(() => getLocalizedCalendarNames(locale), [locale]);
+
+  const getSeasonBucketLabel = (bucket: SeasonalBucket): string => {
+    if (bucket.season && bucket.year) return tSeasonYear(bucket.season, bucket.year);
+    if (bucket.id === "ANNOUNCED") return tr("Annoncés");
+    return bucket.label;
+  };
+  const getSeasonBucketSublabel = (bucket: SeasonalBucket): string => {
+    if (bucket.isCurrent) return tr("Saison en cours");
+    if (bucket.isNext) return tr("Saison suivante");
+    if (bucket.id === "ANNOUNCED") return tr("Prochainement");
+    if (bucket.sublabel.toLowerCase().includes("précéd")) return tr("Saison précédente");
+    return tr("À venir");
+  };
 
   const [tzMode, setTzMode] = useState<"local" | "jst">("local");
   const [localTimeZone, setLocalTimeZone] = useState<string>("UTC");
@@ -194,15 +210,15 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
       }
       return {
         key: formatDateKeyInTimezone(d, activeTimeZone),
-        short: DAY_NAMES_SHORT[nowMs !== null ? d.getDay() : d.getUTCDay()],
-        full: DAY_NAMES_FULL[nowMs !== null ? d.getDay() : d.getUTCDay()],
+        short: calNames.dayNamesShort[nowMs !== null ? d.getDay() : d.getUTCDay()],
+        full: calNames.dayNamesFull[nowMs !== null ? d.getDay() : d.getUTCDay()],
         dayNum: nowMs !== null ? d.getDate() : d.getUTCDate(),
-        monthLabel: MONTHS_FR[nowMs !== null ? d.getMonth() : d.getUTCMonth()],
+        monthLabel: calNames.monthsShort[nowMs !== null ? d.getMonth() : d.getUTCMonth()],
         isToday: i === 0,
         isTomorrow: i === 1,
       };
     });
-  }, [anchorMs, nowMs, activeTimeZone]);
+  }, [anchorMs, nowMs, activeTimeZone, calNames]);
 
   // Section 1 state (Daily / Weekly / Monthly Schedule)
   const [selectedDayKey, setSelectedDayKey] = useState<string>(rollingDays[0].key);
@@ -403,7 +419,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                 : "bg-[#F0B95B]/18 text-[#F0B95B]"
             )}
           >
-            {isPast ? "Sorti" : "À venir"}
+            {isPast ? tr("Sorti") : tr("À venir")}
           </span>
         </div>
 
@@ -422,7 +438,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <span className="px-2 py-0.5 rounded-md bg-accent/18 border border-accent/35 font-mono text-[10.5px] font-semibold text-accent-soft">
-              Ép. {slot.episode}
+              {t("common.epShort")} {slot.episode}
             </span>
             {slot.media.averageScore && (
               <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#F0B95B]">
@@ -439,7 +455,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                   STATUS_CONFIG[entry.status].color
                 )}
               >
-                Suivi · Ép. {entry.progress}
+                {tr("Suivi · {unit} {n}", { unit: t("common.epShort"), n: entry.progress })}
               </span>
             )}
           </div>
@@ -465,7 +481,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                 !isPast && "text-[#F7D08A]"
               )}
             >
-              {nowMs !== null ? formatCountdown(slot.airingAt) : "Horaire confirmé"}
+              {nowMs !== null ? tCountdown(slot.airingAt) : tr("Horaire confirmé")}
             </span>
             {slot.media.studio && (
               <>
@@ -482,7 +498,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           </div>
         </div>
 
-        {/* Quick 1-Click Oui / Non (for aired episodes) or Follow (for upcoming) */}
+        {/* Quick 1-Click Yes / No (for aired episodes) or Follow (for upcoming) */}
         <div className="shrink-0">
           {isPast ? (
             (() => {
@@ -490,7 +506,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               return (
                 <div
                   role="group"
-                  aria-label={`Avez-vous vu ${title} épisode ${slot.episode} ?`}
+                  aria-label={`${title} ${t("common.epShort")} ${slot.episode}`}
                   className="inline-flex items-center p-0.5 rounded-xl bg-obsidian/90 border border-white/[0.1]"
                 >
                   <button
@@ -503,7 +519,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         });
                       }
                     }}
-                    title={isWatched ? `Marquer Ép. ${slot.episode} non vu` : "Non vu"}
+                    title={tr("Non vu")}
                     className={cn(
                       "h-8 px-2 rounded-lg text-[11px] font-semibold inline-flex items-center gap-0.5 transition-colors cursor-pointer",
                       !isWatched
@@ -512,7 +528,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                     )}
                   >
                     <X className="w-3 h-3" />
-                    <span className="hidden sm:inline">Non</span>
+                    <span className="hidden sm:inline">{tr("Non")}</span>
                   </button>
                   <button
                     type="button"
@@ -525,7 +541,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         });
                       }
                     }}
-                    title={isWatched ? `Ép. ${slot.episode} vu ✓` : `Marquer Ép. ${slot.episode} vu en 1 clic`}
+                    title={`${t("common.epShort")} ${slot.episode}`}
                     className={cn(
                       "h-8 px-2.5 rounded-lg text-[11px] font-semibold inline-flex items-center gap-1 transition-all cursor-pointer",
                       isWatched
@@ -534,7 +550,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                     )}
                   >
                     <Check className="w-3 h-3 stroke-[2.8]" />
-                    <span className="hidden sm:inline">Oui</span>
+                    <span className="hidden sm:inline">{tr("Oui")}</span>
                   </button>
                 </div>
               );
@@ -543,7 +559,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
             <button
               type="button"
               onClick={() => incrementProgress(slot.media.id, 1)}
-              title="Marquer +1 épisode vu"
+              title={tr("Marquer +1 épisode vu")}
               className="h-9 px-3 rounded-xl bg-emerald-500/18 hover:bg-emerald-500/30 border border-emerald-400/35 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
             >
               <Check className="w-3.5 h-3.5" />
@@ -553,11 +569,11 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
             <button
               type="button"
               onClick={() => quickAdd(slot.media, "WATCHING")}
-              title="Suivre cet anime en 1 clic"
+              title={tr("Suivre")}
               className="h-9 px-3 rounded-xl bg-white/[0.05] hover:bg-accent border border-white/[0.09] hover:border-accent text-white hover:text-accent-fg text-xs font-medium flex items-center gap-1 transition-all cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Suivre</span>
+              <span className="hidden sm:inline">{tr("Suivre")}</span>
             </button>
           )}
         </div>
@@ -589,21 +605,21 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
             className="inline-flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-full bg-emerald-500/16 hover:bg-emerald-500/26 border border-emerald-400/35 text-xs font-semibold text-emerald-200 transition-colors"
           >
             <ListChecks className="w-3.5 h-3.5" />
-            <span>Pointage 1 clic</span>
+            <span>{tr("Pointage 1 clic")}</span>
           </Link>
           <a
             href="#daily-schedule"
             className="inline-flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-full bg-white/[0.07] hover:bg-white/[0.13] border border-white/[0.12] text-xs font-semibold text-white transition-colors"
           >
             <Clock className="w-3.5 h-3.5 text-[#F0B95B]" />
-            <span>Planning du jour</span>
+            <span>{tr("Planning du jour")}</span>
           </a>
           <a
             href="#seasonal-browser"
             className="inline-flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-full bg-accent/18 hover:bg-accent/30 border border-accent/40 text-xs font-semibold text-accent-soft hover:text-accent-fg transition-colors"
           >
             <CalendarClock className="w-3.5 h-3.5" />
-            <span>Saisons & Prochainement</span>
+            <span>{tr("Saisons & Prochainement")}</span>
           </a>
         </div>
       </div>
@@ -615,32 +631,32 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-white flex flex-wrap items-center gap-2.5">
-              <span>Planning des sorties</span>
+              <span>{tr("Planning des sorties")}</span>
               <span className="text-xs font-mono font-normal px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-[#B8BCCB]">
                 {viewMode === "month"
-                  ? `${MONTH_NAMES_FULL_FR[monthCursor.month]} ${monthCursor.year}`
+                  ? `${calNames.monthsFull[monthCursor.month]} ${monthCursor.year}`
                   : viewMode === "week"
-                    ? "Vue 7 jours"
+                    ? tr("Vue 7 jours")
                     : `${activeDayMeta.full} ${activeDayMeta.dayNum} ${activeDayMeta.monthLabel}`}
               </span>
             </h2>
             <p className="text-xs text-[#858A9E] mt-1">
-              Horaires authentiques AniList affichés en{" "}
+              {tr("Horaires authentiques AniList affichés en")}{" "}
               <strong className="text-[#C8CCE0]">
                 {tzMode === "jst" ? "JST (Asia/Tokyo)" : localTimeZone}
               </strong>{" "}
-              · distinction automatique disponible vs à venir.
+              · {tr("distinction automatique disponible vs à venir.")}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
-            {/* View Switcher: Jour / Semaine / Mois */}
+            {/* View Switcher: Day / Week / Month */}
             <div className="inline-flex items-center p-1 rounded-full bg-surface border border-white/[0.09]">
               {(
                 [
-                  { id: "day", label: "Jour" },
-                  { id: "week", label: "Semaine" },
-                  { id: "month", label: "Mois" },
+                  { id: "day", label: tr("Jour") },
+                  { id: "week", label: tr("Semaine") },
+                  { id: "month", label: tr("Mois") },
                 ] as const
               ).map((m) => (
                 <button
@@ -663,11 +679,10 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
             <button
               type="button"
               onClick={() => setTzMode((z) => (z === "local" ? "jst" : "local"))}
-              title="Basculer entre votre fuseau horaire local et l'heure japonaise (JST)"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface hover:bg-white/[0.08] border border-white/[0.09] text-xs font-mono text-[#C8CCE0] hover:text-white transition-colors cursor-pointer"
             >
               <Globe className="w-3.5 h-3.5 text-sky-400" />
-              <span>{tzMode === "jst" ? "JST (Japon)" : "Heure locale"}</span>
+              <span>{tzMode === "jst" ? tr("JST (Japon)") : tr("Heure locale")}</span>
             </button>
 
             <button
@@ -737,24 +752,28 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                 </p>
                 <div className="relative z-10 mt-1.5 flex items-center gap-1.5 text-[10px] font-mono">
                   {upCount > 0 && (
-                    <span className="text-[#F0B95B] whitespace-nowrap">{upCount} à venir</span>
+                    <span className="text-[#F0B95B] whitespace-nowrap">
+                      {tr("{n} à venir", { n: upCount })}
+                    </span>
                   )}
                   {upCount > 0 && doneCount > 0 && (
                     <span className="text-white/25 hidden xl:inline">·</span>
                   )}
                   {doneCount > 0 && (
                     <span className="text-emerald-400/80 hidden xl:inline">
-                      {doneCount} sorti{doneCount > 1 ? "s" : ""}
+                      {tr("{n} sorti(s)", { n: doneCount })}
                     </span>
                   )}
-                  {list.length === 0 && <span className="text-[#656A7E]">0 ép.</span>}
+                  {list.length === 0 && (
+                    <span className="text-[#656A7E]">0 {t("common.epShort")}</span>
+                  )}
                 </div>
               </button>
             );
           })}
         </div>
 
-        {/* Same-Day Split View: À venir aujourd'hui + Ligne Maintenant + Déjà sortis aujourd'hui */}
+        {/* Same-Day Split View */}
         <AnimatePresence mode="wait">
           <motion.div
             key={`${selectedDayKey}-${scheduleOnlyMyList ? "mine" : "all"}`}
@@ -768,8 +787,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               <div className="rounded-2xl card-surface py-12 px-6 text-center">
                 <Sparkles className="w-7 h-7 text-[#52576B] mx-auto mb-2.5" />
                 <p className="text-sm font-semibold text-white">
-                  Aucune diffusion enregistrée pour ce jour
-                  {scheduleOnlyMyList ? " dans votre liste" : ""}.
+                  {tr("Aucune diffusion enregistrée pour ce jour")}
                 </p>
                 {scheduleOnlyMyList && (
                   <button
@@ -777,13 +795,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                     onClick={() => setScheduleOnlyMyList(false)}
                     className="mt-3 px-4 py-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-xs font-medium text-white cursor-pointer"
                   >
-                    Afficher toutes les sorties
+                    {tr("Afficher toutes les sorties")}
                   </button>
                 )}
               </div>
             ) : (
               <>
-                {/* BLOC A: À venir dans cette journée */}
+                {/* BLOC A: Upcoming */}
                 {dayUpcoming.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -791,8 +809,10 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         <Clock className="w-4 h-4 text-[#F0B95B]" />
                         <span>
                           {activeDayMeta.isToday
-                            ? "À venir plus tard aujourd'hui"
-                            : `À venir — ${activeDayMeta.full} ${activeDayMeta.dayNum} ${activeDayMeta.monthLabel}`}
+                            ? tr("À venir plus tard aujourd'hui")
+                            : tr("À venir — {day}", {
+                                day: `${activeDayMeta.full} ${activeDayMeta.dayNum} ${activeDayMeta.monthLabel}`,
+                              })}
                         </span>
                         <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/35 text-[#F0B95B]">
                           {dayUpcoming.length}
@@ -805,19 +825,21 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                   </div>
                 )}
 
-                {/* Ligne de séparation temporelle "Maintenant" quand la journée contient À venir ET Déjà sortis */}
+                {/* Now divider */}
                 {dayUpcoming.length > 0 && dayAired.length > 0 && (
                   <div className="flex items-center gap-3 py-1">
                     <span className="h-px flex-1 bg-gradient-to-r from-transparent via-accent/50 to-accent/50" />
                     <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent/15 border border-accent/40 text-[11px] font-mono font-semibold text-accent-soft">
                       <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                      <span>Maintenant · {nowTimeStr}</span>
+                      <span>
+                        {tr("Maintenant")} · {nowTimeStr}
+                      </span>
                     </span>
                     <span className="h-px flex-1 bg-gradient-to-l from-transparent via-accent/50 to-accent/50" />
                   </div>
                 )}
 
-                {/* BLOC B: Déjà sortis dans cette journée */}
+                {/* BLOC B: Already aired */}
                 {dayAired.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -825,8 +847,8 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                         <span>
                           {activeDayMeta.isToday
-                            ? "Déjà sortis aujourd'hui"
-                            : `Déjà sortis — ${activeDayMeta.full}`}
+                            ? tr("Déjà sortis aujourd'hui")
+                            : tr("Déjà sortis — {day}", { day: activeDayMeta.full })}
                         </span>
                         <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-300">
                           {dayAired.length}
@@ -845,7 +867,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           </>
         )}
 
-        {/* VIEW 2: HEBDOMADAIRE (7 jours côte à côte / empilés avec heures exactes) */}
+        {/* VIEW 2: WEEKLY */}
         {viewMode === "week" && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             {rollingDays.map((day) => {
@@ -864,7 +886,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         <span>{day.full}</span>
                         {day.isToday && (
                           <span className="px-1.5 py-0.2 rounded bg-accent/20 text-accent-soft font-mono text-[9.5px]">
-                            AUJ.
+                            {tr("AUJ.")}
                           </span>
                         )}
                       </p>
@@ -873,13 +895,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                       </p>
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-white/[0.06] font-mono text-[10.5px] text-[#D2D6E6]">
-                      {items.length} ép.
+                      {items.length} {t("common.epShort")}
                     </span>
                   </div>
 
                   {items.length === 0 ? (
                     <p className="text-xs text-[#6E7387] py-4 text-center">
-                      Aucune sortie enregistrée
+                      {tr("Aucune sortie enregistrée")}
                     </p>
                   ) : (
                     <div className="space-y-2 max-h-[340px] overflow-y-auto pr-0.5">
@@ -912,7 +934,9 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                                   {formatTimeInTimezone(slot.airingAt, activeTimeZone)}
                                 </span>
                                 <span className="text-white/25">·</span>
-                                <span className="text-accent-soft">Ép. {slot.episode}</span>
+                                <span className="text-accent-soft">
+                                  {t("common.epShort")} {slot.episode}
+                                </span>
                                 <span
                                   className={cn(
                                     "ml-auto px-1.5 rounded text-[9px]",
@@ -921,7 +945,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                                       : "bg-[#F0B95B]/15 text-[#F0B95B]"
                                   )}
                                 >
-                                  {isPast ? "Dispo" : "À venir"}
+                                  {isPast ? tr("Dispo") : tr("À venir")}
                                 </span>
                               </div>
                             </div>
@@ -936,7 +960,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           </div>
         )}
 
-        {/* VIEW 3: MENSUELLE (Grille calendrier mensuel avec sorties simulcast + premières saisonnières réelles) */}
+        {/* VIEW 3: MONTHLY */}
         {viewMode === "month" && (
           <div className="space-y-5">
             <div className="rounded-2xl card-surface border border-white/[0.09] p-4 sm:p-5 space-y-4">
@@ -950,17 +974,17 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         : { year: c.year, month: c.month - 1 }
                     )
                   }
-                  aria-label="Mois précédent"
+                  aria-label={tr("Mois précédent")}
                   className="w-9 h-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] flex items-center justify-center text-white cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <div className="text-center">
                   <p className="text-sm sm:text-base font-bold text-white">
-                    {MONTH_NAMES_FULL_FR[monthCursor.month]} {monthCursor.year}
+                    {calNames.monthsFull[monthCursor.month]} {monthCursor.year}
                   </p>
                   <p className="text-[11px] text-[#858A9E]">
-                    Épisodes simulcast (points or) & premières saisonnières confirmées (points cyan)
+                    {tr("Épisodes simulcast (points or) & premières saisonnières confirmées (points cyan)")}
                   </p>
                 </div>
                 <button
@@ -972,7 +996,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         : { year: c.year, month: c.month + 1 }
                     )
                   }
-                  aria-label="Mois suivant"
+                  aria-label={tr("Mois suivant")}
                   className="w-9 h-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.1] flex items-center justify-center text-white cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -980,7 +1004,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               </div>
 
               <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10.5px] font-mono uppercase text-[#7D8296]">
-                {WEEKDAY_HEADERS_MON.map((w) => (
+                {calNames.weekdayHeadersMon.map((w) => (
                   <div key={w} className="py-1">
                     {w}
                   </div>
@@ -1014,7 +1038,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         <div className="flex flex-wrap items-center gap-1 mt-1">
                           {cell.airingCount > 0 && (
                             <span className="px-1 py-0.2 rounded bg-[#F0B95B]/20 text-[#F0B95B] font-mono text-[9.5px] font-bold">
-                              {cell.airingCount} ép
+                              {cell.airingCount} {t("common.epShort")}
                             </span>
                           )}
                           {cell.premiereCount > 0 && (
@@ -1038,16 +1062,19 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                 <div className="rounded-2xl card-surface border border-white/[0.08] p-4 sm:p-5 space-y-4">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-sm font-bold text-white">
-                      Sorties confirmées le {selectedMonthDateKey}
+                      {tr("Sorties confirmées le {date}", { date: selectedMonthDateKey })}
                     </h3>
                     <span className="text-[11px] font-mono text-[#858A9E]">
-                      {slots.length} épisode(s) · {premieres.length} première(s)
+                      {tr("{slots} épisode(s) · {premieres} première(s)", {
+                        slots: slots.length,
+                        premieres: premieres.length,
+                      })}
                     </span>
                   </div>
 
                   {slots.length === 0 && premieres.length === 0 ? (
                     <p className="text-xs text-[#858A9E]">
-                      Aucune sortie horodatée confirmée par AniList pour cette date.
+                      {tr("Aucune sortie horodatée confirmée par AniList pour cette date.")}
                     </p>
                   ) : (
                     <div className="space-y-4">
@@ -1061,7 +1088,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                       {premieres.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-[11px] font-mono uppercase tracking-wider text-sky-300">
-                            Premières / Lancements confirmés
+                            {tr("Premières / Lancements confirmés")}
                           </p>
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                             {premieres.map((m) => (
@@ -1081,7 +1108,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                                     {getDisplayTitle(m)}
                                   </p>
                                   <p className="text-[10.5px] font-mono text-[#8E93A6] mt-0.5">
-                                    {formatFormat(m.format)}
+                                    {tFormat(m.format)}
                                     {m.studio ? ` · ${m.studio}` : ""}
                                   </p>
                                 </div>
@@ -1100,7 +1127,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
       </section>
 
       {/* ==================================================================== */}
-      {/* SECTION 2: SAISONS & PROCHAINEMENT (STYLE MYANIMELIST SEASONAL)      */}
+      {/* SECTION 2: SEASONAL BROWSER                                          */}
       {/* ==================================================================== */}
       <section
         id="seasonal-browser"
@@ -1110,14 +1137,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           <div>
             <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#F0B95B] mb-1 flex items-center gap-1.5">
               <CalendarClock className="w-3.5 h-3.5" />
-              <span>Catalogue Saisonnier · Façon MyAnimeList</span>
+              <span>{tr("Catalogue Saisonnier")}</span>
             </p>
             <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              Saisons & Sorties Prochainement
+              {tr("Saisons & Sorties Prochainement")}
             </h2>
             <p className="text-sm text-[#868B9F] mt-1">
-              Parcourez la saison en cours, les prochaines saisons (Hiver, Printemps, Été, Automne)
-              et les sorties annoncées avec synopsis complet.
+              {tr("Parcourez la saison en cours, les prochaines saisons et les sorties annoncées avec synopsis complet.")}
             </p>
           </div>
 
@@ -1127,7 +1153,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               type="text"
               value={seasonSearch}
               onChange={(e) => setSeasonSearch(e.target.value)}
-              placeholder="Filtrer dans cette saison..."
+              placeholder={tr("Filtrer cette saison...")}
               className="w-full h-10 pl-10 pr-3.5 rounded-xl bg-surface border border-white/[0.09] text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
             />
           </div>
@@ -1148,7 +1174,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                 )}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">{bucket.label}</span>
+                  <span className="text-sm font-semibold">{getSeasonBucketLabel(bucket)}</span>
                   <span
                     className={cn(
                       "text-[10.5px] font-mono px-1.5 py-0.5 rounded-md",
@@ -1170,7 +1196,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                         : "text-[#6E7387]"
                   )}
                 >
-                  {bucket.sublabel}
+                  {getSeasonBucketSublabel(bucket)}
                 </span>
                 {isSelected && (
                   <motion.span
@@ -1184,15 +1210,15 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
           })}
         </div>
 
-        {/* Format Sub-filter Bar (TV, Films, ONA/OVA, Dans ma liste) */}
+        {/* Format Sub-filter Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             {[
-              { id: "ALL" as const, label: "Tous les formats", icon: Layers },
-              { id: "TV" as const, label: "Séries TV", icon: Tv },
-              { id: "MOVIE" as const, label: "Films", icon: Film },
+              { id: "ALL" as const, label: tr("Tous les formats"), icon: Layers },
+              { id: "TV" as const, label: tr("Séries TV"), icon: Tv },
+              { id: "MOVIE" as const, label: tr("Films"), icon: Film },
               { id: "ONA_OVA" as const, label: "ONA / OVA", icon: Sparkles },
-              { id: "MYLIST" as const, label: "Dans ma liste", icon: Bookmark },
+              { id: "MYLIST" as const, label: tr("Dans ma liste"), icon: Bookmark },
             ].map((f) => {
               const Icon = f.icon;
               const active = seasonFormat === f.id;
@@ -1215,17 +1241,19 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
             })}
           </div>
           <span className="text-xs font-mono text-[#7D8296]">
-            {filteredSeasonItems.length} anime{filteredSeasonItems.length > 1 ? "s" : ""} ·{" "}
-            {activeSeason?.label}
+            {filteredSeasonItems.length} ·{" "}
+            {activeSeason ? getSeasonBucketLabel(activeSeason) : ""}
           </span>
         </div>
 
-        {/* MAL-Inspired Detailed Seasonal Cards Grid (Poster left + Synopsis & Metadata right!) */}
+        {/* Detailed Seasonal Cards Grid */}
         {filteredSeasonItems.length === 0 ? (
           <div className="rounded-2xl card-surface py-14 px-6 text-center">
             <Sparkles className="w-7 h-7 text-[#52576B] mx-auto mb-2.5" />
             <p className="text-sm font-semibold text-white">
-              Aucun anime trouvé pour ce filtre dans {activeSeason?.label}.
+              {tr("Aucun anime trouvé pour ce filtre dans {season}.", {
+                season: activeSeason ? getSeasonBucketLabel(activeSeason) : "",
+              })}
             </p>
             <button
               type="button"
@@ -1235,14 +1263,21 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
               }}
               className="mt-3 px-4 py-1.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-xs font-medium text-white cursor-pointer"
             >
-              Réinitialiser le filtre
+              {tr("Réinitialiser le filtre")}
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {filteredSeasonItems.map((media) => {
               const title = getDisplayTitle(media);
-              const rel = formatReleaseDate(media, nowMs);
+              const rel = formatReleaseDate(
+                media,
+                nowMs,
+                calNames.monthsShort,
+                tSeasonYear,
+                tr("Date à confirmer"),
+                lang
+              );
               const entry = getEntry(media.id);
 
               return (
@@ -1250,7 +1285,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                   key={media.id}
                   className="group rounded-2xl overflow-hidden isolate [transform:translateZ(0)] card-surface hover:border-white/[0.18] transition-colors flex flex-col"
                 >
-                  {/* MAL-style Card Top Header Strip */}
+                  {/* Card Top Header Strip */}
                   <div className="px-4 py-3 bg-[#131622]/90 border-b border-white/[0.07] flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <Link
@@ -1261,12 +1296,14 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                       </Link>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[#8C91A6]">
                         <span className="font-mono text-[#D2D5E2]">
-                          {formatFormat(media.format)}
+                          {tFormat(media.format)}
                         </span>
                         {media.episodes && (
                           <>
                             <span className="text-white/25">·</span>
-                            <span className="font-mono">{media.episodes} ép.</span>
+                            <span className="font-mono">
+                              {media.episodes} {t("common.epShort")}
+                            </span>
                           </>
                         )}
                         {media.studio && (
@@ -1294,13 +1331,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                       </span>
                       {rel.daysUntil && (
                         <span className="px-2 py-0.5 rounded-full bg-accent/20 border border-accent/45 font-mono text-[10px] font-semibold text-accent-soft">
-                          J-{rel.daysUntil}
+                          {tr("Dans {n}j", { n: rel.daysUntil })}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* MAL-style 2-Column Body: Full Poster Left + Genres/Synopsis/Actions Right */}
+                  {/* 2-Column Body: Full Poster Left + Genres/Synopsis/Actions Right */}
                   <div className="p-4 flex gap-4 flex-1">
                     {/* Left Poster */}
                     <Link
@@ -1339,13 +1376,13 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                                 href={`/discover?genre=${encodeURIComponent(g)}`}
                                 className="px-2 py-0.5 rounded-md bg-white/[0.05] hover:bg-accent/20 border border-white/[0.08] text-[10.5px] text-[#C8CCE0] hover:text-accent-fg transition-colors"
                               >
-                                {g}
+                                {tGenre(g)}
                               </Link>
                             ))}
                           </div>
                         )}
 
-                        {/* Readable MAL-style Auto-Translated Synopsis (lazy on viewport) */}
+                        {/* Auto-Translated Synopsis (lazy on viewport) */}
                         <TranslatedSynopsis
                           mediaId={media.id}
                           description={media.description}
@@ -1379,15 +1416,15 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                             {entry ? (
                               <>
                                 <Check className="w-3.5 h-3.5" />
-                                <span>{STATUS_CONFIG[entry.status].shortLabel}</span>
+                                <span>{tStatus(entry.status, media.type)}</span>
                               </>
                             ) : (
                               <>
                                 <BookmarkPlus className="w-3.5 h-3.5" />
                                 <span>
                                   {media.status === "RELEASING"
-                                    ? "Watching"
-                                    : "Plan to Watch"}
+                                    ? tStatus("WATCHING", media.type)
+                                    : tStatus("PLAN_TO_WATCH", media.type)}
                                 </span>
                               </>
                             )}
@@ -1397,7 +1434,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                             <button
                               type="button"
                               onClick={() => openTrailer(media.trailer!.id, title)}
-                              title="Bande-annonce"
+                              title={t("detail.watchTrailer")}
                               className="h-8 px-2.5 rounded-lg bg-[#F0B95B]/14 hover:bg-[#F0B95B]/26 border border-[#F0B95B]/35 text-[#F0B95B] text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
                             >
                               <Play className="w-3 h-3 fill-current" />
@@ -1410,7 +1447,7 @@ export function CalendarClient({ schedule, seasons }: CalendarClientProps) {
                           href={`/media/${media.id}`}
                           className="inline-flex items-center gap-1 text-xs font-medium text-[#9A9EAE] hover:text-white transition-colors"
                         >
-                          <span>Fiche</span>
+                          <span>{tr("Fiche")}</span>
                           <ChevronRight className="w-3.5 h-3.5" />
                         </Link>
                       </div>

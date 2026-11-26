@@ -19,10 +19,12 @@ import {
   Flag,
   Ban,
   ShieldCheck,
+  Crown,
   X,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { RoleBadge } from "@/components/ui/RoleBadge";
 import { ActivityCard } from "@/components/social/ActivityCard";
 import { VoiceActorFavoritesManager } from "@/components/social/VoiceActorFavoritesManager";
 import { FriendActionButton } from "@/components/social/FriendActionButton";
@@ -176,6 +178,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           avatarInitials: currentUser.avatarInitials,
           bio: currentUser.bio,
           accentColor: currentUser.accentColor,
+          role: currentUser.role,
           isActivityPublic: currentUser.isActivityPublic ?? true,
           joinedAt: currentUser.joinedAt,
           favoriteStaff,
@@ -404,6 +407,7 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                 <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
                   {displayProfile.displayName}
                 </h1>
+                <RoleBadge role={displayProfile.role} size="md" />
                 <span className="px-2.5 py-0.5 rounded-full bg-white/[0.07] border border-white/[0.1] font-mono text-xs text-[#C8CCE0]">
                   @{displayProfile.username}
                 </span>
@@ -447,13 +451,24 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             {isOwnProfile ? (
-              <Link
-                href="/settings#profil"
-                className="h-10 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.12] text-xs font-semibold text-white inline-flex items-center gap-2 transition-colors"
-              >
-                <Settings className="w-4 h-4 text-accent" />
-                <span>Modifier mon profil & bannière</span>
-              </Link>
+              <>
+                {displayProfile.role === "creator" && (
+                  <Link
+                    href="/admin"
+                    className="h-10 px-4 rounded-xl bg-[#F0B95B]/16 hover:bg-[#F0B95B]/26 border border-[#F0B95B]/55 text-xs font-bold text-[#FDE68A] inline-flex items-center gap-2 transition-colors"
+                  >
+                    <Crown className="w-4 h-4 text-[#F0B95B]" />
+                    <span>Espace Créateur</span>
+                  </Link>
+                )}
+                <Link
+                  href="/settings#profil"
+                  className="h-10 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.12] text-xs font-semibold text-white inline-flex items-center gap-2 transition-colors"
+                >
+                  <Settings className="w-4 h-4 text-accent" />
+                  <span>Modifier mon profil & bannière</span>
+                </Link>
+              </>
             ) : (
               <>
                 {!isBlocked && (

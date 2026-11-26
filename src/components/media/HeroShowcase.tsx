@@ -26,7 +26,6 @@ import { StreamingPillsInline } from "@/components/media/WhereToWatchSection";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import {
   cn,
-  formatFormat,
   formatScore,
   formatSeason,
   getDisplayTitle,
@@ -37,11 +36,15 @@ const SLIDE_DURATION_MS = 8000;
 
 interface HeroShowcaseProps {
   items: MediaItem[];
+  featuredHero?: {
+    mediaId: number;
+    customTagline?: string;
+  } | null;
 }
 
-export function HeroShowcase({ items }: HeroShowcaseProps) {
+export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
   const { getEntry, openQuickEdit, openTrailer } = useShiori();
-  const { t, tStatus, tGenre, tSeason } = useTranslation();
+  const { t, tr, tStatus, tGenre, tSeason, tFormat } = useTranslation();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [heroDragging, setHeroDragging] = useState(false);
@@ -270,10 +273,17 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                   }}
                   className="flex flex-wrap items-center gap-2 mb-4"
                 >
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/35 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-soft">
-                    <Sparkles className="w-3 h-3" />
-                    {t("home.heroTrending")}
-                  </span>
+                  {featuredHero && active.id === featuredHero.mediaId ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0B95B]/20 border border-[#F0B95B]/55 text-[11px] font-bold uppercase tracking-[0.14em] text-[#FDE68A] shadow-[0_0_20px_-4px_rgba(240,185,91,0.55)]">
+                      <Star className="w-3 h-3 fill-current text-[#F0B95B]" />
+                      {tr("Sélection Shiori")}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/18 border border-accent/35 text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-soft">
+                      <Sparkles className="w-3 h-3" />
+                      {t("home.heroTrending")}
+                    </span>
+                  )}
                   {active.averageScore && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/55 backdrop-blur-md border border-white/[0.12] text-xs font-mono font-semibold text-[#F0B95B]">
                       <Star className="w-3.5 h-3.5 fill-current" />
@@ -282,7 +292,7 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                   )}
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.06] backdrop-blur-md border border-white/[0.08] text-xs text-[#CFD3E0]">
                     <Tv className="w-3 h-3 text-[#9A9EAE]" />
-                    {formatFormat(active.format)}
+                    {tFormat(active.format)}
                     {active.episodes ? ` · ${active.episodes} ${t("common.epShort")}` : ""}
                   </span>
                   {active.seasonYear && (
@@ -362,6 +372,26 @@ export function HeroShowcase({ items }: HeroShowcaseProps) {
                     <StreamingPillsInline links={active.streamingLinks} max={3} />
                   </motion.div>
                 )}
+
+                {/* Optional Creator Tagline for Featured "Sélection Shiori" */}
+                {featuredHero &&
+                  active.id === featuredHero.mediaId &&
+                  featuredHero.customTagline && (
+                    <motion.p
+                      variants={{
+                        hidden: { opacity: 0, y: 12 },
+                        visible: {
+                          opacity: 1,
+                          y: 0,
+                          transition: { duration: 0.45, ease: CINEMA_EASE },
+                        },
+                      }}
+                      className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#F0B95B]/12 border border-[#F0B95B]/35 text-xs sm:text-sm font-medium text-[#FDE68A] max-w-2xl"
+                    >
+                      <Star className="w-3.5 h-3.5 fill-current text-[#F0B95B] shrink-0" />
+                      <span>{featuredHero.customTagline}</span>
+                    </motion.p>
+                  )}
 
                 {/* Synopsis (auto-translated in chosen content language) */}
                 <motion.div

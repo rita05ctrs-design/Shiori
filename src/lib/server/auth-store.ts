@@ -16,7 +16,9 @@ import type {
   ThemeSettings,
   UnlockedBadgeRecord,
   UserProfile,
+  UserRole,
 } from "@/types/media";
+import { resolveEffectiveRole } from "@/lib/server/role-resolver";
 
 export interface StoredUiPreferences {
   theme?: ThemeSettings;
@@ -75,6 +77,7 @@ export interface StoredAccount {
   avatarUrl?: string | null;
   bannerUrl?: string | null;
   accentColor: string;
+  role?: UserRole;
   isActivityPublic?: boolean;
   preferredLanguage?: ContentLanguage;
   favoriteStaff?: FavoriteVoiceActor[];
@@ -230,6 +233,12 @@ export function verifySessionToken(token: string | undefined): string | null {
 }
 
 export function toPublicProfile(account: StoredAccount): UserProfile {
+  const effectiveRole = resolveEffectiveRole({
+    dbRole: account.role,
+    email: account.email,
+    anilistUserId: account.anilistOAuth?.userId ?? null,
+  });
+
   return {
     id: account.id,
     username: account.username,
@@ -240,6 +249,7 @@ export function toPublicProfile(account: StoredAccount): UserProfile {
     avatarUrl: account.avatarUrl ?? null,
     bannerUrl: account.bannerUrl ?? null,
     accentColor: account.accentColor,
+    role: effectiveRole,
     isActivityPublic: account.isActivityPublic ?? true,
     preferredLanguage: account.preferredLanguage ?? "fr",
     mode: "account",

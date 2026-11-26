@@ -34,9 +34,19 @@ export function formatScore(score: number | null | undefined): string {
   return score.toFixed(1);
 }
 
-export function formatFormat(format: string | null | undefined): string {
-  if (!format) return "Série";
-  const map: Record<string, string> = {
+const LANG_TO_LOCALE: Record<ContentLanguage, string> = {
+  fr: "fr-FR",
+  en: "en-US",
+  es: "es-ES",
+  de: "de-DE",
+  it: "it-IT",
+  pt: "pt-PT",
+  ja: "ja-JP",
+};
+
+const FORMAT_LABELS: Record<ContentLanguage, Record<string, string>> = {
+  fr: {
+    DEFAULT: "Série",
     TV: "TV",
     TV_SHORT: "TV Court",
     MOVIE: "Film",
@@ -47,32 +57,186 @@ export function formatFormat(format: string | null | undefined): string {
     MANGA: "Manga",
     NOVEL: "Light Novel",
     ONE_SHOT: "One-Shot",
-  };
-  return map[format] ?? format;
+  },
+  en: {
+    DEFAULT: "Series",
+    TV: "TV",
+    TV_SHORT: "TV Short",
+    MOVIE: "Movie",
+    SPECIAL: "Special",
+    OVA: "OVA",
+    ONA: "ONA",
+    MUSIC: "Music",
+    MANGA: "Manga",
+    NOVEL: "Light Novel",
+    ONE_SHOT: "One-Shot",
+  },
+  es: {
+    DEFAULT: "Serie",
+    TV: "TV",
+    TV_SHORT: "TV Corto",
+    MOVIE: "Película",
+    SPECIAL: "Especial",
+    OVA: "OVA",
+    ONA: "ONA",
+    MUSIC: "Música",
+    MANGA: "Manga",
+    NOVEL: "Novela Ligera",
+    ONE_SHOT: "One-Shot",
+  },
+  de: {
+    DEFAULT: "Serie",
+    TV: "TV",
+    TV_SHORT: "TV-Kurz",
+    MOVIE: "Film",
+    SPECIAL: "Special",
+    OVA: "OVA",
+    ONA: "ONA",
+    MUSIC: "Musik",
+    MANGA: "Manga",
+    NOVEL: "Light Novel",
+    ONE_SHOT: "One-Shot",
+  },
+  it: {
+    DEFAULT: "Serie",
+    TV: "TV",
+    TV_SHORT: "TV Corto",
+    MOVIE: "Film",
+    SPECIAL: "Speciale",
+    OVA: "OVA",
+    ONA: "ONA",
+    MUSIC: "Musica",
+    MANGA: "Manga",
+    NOVEL: "Light Novel",
+    ONE_SHOT: "One-Shot",
+  },
+  pt: {
+    DEFAULT: "Série",
+    TV: "TV",
+    TV_SHORT: "TV Curto",
+    MOVIE: "Filme",
+    SPECIAL: "Especial",
+    OVA: "OVA",
+    ONA: "ONA",
+    MUSIC: "Música",
+    MANGA: "Mangá",
+    NOVEL: "Light Novel",
+    ONE_SHOT: "One-Shot",
+  },
+  ja: {
+    DEFAULT: "シリーズ",
+    TV: "TV",
+    TV_SHORT: "TVショート",
+    MOVIE: "映画",
+    SPECIAL: "スペシャル",
+    OVA: "OVA",
+    ONA: "ONA",
+    MUSIC: "ミュージック",
+    MANGA: "漫画",
+    NOVEL: "ライトノベル",
+    ONE_SHOT: "読み切り",
+  },
+};
+
+export function formatFormat(
+  format: string | null | undefined,
+  lang: ContentLanguage = "fr"
+): string {
+  const dict = FORMAT_LABELS[lang] ?? FORMAT_LABELS.fr;
+  if (!format) return dict.DEFAULT;
+  return dict[format] ?? format;
 }
 
-export function formatMediaStatus(status: string | null | undefined): string {
-  if (!status) return "Inconnu";
-  const map: Record<string, string> = {
+const MEDIA_STATUS_LABELS: Record<ContentLanguage, Record<string, string>> = {
+  fr: {
+    UNKNOWN: "Inconnu",
     RELEASING: "En cours",
     FINISHED: "Terminé",
     NOT_YET_RELEASED: "À venir",
     CANCELLED: "Annulé",
     HIATUS: "En pause",
-  };
-  return map[status] ?? status;
+  },
+  en: {
+    UNKNOWN: "Unknown",
+    RELEASING: "Airing",
+    FINISHED: "Finished",
+    NOT_YET_RELEASED: "Upcoming",
+    CANCELLED: "Cancelled",
+    HIATUS: "Hiatus",
+  },
+  es: {
+    UNKNOWN: "Desconocido",
+    RELEASING: "En emisión",
+    FINISHED: "Finalizado",
+    NOT_YET_RELEASED: "Próximamente",
+    CANCELLED: "Cancelado",
+    HIATUS: "En pausa",
+  },
+  de: {
+    UNKNOWN: "Unbekannt",
+    RELEASING: "Laufend",
+    FINISHED: "Abgeschlossen",
+    NOT_YET_RELEASED: "Angekündigt",
+    CANCELLED: "Abgebrochen",
+    HIATUS: "Pausiert",
+  },
+  it: {
+    UNKNOWN: "Sconosciuto",
+    RELEASING: "In corso",
+    FINISHED: "Concluso",
+    NOT_YET_RELEASED: "In arrivo",
+    CANCELLED: "Cancellato",
+    HIATUS: "In pausa",
+  },
+  pt: {
+    UNKNOWN: "Desconhecido",
+    RELEASING: "Em exibição",
+    FINISHED: "Concluído",
+    NOT_YET_RELEASED: "Em breve",
+    CANCELLED: "Cancelado",
+    HIATUS: "Em hiato",
+  },
+  ja: {
+    UNKNOWN: "不明",
+    RELEASING: "放送・連載中",
+    FINISHED: "完結",
+    NOT_YET_RELEASED: "放送予定",
+    CANCELLED: "中止",
+    HIATUS: "休止中",
+  },
+};
+
+export function formatMediaStatus(
+  status: string | null | undefined,
+  lang: ContentLanguage = "fr"
+): string {
+  const dict = MEDIA_STATUS_LABELS[lang] ?? MEDIA_STATUS_LABELS.fr;
+  if (!status) return dict.UNKNOWN;
+  return dict[status] ?? status;
 }
 
-export function formatSeason(season: string | null | undefined, year: number | null | undefined): string {
-  const map: Record<string, string> = {
-    WINTER: "Hiver",
-    SPRING: "Printemps",
-    SUMMER: "Été",
-    FALL: "Automne",
-  };
-  if (season && year) return `${map[season] ?? season} ${year}`;
+const SEASON_LABELS_BY_LANG: Record<ContentLanguage, Record<string, string>> = {
+  fr: { WINTER: "Hiver", SPRING: "Printemps", SUMMER: "Été", FALL: "Automne", UNKNOWN: "Saison inconnue" },
+  en: { WINTER: "Winter", SPRING: "Spring", SUMMER: "Summer", FALL: "Fall", UNKNOWN: "Unknown season" },
+  es: { WINTER: "Invierno", SPRING: "Primavera", SUMMER: "Verano", FALL: "Otoño", UNKNOWN: "Temporada desconocida" },
+  de: { WINTER: "Winter", SPRING: "Frühling", SUMMER: "Sommer", FALL: "Herbst", UNKNOWN: "Unbekannte Saison" },
+  it: { WINTER: "Inverno", SPRING: "Primavera", SUMMER: "Estate", FALL: "Autunno", UNKNOWN: "Stagione sconosciuta" },
+  pt: { WINTER: "Inverno", SPRING: "Primavera", SUMMER: "Verão", FALL: "Outono", UNKNOWN: "Temporada desconhecida" },
+  ja: { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", UNKNOWN: "シーズン不明" },
+};
+
+export function formatSeason(
+  season: string | null | undefined,
+  year: number | null | undefined,
+  lang: ContentLanguage = "fr"
+): string {
+  const dict = SEASON_LABELS_BY_LANG[lang] ?? SEASON_LABELS_BY_LANG.fr;
+  if (season && year) {
+    if (lang === "ja") return `${year}年${dict[season] ?? season}`;
+    return `${dict[season] ?? season} ${year}`;
+  }
   if (year) return `${year}`;
-  return "Saison inconnue";
+  return dict.UNKNOWN;
 }
 
 export const STATUS_CONFIG: Record<
@@ -232,16 +396,73 @@ export function formatCountdown(
   return fmt.inMin(Math.max(1, mins));
 }
 
-export function formatRelativeTime(iso: string): string {
+const RELATIVE_TIME_LABELS: Record<
+  ContentLanguage,
+  {
+    justNow: string;
+    minsAgo: (m: number) => string;
+    hoursAgo: (h: number) => string;
+    daysAgo: (d: number) => string;
+  }
+> = {
+  fr: {
+    justNow: "À l'instant",
+    minsAgo: (m) => `Il y a ${m} min`,
+    hoursAgo: (h) => `Il y a ${h}h`,
+    daysAgo: (d) => `Il y a ${d}j`,
+  },
+  en: {
+    justNow: "Just now",
+    minsAgo: (m) => `${m}m ago`,
+    hoursAgo: (h) => `${h}h ago`,
+    daysAgo: (d) => `${d}d ago`,
+  },
+  es: {
+    justNow: "Ahora mismo",
+    minsAgo: (m) => `Hace ${m} min`,
+    hoursAgo: (h) => `Hace ${h}h`,
+    daysAgo: (d) => `Hace ${d}d`,
+  },
+  de: {
+    justNow: "Gerade eben",
+    minsAgo: (m) => `Vor ${m} Min.`,
+    hoursAgo: (h) => `Vor ${h} Std.`,
+    daysAgo: (d) => `Vor ${d} T.`,
+  },
+  it: {
+    justNow: "Proprio ora",
+    minsAgo: (m) => `${m} min fa`,
+    hoursAgo: (h) => `${h}h fa`,
+    daysAgo: (d) => `${d}g fa`,
+  },
+  pt: {
+    justNow: "Agora mesmo",
+    minsAgo: (m) => `Há ${m} min`,
+    hoursAgo: (h) => `Há ${h}h`,
+    daysAgo: (d) => `Há ${d}d`,
+  },
+  ja: {
+    justNow: "たった今",
+    minsAgo: (m) => `${m}分前`,
+    hoursAgo: (h) => `${h}時間前`,
+    daysAgo: (d) => `${d}日前`,
+  },
+};
+
+export function formatRelativeTime(
+  iso: string,
+  lang: ContentLanguage = "fr"
+): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "À l'instant";
-  if (mins < 60) return `Il y a ${mins} min`;
+  const fmt = RELATIVE_TIME_LABELS[lang] ?? RELATIVE_TIME_LABELS.fr;
+  if (mins < 1) return fmt.justNow;
+  if (mins < 60) return fmt.minsAgo(mins);
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `Il y a ${hours}h`;
+  if (hours < 24) return fmt.hoursAgo(hours);
   const days = Math.floor(hours / 24);
-  if (days < 7) return `Il y a ${days}j`;
-  return new Date(iso).toLocaleDateString("fr-FR", {
+  if (days < 7) return fmt.daysAgo(days);
+  return new Date(iso).toLocaleDateString(LANG_TO_LOCALE[lang] ?? "fr-FR", {
     day: "numeric",
     month: "short",
   });

@@ -88,6 +88,7 @@ export async function POST(
           authorDisplayName: actor.displayName,
           authorAvatarUrl: safeAvatar,
           authorAccentColor: actor.accentColor,
+          authorRole: actor.role,
           body: text,
           createdAt,
         };
@@ -116,6 +117,7 @@ export async function POST(
     authorDisplayName: actor.displayName,
     authorAvatarUrl: safeAvatar,
     authorAccentColor: actor.accentColor,
+    authorRole: actor.role,
     body: text,
     createdAt,
   };

@@ -20,12 +20,12 @@ import {
   FolderHeart,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
+import { useTranslation } from "@/hooks/useTranslation";
 import { clampProgress } from "@/lib/library-utils";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import {
   cn,
   getDisplayTitle,
-  getStatusLabel,
   STATUS_CONFIG,
 } from "@/lib/utils";
 import type { LibraryEntry, LibraryStatus, MediaItem } from "@/types/media";
@@ -87,6 +87,7 @@ export function QuickEditModal() {
     collections,
     toggleMediaInCollection,
   } = useShiori();
+  const { tr, tStatus } = useTranslation();
 
   const [status, setStatus] = useState<LibraryStatus>("WATCHING");
   const [progress, setProgress] = useState<number>(0);
@@ -173,7 +174,7 @@ export function QuickEditModal() {
     closeQuickEdit();
   };
 
-  const unitLabel = info?.type === "MANGA" ? "Chapitres" : "Épisodes";
+  const unitLabel = info?.type === "MANGA" ? tr("Chapitres") : tr("Épisodes");
   const pct =
     info?.totalUnits
       ? Math.min(100, Math.round((progress / info.totalUnits) * 100))
@@ -257,7 +258,7 @@ export function QuickEditModal() {
                 <div className="min-w-0 flex-1 pb-1">
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-[0.18em] text-accent-soft">
                     <Bookmark className="w-3 h-3 fill-current" />
-                    {existing ? "Modifier dans Shiori" : "Ajouter à Shiori"} ·{" "}
+                    {existing ? tr("Modifier dans Shiori") : tr("Ajouter à Shiori")} ·{" "}
                     {info.type === "MANGA" ? "Manga" : "Anime"}
                   </span>
                   <h3 className="text-lg font-bold text-white truncate mt-0.5">
@@ -302,7 +303,8 @@ export function QuickEditModal() {
                       setIsFavorite(next);
                       if (next) setHeartPulse(Date.now());
                     }}
-                    title="Coup de cœur"
+                    title={tr("Coup de cœur")}
+                    aria-label={tr("Coup de cœur")}
                     className={cn(
                       "w-10 h-10 rounded-full border flex items-center justify-center transition-all cursor-pointer",
                       isFavorite
@@ -321,7 +323,7 @@ export function QuickEditModal() {
               {/* Animated Status Cards with sliding layoutId highlight */}
               <div>
                 <label className="block text-[11px] font-mono uppercase tracking-[0.16em] text-[#858A9E] mb-2.5">
-                  Catégorie
+                  {tr("Catégorie")}
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {STATUS_ITEMS.map(({ id: s, icon: Icon }) => {
@@ -350,7 +352,7 @@ export function QuickEditModal() {
                         )}
                         <Icon className="w-3.5 h-3.5 relative z-10 shrink-0" />
                         <span className="relative z-10 truncate">
-                          {getStatusLabel(s, info.type)}
+                          {tStatus(s, info.type)}
                         </span>
                       </motion.button>
                     );
@@ -366,7 +368,11 @@ export function QuickEditModal() {
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono text-[#9A9EAE]">
-                      {info.totalUnits ? `${progress} / ${info.totalUnits} (${pct}%)` : `${progress} lus/vus`}
+                      {info.totalUnits
+                        ? `${progress} / ${info.totalUnits} (${pct}%)`
+                        : info.type === "MANGA"
+                          ? tr("{n} lus", { n: progress })
+                          : tr("{n} vus", { n: progress })}
                     </span>
                     {info.totalUnits && progress < info.totalUnits && (
                       <button
@@ -377,7 +383,7 @@ export function QuickEditModal() {
                         }}
                         className="text-[10.5px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition-colors cursor-pointer"
                       >
-                        Tout finir
+                        {tr("Tout finir")}
                       </button>
                     )}
                   </div>
@@ -432,12 +438,12 @@ export function QuickEditModal() {
                   <div className="pt-3 mt-1 border-t border-white/[0.07] space-y-2.5">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-violet-300">
-                        Tomes / Volumes
+                        {tr("Tomes / Volumes")}
                       </label>
                       <span className="text-xs font-mono text-[#9A9EAE]">
                         {info.totalVolumes
-                          ? `${progressVolumes} / ${info.totalVolumes} tomes`
-                          : `${progressVolumes} tome${progressVolumes > 1 ? "s" : ""}`}
+                          ? tr("{n} / {total} tomes", { n: progressVolumes, total: info.totalVolumes })
+                          : tr("{n} tome(s)", { n: progressVolumes })}
                       </span>
                     </div>
                     <div className="flex items-center gap-2.5">
@@ -484,15 +490,15 @@ export function QuickEditModal() {
                 <div className="flex items-center justify-between gap-2">
                   <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-[#858A9E] flex items-center gap-1.5">
                     <Star className="w-3.5 h-3.5 text-[#F0B95B] fill-[#F0B95B]" />
-                    <span>Note personnelle</span>
+                    <span>{tr("Note personnelle")}</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-semibold text-[#F0B95B]">
                       {score !== null
-                        ? `${score.toFixed(1)} / 10${SCORE_VERDICT[Math.round(score)] ? ` · ${SCORE_VERDICT[Math.round(score)]}` : ""}`
+                        ? `${score.toFixed(1)} / 10${SCORE_VERDICT[Math.round(score)] ? ` · ${tr(SCORE_VERDICT[Math.round(score)])}` : ""}`
                         : previewInt
-                          ? `${previewInt}.0 · ${SCORE_VERDICT[previewInt]}`
-                          : "Non noté"}
+                          ? `${previewInt}.0 · ${tr(SCORE_VERDICT[previewInt])}`
+                          : tr("Non noté")}
                     </span>
                     {score !== null && (
                       <button
@@ -500,7 +506,7 @@ export function QuickEditModal() {
                         onClick={() => setScore(null)}
                         className="text-[10.5px] text-[#858A9E] hover:text-white px-2 py-0.5 rounded bg-white/[0.06] cursor-pointer"
                       >
-                        Effacer
+                        {tr("Effacer")}
                       </button>
                     )}
                   </div>
@@ -538,7 +544,7 @@ export function QuickEditModal() {
 
                 {score !== null && score < 10 && (
                   <div className="flex items-center justify-between pt-0.5">
-                    <span className="text-[11px] text-[#7D8296]">Affiner au demi-point :</span>
+                    <span className="text-[11px] text-[#7D8296]">{tr("Affiner au demi-point :")}</span>
                     <button
                       type="button"
                       onClick={() =>
@@ -564,7 +570,7 @@ export function QuickEditModal() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
-                    Date de début
+                    {tr("Date de début")}
                   </label>
                   <input
                     type="date"
@@ -575,7 +581,7 @@ export function QuickEditModal() {
                 </div>
                 <div>
                   <label className="block text-[10.5px] font-mono uppercase tracking-[0.14em] text-[#858A9E] mb-1.5">
-                    Date de fin
+                    {tr("Date de fin")}
                   </label>
                   <input
                     type="date"
@@ -591,7 +597,7 @@ export function QuickEditModal() {
                 <div className="space-y-2">
                   <label className="text-[11px] font-mono uppercase tracking-[0.15em] text-[#858A9E] flex items-center gap-1.5">
                     <FolderHeart className="w-3.5 h-3.5 text-accent" />
-                    <span>Collections personnalisées</span>
+                    <span>{tr("Collections personnalisées")}</span>
                   </label>
                   <div className="flex flex-wrap gap-1.5">
                     {collections.map((col) => {
@@ -624,14 +630,14 @@ export function QuickEditModal() {
               {/* Personal Notes */}
               <div>
                 <label className="block text-[11px] font-mono uppercase tracking-[0.15em] text-[#858A9E] mb-2">
-                  Notes & journal personnel (privé)
+                  {tr("Notes & journal personnel (privé)")}
                 </label>
                 <textarea
                   rows={3}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Vos impressions, épisodes mémorables, citation favorite..."
-                  className="w-full rounded-xl bg-[#08090E] border border-white/[0.09] px-3.5 py-2.5 text-sm text-[#ECEBE6] placeholder:text-[#5F6477] focus:outline-none focus:border-accent/60 resize-none"
+                  placeholder={tr("Vos impressions, épisodes mémorables, citation favorite...")}
+                  className="w-full rounded-xl bg-[#08090E] border border-white/[0.09] px-3.5 py-2.5 text-base sm:text-sm text-[#ECEBE6] placeholder:text-[#5F6477] focus:outline-none focus:border-accent/60 resize-none"
                 />
               </div>
             </div>
@@ -645,12 +651,12 @@ export function QuickEditModal() {
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-500/12 transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Retirer</span>
+                  <span>{tr("Retirer")}</span>
                 </button>
               ) : (
                 <span className="text-[11px] font-mono text-[#6E7387] flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3 text-[#F0B95B]" />
-                  <span>Sauvegarde instantanée</span>
+                  <span>{tr("Sauvegarde instantanée")}</span>
                 </span>
               )}
 
@@ -660,7 +666,7 @@ export function QuickEditModal() {
                   onClick={closeQuickEdit}
                   className="px-4 py-2 rounded-xl text-xs font-medium text-[#A1A5B7] hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
                 >
-                  Annuler
+                  {tr("Annuler")}
                 </button>
                 <motion.button
                   type="submit"
@@ -676,10 +682,10 @@ export function QuickEditModal() {
                   <Check className="w-3.5 h-3.5" />
                   <span>
                     {savedFlash
-                      ? "Enregistré !"
+                      ? tr("Enregistré !")
                       : existing
-                        ? "Enregistrer"
-                        : "Ajouter à ma bibliothèque"}
+                        ? tr("Enregistrer")
+                        : tr("Ajouter à ma bibliothèque")}
                   </span>
                 </motion.button>
               </div>

@@ -27,6 +27,7 @@ import {
   type MoodIconKey,
   type MoodPreset,
 } from "@/lib/discover-taxonomy";
+import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 
 const ICON_MAP: Record<MoodIconKey, React.ComponentType<{ className?: string }>> = {
@@ -54,6 +55,7 @@ interface MoodCarouselProps {
 }
 
 export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) {
+  const { tr } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const visibleMoods = expanded
@@ -71,10 +73,10 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
           </span>
           <div>
             <h2 className="text-sm sm:text-base font-semibold text-[#F4F3EE] leading-tight">
-              Quelle est votre envie ce soir ?
+              {tr("Quelle est votre envie ce soir ?")}
             </h2>
             <p className="text-[11.5px] text-[#83889C] hidden sm:block">
-              Appuyez sur une ambiance pour filtrer instantanément le catalogue
+              {tr("Appuyez sur une ambiance pour filtrer instantanément le catalogue")}
             </p>
           </div>
         </div>
@@ -86,7 +88,7 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
           onClick={() => setExpanded((v) => !v)}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.09] hover:border-white/[0.18] text-xs font-medium text-[#D6D9E6] hover:text-white transition-all cursor-pointer shrink-0"
         >
-          <span>{expanded ? "Réduire" : `+ ${hiddenCount} autres envies`}</span>
+          <span>{expanded ? tr("Réduire") : tr("+ {n} autres envies", { n: hiddenCount })}</span>
           <ChevronDown
             className={cn(
               "w-3.5 h-3.5 text-[#F0B95B] transition-transform duration-300",
@@ -175,7 +177,7 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-lg"
                     >
                       <Check className="w-3 h-3 stroke-[3]" />
-                      <span>Actif</span>
+                      <span>{tr("Actif")}</span>
                     </span>
                   ) : (
                     <span className="w-7 h-7 rounded-full bg-[#090B12]/80 border border-white/15 flex items-center justify-center text-white/70 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-white transition-all duration-200">
@@ -187,10 +189,10 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
                 {/* Bottom Title + Hook */}
                 <div>
                   <h3 className="text-[14px] font-bold text-white tracking-tight leading-tight drop-shadow-sm">
-                    {mood.label}
+                    {tr(mood.label)}
                   </h3>
                   <p className="text-[11px] text-[#C6CAD8]/90 mt-0.5 line-clamp-1">
-                    {mood.subtitle}
+                    {tr(mood.subtitle)}
                   </p>
                 </div>
               </div>

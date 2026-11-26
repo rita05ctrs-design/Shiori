@@ -12,14 +12,16 @@ import {
   CalendarDays,
   Cloud,
   HardDrive,
+  Crown,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { ShioriAiChatPanel } from "@/components/ai/ShioriAiChatPanel";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { RoleBadge } from "@/components/ui/RoleBadge";
 
 export default function AssistantPage() {
-  const { profile, isAuthenticated, library, orderedFavorites, openAuthModal } = useShiori();
+  const { profile, isAuthenticated, isCreator, library, orderedFavorites, openAuthModal } = useShiori();
   const { t } = useTranslation();
 
   const watchingCount = library.filter((e) => e.status === "WATCHING").length;
@@ -43,6 +45,7 @@ export default function AssistantPage() {
                 <h1 className="text-lg sm:text-xl font-bold text-[#F4F3EE] truncate">
                   {profile.displayName}
                 </h1>
+                <RoleBadge role={profile.role} size="sm" />
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-[10.5px] text-[#B8BCCB]">
                   {isAuthenticated ? (
                     <>
@@ -122,6 +125,22 @@ export default function AssistantPage() {
             <Settings className="w-3.5 h-3.5 text-[#9A9EAE]" />
             <span>{t("nav.settings")}</span>
           </Link>
+          <Link
+            href="/support"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0B95B]/12 hover:bg-[#F0B95B]/22 border border-[#F0B95B]/40 text-xs font-semibold text-[#FDE68A] whitespace-nowrap transition-colors"
+          >
+            <Heart className="w-3.5 h-3.5 text-[#F0B95B]" />
+            <span>Soutenir Shiori</span>
+          </Link>
+          {isCreator && (
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#F0B95B]/20 hover:bg-[#F0B95B]/30 border border-[#F0B95B]/60 text-xs font-bold text-[#FDE68A] whitespace-nowrap transition-colors"
+            >
+              <Crown className="w-3.5 h-3.5 text-[#F0B95B]" />
+              <span>Admin</span>
+            </Link>
+          )}
         </div>
       </section>
 

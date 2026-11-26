@@ -74,7 +74,7 @@ import {
   type LibraryViewMode,
   type PersistedLibraryState,
 } from "@/lib/filter-persistence";
-import { cn, formatFormat, getStatusLabel, STATUS_CONFIG } from "@/lib/utils";
+import { cn, STATUS_CONFIG } from "@/lib/utils";
 import {
   getYearEraOptions,
   getYearFilterCopy,
@@ -86,13 +86,13 @@ import type { LibraryStatus, MediaType } from "@/types/media";
 type FilterTab = "ALL" | LibraryStatus;
 type ViewMode = LibraryViewMode;
 
-const TABS: { id: FilterTab; label: string }[] = [
-  { id: "ALL", label: "Tous" },
-  { id: "WATCHING", label: "En cours" },
-  { id: "COMPLETED", label: "Terminés" },
-  { id: "PLAN_TO_WATCH", label: "À voir" },
-  { id: "ON_HOLD", label: "En pause" },
-  { id: "DROPPED", label: "Abandonnés" },
+const TABS: { id: FilterTab }[] = [
+  { id: "ALL" },
+  { id: "WATCHING" },
+  { id: "COMPLETED" },
+  { id: "PLAN_TO_WATCH" },
+  { id: "ON_HOLD" },
+  { id: "DROPPED" },
 ];
 
 const LIBRARY_SORTS: LuxurySelectOption[] = [
@@ -176,9 +176,31 @@ function LibraryPageInner() {
     contentLanguage,
     toast,
   } = useShiori();
-  const { t, tStatus, locale } = useTranslation();
+  const { t, tr, tStatus, tFormat, tGenre, tSeason, locale } = useTranslation();
   const yearCopy = useMemo(() => getYearFilterCopy(contentLanguage), [contentLanguage]);
   const yearEraOptions = useMemo(() => getYearEraOptions(contentLanguage), [contentLanguage]);
+
+  const librarySorts = useMemo<LuxurySelectOption[]>(
+    () => LIBRARY_SORTS.map((o) => ({ ...o, label: tr(o.label) })),
+    [tr]
+  );
+  const librarySeasonOptions = useMemo<LuxurySelectOption[]>(
+    () =>
+      LIBRARY_SEASON_OPTIONS.map((o) => ({
+        ...o,
+        label: o.id === "ALL" ? tr("Toutes les saisons") : tSeason(o.id),
+        hint: o.hint ? tr(o.hint) : undefined,
+      })),
+    [tSeason, tr]
+  );
+  const scorePills = useMemo(
+    () => SCORE_PILLS.map((p) => ({ ...p, label: tr(p.label), short: tr(p.short) })),
+    [tr]
+  );
+  const progressPills = useMemo(
+    () => PROGRESS_PILLS.map((p) => ({ ...p, label: tr(p.label), short: tr(p.short) })),
+    [tr]
+  );
 
   const [filters, setFilters] = useState<LibraryFilterState>(DEFAULT_LIBRARY_FILTERS);
   const [sortBy, setSortBy] = useState<LibrarySortKey>("UPDATED");
@@ -411,10 +433,10 @@ function LibraryPageInner() {
     }
 
     const genreOptions: LuxurySelectOption[] = [
-      { id: "ALL", label: "Tous les genres", icon: Tag },
+      { id: "ALL", label: tr("Tous les genres"), icon: Tag },
       ...Array.from(genreCounts.entries())
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([g, count]) => ({ id: g, label: g, count, icon: Tag })),
+        .map(([g, count]) => ({ id: g, label: tGenre(g), count, icon: Tag })),
     ];
 
     const eraDropdownOptions: LuxurySelectOption[] = yearEraOptions.map((era) => ({
@@ -438,21 +460,21 @@ function LibraryPageInner() {
     ];
 
     const studioOptions: LuxurySelectOption[] = [
-      { id: "ALL", label: "Tous les studios", icon: Building2 },
+      { id: "ALL", label: tr("Tous les studios"), icon: Building2 },
       ...Array.from(studioCounts.entries())
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([s, count]) => ({ id: s, label: s, count, icon: Building2 })),
     ];
 
     const formatOptions: LuxurySelectOption[] = [
-      { id: "ALL", label: "Tous les formats", icon: Layers },
+      { id: "ALL", label: tr("Tous les formats"), icon: Layers },
       ...Array.from(formatCounts.entries())
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .map(([f, count]) => {
           const meta = getFormatMeta(f);
           return {
             id: f,
-            label: formatFormat(f),
+            label: tFormat(f),
             count,
             icon: meta.icon,
             accent: meta.accent,
@@ -461,7 +483,7 @@ function LibraryPageInner() {
     ];
 
     const collectionOptions: LuxurySelectOption[] = [
-      { id: "ALL", label: "Toutes les collections", icon: FolderHeart },
+      { id: "ALL", label: tr("Toutes les collections"), icon: FolderHeart },
       ...collections.map((c) => ({
         id: c.id,
         label: c.name,
@@ -478,7 +500,7 @@ function LibraryPageInner() {
       formatOptions,
       collectionOptions,
     };
-  }, [library, collections, yearCopy, yearEraOptions]);
+  }, [library, collections, yearCopy, yearEraOptions, tFormat, tGenre, tr]);
 
   const activeAdvancedCount = useMemo(() => {
     let count = 0;

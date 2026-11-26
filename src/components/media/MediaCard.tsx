@@ -8,7 +8,6 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { StreamingIconsStrip } from "@/components/media/WhereToWatchSection";
 import {
   cn,
-  formatFormat,
   formatScore,
   getDisplayTitle,
   STATUS_CONFIG,
@@ -27,7 +26,7 @@ export const MediaCard = React.memo(function MediaCard({
   className,
 }: MediaCardProps) {
   const { getEntry, openQuickEdit } = useShiori();
-  const { t, tStatus } = useTranslation();
+  const { t, tr, tStatus, tFormat, tGenre } = useTranslation();
   const entry = getEntry(media.id);
   const title = getDisplayTitle(media);
   const statusCfg = entry ? STATUS_CONFIG[entry.status] : null;
@@ -102,7 +101,7 @@ export const MediaCard = React.memo(function MediaCard({
             e.stopPropagation();
             openQuickEdit(media);
           }}
-          title={entry ? "Modifier dans ma bibliothèque" : "Ajouter à ma bibliothèque"}
+          title={entry ? tr("Modifier dans ma bibliothèque") : tr("Ajouter à ma bibliothèque")}
           className={cn(
             "absolute bottom-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center border transition-all duration-200 cursor-pointer active:scale-90",
             entry
@@ -116,7 +115,7 @@ export const MediaCard = React.memo(function MediaCard({
         {/* Bottom Left Format Tag */}
         <div className="absolute bottom-2.5 left-2.5 z-10 pointer-events-none">
           <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#090B12]/88 text-[#D2D5E0] border border-white/[0.1]">
-            {formatFormat(media.format)}
+            {tFormat(media.format)}
           </span>
         </div>
       </div>
@@ -133,7 +132,7 @@ export const MediaCard = React.memo(function MediaCard({
         <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-[#7E8397] min-w-0">
           {media.seasonYear && <span className="font-mono shrink-0">{media.seasonYear}</span>}
           {media.seasonYear && media.genres[0] && <span className="shrink-0">·</span>}
-          {media.genres[0] && <span className="truncate">{media.genres[0]}</span>}
+          {media.genres[0] && <span className="truncate">{tGenre(media.genres[0])}</span>}
           <div className="ml-auto flex items-center gap-1 shrink-0">
             <StreamingIconsStrip links={media.streamingLinks} max={2} />
             {entry && <Check className="w-3 h-3 text-emerald-400 shrink-0" />}

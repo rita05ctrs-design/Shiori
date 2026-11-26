@@ -35,11 +35,7 @@ import {
 import {
   cn,
   formatCompactNumber,
-  formatCountdown,
-  formatFormat,
-  formatMediaStatus,
   formatScore,
-  formatSeason,
   getDisplayTitle,
 } from "@/lib/utils";
 import type { MediaDetail } from "@/types/media";
@@ -51,7 +47,7 @@ const RELATION_FR: Record<string, string> = {
   SOURCE: "Œuvre originale",
   SIDE_STORY: "Histoire parallèle",
   SPIN_OFF: "Spin-off",
-  ALTERNATIVE: "Alternatif",
+  ALTERNATIVE: "Version alternative",
   PARENT: "Série mère",
   SUMMARY: "Résumé",
   OTHER: "Lié",
@@ -64,7 +60,7 @@ interface MediaDetailClientProps {
 export function MediaDetailClient({ media }: MediaDetailClientProps) {
   const router = useRouter();
   const { getEntry, upsertEntry } = useShiori();
-  const { t, tGenre, locale } = useTranslation();
+  const { t, tr, tGenre, tFormat, tMediaStatus, tSeasonYear, tCountdown, locale } = useTranslation();
 
   const handleBack = () => {
     if (
@@ -86,7 +82,6 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
       : computeGenreIntensities(media.genres, media.tags);
 
   const totalUnits = media.type === "MANGA" ? media.chapters : media.episodes;
-  const unitLabel = media.type === "MANGA" ? "Chapitre" : "Épisode";
 
   // Score distribution normalization
   const maxDistAmount = Math.max(
@@ -175,7 +170,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 <div className="flex justify-between gap-2">
                   <dt className="text-[#7E8397]">{t("discover.format")}</dt>
                   <dd className="text-[#ECEBE6] font-medium text-right">
-                    {formatFormat(media.format)}
+                    {tFormat(media.format)}
                   </dd>
                 </div>
                 {media.type === "ANIME" ? (
@@ -188,7 +183,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                     </div>
                     {media.duration && (
                       <div className="flex justify-between gap-2">
-                        <dt className="text-[#7E8397]">Durée</dt>
+                        <dt className="text-[#7E8397]">{tr("Durée")}</dt>
                         <dd className="text-[#ECEBE6] font-mono">{media.duration} min</dd>
                       </div>
                     )}
@@ -203,43 +198,43 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                     </div>
                     {media.volumes && (
                       <div className="flex justify-between gap-2">
-                        <dt className="text-[#7E8397]">Tomes</dt>
+                        <dt className="text-[#7E8397]">{tr("Tomes / Volumes")}</dt>
                         <dd className="text-[#ECEBE6] font-mono">{media.volumes}</dd>
                       </div>
                     )}
                   </>
                 )}
                 <div className="flex justify-between gap-2">
-                  <dt className="text-[#7E8397]">Statut</dt>
+                  <dt className="text-[#7E8397]">{tr("Statut")}</dt>
                   <dd className="text-[#ECEBE6] font-medium">
-                    {formatMediaStatus(media.status)}
+                    {tMediaStatus(media.status)}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-[#7E8397]">Sortie</dt>
+                  <dt className="text-[#7E8397]">{tr("Sortie")}</dt>
                   <dd className="text-[#ECEBE6]">
-                    {formatSeason(media.season, media.seasonYear ?? media.startYear)}
+                    {tSeasonYear(media.season, media.seasonYear ?? media.startYear)}
                   </dd>
                 </div>
                 {media.studio && (
                   <div className="flex justify-between gap-2">
                     <dt className="text-[#7E8397]">
-                      {media.type === "MANGA" ? "Auteur" : "Studio"}
+                      {media.type === "MANGA" ? tr("Auteur") : "Studio"}
                     </dt>
                     <dd className="text-white font-medium text-right">{media.studio}</dd>
                   </div>
                 )}
                 {media.popularity && (
                   <div className="flex justify-between gap-2">
-                    <dt className="text-[#7E8397]">Popularité</dt>
+                    <dt className="text-[#7E8397]">{tr("Popularité")}</dt>
                     <dd className="text-[#ECEBE6] font-mono">
-                      {formatCompactNumber(media.popularity)} membres
+                      {formatCompactNumber(media.popularity)} {tr("membres")}
                     </dd>
                   </div>
                 )}
                 {media.favourites && (
                   <div className="flex justify-between gap-2">
-                    <dt className="text-[#7E8397]">Favoris</dt>
+                    <dt className="text-[#7E8397]">{tr("Favoris")}</dt>
                     <dd className="text-[#ECEBE6] font-mono">
                       {formatCompactNumber(media.favourites)}
                     </dd>
@@ -254,7 +249,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                   rel="noreferrer"
                   className="mt-2 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[#9A9EAE] hover:text-white transition-colors"
                 >
-                  <span>Fiche AniList</span>
+                  <span>{tr("Fiche AniList")}</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
@@ -272,7 +267,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                   ) : (
                     <Tv className="w-3 h-3 text-sky-400" />
                   )}
-                  {media.type} · {formatFormat(media.format)}
+                  {media.type} · {tFormat(media.format)}
                 </span>
                 {media.averageScore && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0B95B]/15 border border-[#F0B95B]/35 text-xs font-mono font-semibold text-[#F0B95B]">
@@ -283,8 +278,8 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 {media.nextAiringEpisode && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/18 border border-accent/35 text-xs font-mono text-accent-soft">
                     <Clock className="w-3.5 h-3.5" />
-                    Ép. {media.nextAiringEpisode.episode} ·{" "}
-                    {formatCountdown(media.nextAiringEpisode.airingAt)}
+                    {t("common.epShort")} {media.nextAiringEpisode.episode} ·{" "}
+                    {tCountdown(media.nextAiringEpisode.airingAt)}
                   </span>
                 )}
               </div>
@@ -371,7 +366,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 <div className="mt-5 pt-4 border-t border-white/[0.07]">
                   <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-[#F0B95B] mb-1.5 flex items-center gap-1.5">
                     <Bookmark className="w-3 h-3 fill-current" />
-                    Votre note personnelle
+                    {tr("Votre note personnelle")}
                   </p>
                   <p className="text-sm italic text-[#E6E4DD] leading-relaxed">
                     &laquo; {entry.notes} &raquo;
@@ -441,11 +436,6 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                   );
                 })}
               </div>
-              {totalUnits && totalUnits > checklistCount && (
-                <p className="mt-3 text-[11px] text-[#787D91]">
-                  Utilisez le compteur +1 ou &laquo; Note, dates & critique &raquo; pour naviguer au-delà du {unitLabel.toLowerCase()} {checklistCount} (sur {totalUnits}).
-                </p>
-              )}
             </section>
 
             {/* Score Distribution & Tags Row */}
@@ -455,7 +445,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                   <section className="rounded-2xl card-surface p-5">
                     <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-[#858A9E] mb-4 flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 text-[#F0B95B]" />
-                      Répartition des notes communautaires
+                      {tr("Répartition des notes communautaires")}
                     </h2>
                     <div className="flex items-end gap-2 h-28 pt-2">
                       {media.scoreDistribution.map((bucket) => {
@@ -490,7 +480,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                 {media.tags.length > 0 && (
                   <section className="rounded-2xl card-surface p-5">
                     <h2 className="text-xs font-mono uppercase tracking-[0.18em] text-[#858A9E] mb-3.5">
-                      Thèmes & Atmosphère
+                      {tr("Thèmes & Atmosphère")}
                     </h2>
                     <div className="flex flex-wrap gap-2">
                       {media.tags.map((tag) => (
@@ -538,7 +528,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                             {ch.name}
                           </p>
                           <p className="text-[11px] font-mono uppercase text-[#7E8397] mt-0.5">
-                            {ch.role === "MAIN" ? "Principal" : "Secondaire"}
+                            {ch.role === "MAIN" ? tr("Principal") : tr("Secondaire")}
                           </p>
                         </div>
                       </div>
@@ -569,7 +559,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
             {/* Relations */}
             {media.relations.length > 0 && (
               <RevealSection className="space-y-4">
-                <h2 className="text-lg font-semibold text-white">Œuvres liées</h2>
+                <h2 className="text-lg font-semibold text-white">{tr("Œuvres liées")}</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   {media.relations.map((rel) => (
                     <motion.div key={`${rel.relationType}-${rel.media.id}`} whileHover={{ y: -3 }}>
@@ -584,13 +574,13 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                         />
                         <div className="min-w-0">
                           <span className="text-[10px] font-mono uppercase tracking-wider text-accent-hover">
-                            {RELATION_FR[rel.relationType] ?? rel.relationType}
+                            {RELATION_FR[rel.relationType] ? tr(RELATION_FR[rel.relationType]) : rel.relationType}
                           </span>
                           <p className="text-xs font-semibold text-[#F4F3EE] group-hover:text-white line-clamp-2 mt-0.5">
                             {rel.media.title}
                           </p>
                           <p className="text-[10.5px] text-[#7E8397] mt-0.5">
-                            {formatFormat(rel.media.format)}
+                            {tFormat(rel.media.format)}
                           </p>
                         </div>
                       </Link>
