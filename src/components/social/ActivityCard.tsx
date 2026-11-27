@@ -83,6 +83,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState<ReportReason>("spoiler");
   const [reporting, setReporting] = useState(false);
+  const [likeAnimKey, setLikeAnimKey] = useState(0);
 
   const isOwnActivity = item.userId === profile.id;
   const isLiked = item.likes.includes(profile.id);
@@ -109,6 +110,9 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
   const handleToggleLike = async () => {
     // Optimistic instant toggle (supports rapid double clicks without blocking!)
     const addingLike = !isLiked;
+    if (addingLike) {
+      setLikeAnimKey((k) => k + 1);
+    }
     const optimisticLikes = isLiked
       ? item.likes.filter((id) => id !== profile.id)
       : [...item.likes, profile.id];
@@ -401,14 +405,35 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
             type="button"
             onClick={() => void handleToggleLike()}
             className={cn(
-              "h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
+              "group/like relative h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-[transform,background-color,border-color,color] duration-200 hover:-translate-y-0.5 active:scale-92 cursor-pointer",
               isLiked
-                ? "bg-rose-500/18 border-rose-400/45 text-rose-300"
+                ? "bg-rose-500/18 border-rose-400/45 text-rose-300 shadow-[0_4px_14px_rgba(244,63,94,0.22)]"
                 : "bg-white/[0.04] hover:bg-white/[0.09] border-white/[0.08] text-[#B5B9C9] hover:text-white"
             )}
           >
-            <Heart className={cn("w-3.5 h-3.5", isLiked && "fill-current")} />
-            <span className="font-mono">{item.likes.length}</span>
+            <span className="relative inline-flex items-center justify-center">
+              {likeAnimKey > 0 && isLiked && (
+                <span
+                  key={`ring-${likeAnimKey}`}
+                  aria-hidden="true"
+                  className="shiori-pop-ring pointer-events-none absolute -inset-1.5 rounded-full border border-rose-400/80"
+                />
+              )}
+              <Heart
+                key={likeAnimKey > 0 ? `heart-${likeAnimKey}` : "heart-rest"}
+                className={cn(
+                  "w-3.5 h-3.5 transition-transform duration-200 group-hover/like:scale-110",
+                  isLiked && "fill-current",
+                  likeAnimKey > 0 && isLiked && "shiori-heart-pop"
+                )}
+              />
+            </span>
+            <span
+              key={likeAnimKey > 0 ? `cnt-${item.likes.length}` : "cnt-rest"}
+              className={cn("font-mono", likeAnimKey > 0 && "shiori-count-pop")}
+            >
+              {item.likes.length}
+            </span>
             <span>{tr("J'aime")}</span>
           </button>
 
@@ -416,7 +441,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
             type="button"
             onClick={() => setCommentsOpen((v) => !v)}
             className={cn(
-              "h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
+              "h-8 px-3 rounded-full border text-xs font-semibold inline-flex items-center gap-1.5 transition-[transform,background-color,border-color,color] duration-200 hover:-translate-y-0.5 active:scale-92 cursor-pointer",
               commentsOpen
                 ? "bg-accent/18 border-accent/40 text-accent-soft"
                 : "bg-white/[0.04] hover:bg-white/[0.09] border-white/[0.08] text-[#B5B9C9] hover:text-white"

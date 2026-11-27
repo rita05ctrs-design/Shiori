@@ -339,9 +339,9 @@ export function Navbar() {
               onClick={() => setCommandOpen(true)}
               aria-label={t("nav.search")}
               title={`${t("nav.search")} (⌘K)`}
-              className="group flex items-center justify-center gap-1.5 w-8.5 h-8.5 sm:w-9 sm:h-9 xl:w-auto xl:px-3 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] hover:border-white/[0.18] transition-all text-xs text-[#B8BCCB] hover:text-white cursor-pointer"
+              className="group flex items-center justify-center gap-1.5 w-8.5 h-8.5 sm:w-9 sm:h-9 xl:w-auto xl:px-3 rounded-full bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.09] hover:border-white/[0.18] transition-[transform,background-color,border-color,color] duration-200 hover:-translate-y-0.5 active:scale-95 text-xs text-[#B8BCCB] hover:text-white cursor-pointer"
             >
-              <Search className="w-3.5 h-3.5 text-accent-soft group-hover:text-white transition-colors" />
+              <Search className="w-3.5 h-3.5 text-accent-soft group-hover:text-white group-hover:rotate-[-10deg] group-hover:scale-110 transition-transform duration-200" />
               <span className="hidden 2xl:inline">{t("nav.search")}</span>
               <kbd className="hidden xl:inline-flex items-center px-1.5 py-0.5 rounded bg-white/[0.07] text-[10px] font-mono text-[#9EA3B5] border border-white/[0.08]">
                 ⌘K
@@ -361,7 +361,7 @@ export function Navbar() {
                 aria-label={t("nav.messages")}
                 title={t("nav.messages")}
                 className={cn(
-                  "hidden sm:flex relative w-9 h-9 rounded-full border items-center justify-center transition-all",
+                  "hidden sm:flex relative w-9 h-9 rounded-full border items-center justify-center transition-[transform,background-color,border-color,color] duration-200 hover:-translate-y-0.5 active:scale-95",
                   pathname.startsWith("/messages")
                     ? "bg-accent/20 border-accent/55 text-white"
                     : "bg-white/[0.045] hover:bg-white/[0.09] border-white/[0.08] hover:border-white/[0.18] text-[#B8BCCB] hover:text-white"
@@ -387,7 +387,7 @@ export function Navbar() {
                 aria-label={tr("Menu profil et paramètres")}
                 aria-expanded={profileMenuOpen}
                 className={cn(
-                  "flex items-center gap-2 h-8.5 sm:h-9 px-1 sm:px-1.5 xl:pr-2.5 rounded-full transition-all cursor-pointer border",
+                  "flex items-center gap-2 h-8.5 sm:h-9 px-1 sm:px-1.5 xl:pr-2.5 rounded-full transition-[transform,background-color,border-color] duration-200 hover:-translate-y-0.5 active:scale-95 cursor-pointer border",
                   isCreator
                     ? "bg-[#F0B95B]/10 hover:bg-[#F0B95B]/18 border-[#F0B95B]/45 hover:border-[#F0B95B]/70"
                     : "bg-white/[0.045] hover:bg-white/[0.09] border-white/[0.08] hover:border-white/[0.18]"

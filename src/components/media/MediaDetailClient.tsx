@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import { usePosterTilt } from "@/hooks/usePosterTilt";
 import { MediaCard } from "@/components/media/MediaCard";
 import { LibraryTrackerCard } from "@/components/media/LibraryTrackerCard";
 import { TranslatedSynopsis } from "@/components/media/TranslatedSynopsis";
@@ -61,6 +62,8 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
   const router = useRouter();
   const { getEntry, upsertEntry } = useShiori();
   const { t, tr, tGenre, tFormat, tMediaStatus, tSeasonYear, tCountdown, locale } = useTranslation();
+  const { tiltRef: detailPosterRef, tiltHandlers: detailPosterHandlers } =
+    usePosterTilt<HTMLDivElement>({ maxTilt: 6.5 });
 
   const handleBack = () => {
     if (
@@ -144,18 +147,43 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
           {/* LEFT COLUMN: Poster + Tracker Controls + Metadata */}
           <div className="lg:col-span-3 space-y-5">
-            {/* Poster */}
+            {/* Poster — 3D Magnetic Perspective Tilt + Cursor-Tracking Specular Spotlight */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35 }}
-              className="w-36 sm:w-56 lg:w-full aspect-[2/3] rounded-2xl overflow-hidden border border-white/[0.14] shadow-[0_24px_60px_rgba(0,0,0,0.75)] bg-[#131622]"
+              className="w-36 sm:w-56 lg:w-full"
             >
-              <img
-                src={media.coverImage.extraLarge}
-                alt={title}
-                className="w-full h-full object-cover"
-              />
+              <div
+                ref={detailPosterRef}
+                {...detailPosterHandlers}
+                className="shiori-poster-shell shiori-detail-poster relative aspect-[2/3] w-full rounded-2xl border border-white/[0.14] shadow-[0_24px_60px_rgba(0,0,0,0.75)] bg-[#131622]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="shiori-poster-glow pointer-events-none absolute -inset-2.5 rounded-3xl z-0"
+                />
+                <div className="relative z-[1] w-full h-full rounded-[15px] overflow-hidden bg-[#131622]">
+                  <img
+                    src={media.coverImage.extraLarge}
+                    alt={title}
+                    draggable={false}
+                    className="shiori-poster-img w-full h-full object-cover select-none"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="shiori-poster-glare pointer-events-none absolute inset-0 z-[2] rounded-[15px]"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="shiori-poster-sheen pointer-events-none absolute inset-0 z-[2] bg-gradient-to-r from-transparent via-white/[0.18] to-transparent"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="shiori-poster-rim pointer-events-none absolute inset-0 z-[3] rounded-[15px]"
+                  />
+                </div>
+              </div>
             </motion.div>
 
             {/* Primary Animated Tracking Card */}
@@ -422,7 +450,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
                       type="button"
                       onClick={() => handleSetEpisode(num)}
                       className={cn(
-                        "h-9 rounded-lg font-mono text-xs font-medium border transition-all flex items-center justify-center gap-1 cursor-pointer",
+                        "h-9 rounded-lg font-mono text-xs font-medium border transition-[transform,background-color,border-color,color,box-shadow] duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-0.5 hover:scale-[1.06] active:scale-[0.92] flex items-center justify-center gap-1 cursor-pointer",
                         isCurrent
                           ? "bg-accent border-accent-hover text-accent-fg shadow-[0_0_16px_rgb(var(--shiori-accent-rgb)/0.45)]"
                           : watched

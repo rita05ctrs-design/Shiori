@@ -1521,7 +1521,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5 pt-0.5">
           <button
             type="button"
             onClick={() => {
@@ -1532,7 +1532,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               setActiveMoodId(null);
             }}
             className={cn(
-              "px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 cursor-pointer transition-colors",
+              "px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 cursor-pointer transition-[transform,background-color,border-color,color] duration-150 hover:-translate-y-0.5 active:scale-[0.94]",
               selectedGenres.length === 0 && selectedTags.length === 0
                 ? "bg-white text-[#090A0F] border-white font-semibold"
                 : "bg-white/[0.03] border-white/[0.08] text-[#9A9EAE] hover:text-white"
@@ -1548,9 +1548,9 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 type="button"
                 onClick={() => toggleGenre(g.id)}
                 className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 cursor-pointer transition-colors",
+                  "px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap shrink-0 cursor-pointer transition-[transform,background-color,border-color,color] duration-150 hover:-translate-y-0.5 active:scale-[0.94]",
                   selected
-                    ? "bg-accent border-accent text-accent-fg font-semibold"
+                    ? "bg-accent border-accent text-accent-fg font-semibold shadow-[0_4px_14px_rgb(var(--shiori-accent-rgb)/0.32)]"
                     : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.16]"
                 )}
               >

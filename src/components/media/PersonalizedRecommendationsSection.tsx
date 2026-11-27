@@ -19,6 +19,7 @@ import {
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { RevealSection } from "@/components/motion/MotionPrimitives";
+import { PosterTiltSurface } from "@/components/motion/PosterTiltSurface";
 import { useDragScroll } from "@/hooks/useDragScroll";
 import { cn, formatScore, getDisplayTitle } from "@/lib/utils";
 import type { PersonalizedRecommendation } from "@/types/media";
@@ -228,8 +229,8 @@ export function PersonalizedRecommendationsSection() {
                   key={m.id}
                   className="shiori-rail-slot w-[148px] sm:w-[176px] lg:w-[188px] shrink-0 group flex flex-col"
                 >
-                  {/* 2:3 Vertical Poster — 120fps Cinema Hover */}
-                  <div className="shiori-poster-shell relative z-0 aspect-[2/3] rounded-xl border border-white/[0.08] bg-[#121521] shadow-[0_8px_18px_rgba(0,0,0,0.4)]">
+                  {/* 2:3 Vertical Poster — 120fps 3D Magnetic Tilt + Cursor Spotlight */}
+                  <PosterTiltSurface className="shiori-poster-shell relative z-0 aspect-[2/3] rounded-xl border border-white/[0.08] bg-[#121521] shadow-[0_8px_18px_rgba(0,0,0,0.4)]">
                     <span
                       aria-hidden="true"
                       className="shiori-poster-glow pointer-events-none absolute -inset-2 rounded-2xl z-0"
@@ -250,6 +251,10 @@ export function PersonalizedRecommendationsSection() {
                       <div className="shiori-poster-vignette absolute inset-0 z-[1] bg-gradient-to-t from-obsidian via-obsidian/20 to-transparent pointer-events-none" />
                       <span
                         aria-hidden="true"
+                        className="shiori-poster-glare pointer-events-none absolute inset-0 z-[2] rounded-[11px]"
+                      />
+                      <span
+                        aria-hidden="true"
                         className="shiori-poster-sheen pointer-events-none absolute inset-0 z-[2] bg-gradient-to-r from-transparent via-white/[0.18] to-transparent"
                       />
                       <span
@@ -258,7 +263,7 @@ export function PersonalizedRecommendationsSection() {
                       />
 
                       {/* Type Pill */}
-                      <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-obsidian/88 border border-white/12 text-[9.5px] font-mono uppercase text-[#D8DBE6]">
+                      <span className="shiori-poster-format absolute top-2 left-2 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-obsidian/88 border border-white/12 text-[9.5px] font-mono uppercase text-[#D8DBE6]">
                         {m.type === "MANGA" ? (
                           <BookOpen className="w-2.5 h-2.5 text-violet-400" />
                         ) : (
@@ -269,7 +274,7 @@ export function PersonalizedRecommendationsSection() {
 
                       {/* Score Pill */}
                       {m.averageScore && (
-                        <span className="absolute top-2 right-2 z-10 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-obsidian/88 border border-white/12 font-mono text-[10.5px] font-bold text-kinpaku">
+                        <span className="shiori-poster-score absolute top-2 right-2 z-10 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-obsidian/88 border border-white/12 font-mono text-[10.5px] font-bold text-kinpaku">
                           <Star className="w-2.5 h-2.5 fill-current" />
                           {formatScore(m.averageScore)}
                         </span>
@@ -286,10 +291,10 @@ export function PersonalizedRecommendationsSection() {
                           }}
                           title={entry ? tr("Déjà dans votre liste") : tr("Ajouter en À voir")}
                           className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center border transition-[transform,opacity,background-color,border-color] duration-250 ease-out cursor-pointer shadow-lg active:scale-90",
+                            "w-8 h-8 rounded-full flex items-center justify-center border transition-[transform,opacity,background-color,border-color] duration-280 ease-[cubic-bezier(0.34,1.56,0.64,1)] cursor-pointer shadow-lg active:scale-90",
                             entry
                               ? "bg-emerald-500 border-emerald-400 text-[#07080C]"
-                              : "bg-obsidian/92 hover:bg-accent border-white/22 hover:border-accent text-white hover:text-accent-fg sm:opacity-0 sm:translate-y-1.5 sm:scale-90 sm:group-hover:opacity-100 sm:group-hover:translate-y-0 sm:group-hover:scale-100"
+                              : "bg-obsidian/92 hover:bg-accent border-white/22 hover:border-accent text-white hover:text-accent-fg hover:scale-110 sm:opacity-0 sm:translate-y-2 sm:scale-85 sm:group-hover:opacity-100 sm:group-hover:translate-y-0 sm:group-hover:scale-100"
                           )}
                         >
                           {entry ? (
@@ -300,14 +305,14 @@ export function PersonalizedRecommendationsSection() {
                         </button>
                       </div>
                     </Link>
-                  </div>
+                  </PosterTiltSurface>
 
                   {/* Title & Compact Reason Tag */}
                   <div className="pt-2.5 space-y-1.5">
                     <Link
                       href={`/media/${m.id}`}
                       draggable={false}
-                      className="block text-[13px] font-semibold text-[#F4F3EE] group-hover:text-accent-hover transition-colors line-clamp-1 leading-snug"
+                      className="shiori-poster-title block text-[13px] font-semibold text-[#F4F3EE] group-hover:text-accent-hover line-clamp-1 leading-snug"
                     >
                       {title}
                     </Link>

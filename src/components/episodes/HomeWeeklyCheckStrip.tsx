@@ -660,7 +660,10 @@ export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps)
                             className="w-11 h-15 rounded-xl object-cover border border-white/12 shrink-0"
                           />
                           <div className="min-w-0 flex-1">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-md border font-semibold bg-accent/18 text-accent-soft border-accent/35">
+                            <span
+                              key={entry.progress}
+                              className="shiori-count-pop inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-md border font-semibold bg-accent/18 text-accent-soft border-accent/35"
+                            >
                               {t("common.epShort")} {entry.progress}
                               {entry.totalUnits ? `/${entry.totalUnits}` : ""}
                             </span>
@@ -753,8 +756,9 @@ export function HomeWeeklyCheckStrip({ airingSlots }: HomeWeeklyCheckStripProps)
                           </div>
                           <div className="min-w-0 flex-1">
                             <span
+                              key={`${slot.id}-${isWatched ? "w" : "u"}`}
                               className={cn(
-                                "inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-md border font-semibold",
+                                "shiori-count-pop inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-md border font-semibold",
                                 isWatched
                                   ? "bg-emerald-500/18 text-emerald-300 border-emerald-400/35"
                                   : "bg-accent/18 text-accent-soft border-accent/35"

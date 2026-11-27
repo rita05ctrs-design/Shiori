@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Star, Plus, Check, Edit3 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import { usePosterTilt } from "@/hooks/usePosterTilt";
 import { StreamingIconsStrip } from "@/components/media/WhereToWatchSection";
 import {
   cn,
@@ -27,6 +28,7 @@ export const MediaCard = React.memo(function MediaCard({
 }: MediaCardProps) {
   const { getEntry, openQuickEdit } = useShiori();
   const { t, tr, tStatus, tFormat, tGenre } = useTranslation();
+  const { tiltRef, tiltHandlers } = usePosterTilt<HTMLDivElement>();
   const entry = getEntry(media.id);
   const title = getDisplayTitle(media);
   const statusCfg = entry ? STATUS_CONFIG[entry.status] : null;
@@ -34,9 +36,13 @@ export const MediaCard = React.memo(function MediaCard({
   return (
     /* Non-moving outer hit-area wrapper eliminates hover edge jitter while preserving native 120fps horizontal touch swiping */
     <div className={cn("group relative flex flex-col", className)}>
-      {/* Zero-repaint 120fps Cinema Poster Container (glow & rim fade via opacity only — no animated box-shadow!) */}
-      <div className="shiori-poster-shell relative z-0 aspect-[2/3] w-full rounded-xl bg-[#121520] border border-white/[0.09] shadow-[0_8px_18px_rgba(0,0,0,0.4)]">
-        {/* Lightweight radial gradient ambient glow (0 shadow-blur rasterization at rest!) */}
+      {/* Zero-repaint 120fps 3D Magnetic Tilt + Cursor Spotlight Poster Container */}
+      <div
+        ref={tiltRef}
+        {...tiltHandlers}
+        className="shiori-poster-shell relative z-0 aspect-[2/3] w-full rounded-xl bg-[#121520] border border-white/[0.09] shadow-[0_8px_18px_rgba(0,0,0,0.4)]"
+      >
+        {/* Lightweight cursor-following ambient aura (0 shadow-blur rasterization at rest!) */}
         <span
           aria-hidden="true"
           className="shiori-poster-glow pointer-events-none absolute -inset-2 rounded-2xl z-0"
@@ -59,6 +65,11 @@ export const MediaCard = React.memo(function MediaCard({
             />
             {/* Cinematic bottom vignette */}
             <div className="shiori-poster-vignette absolute inset-0 z-[1] bg-gradient-to-t from-obsidian/94 via-obsidian/10 to-black/22 pointer-events-none" />
+            {/* Cursor-tracking specular light glare */}
+            <span
+              aria-hidden="true"
+              className="shiori-poster-glare pointer-events-none absolute inset-0 z-[2] rounded-[11px]"
+            />
             {/* Pure GPU diagonal glass specular sheen sweep on hover */}
             <span
               aria-hidden="true"
@@ -98,7 +109,7 @@ export const MediaCard = React.memo(function MediaCard({
 
           {/* Top Right: Score Pill */}
           {media.averageScore && (
-            <div className="absolute top-2 right-2 sm:top-2.5 sm:right-2.5 z-10 px-1.5 sm:px-2 py-0.5 rounded-md bg-[#090B12]/90 border border-white/12 flex items-center gap-1 pointer-events-none">
+            <div className="shiori-poster-score absolute top-2 right-2 sm:top-2.5 sm:right-2.5 z-10 px-1.5 sm:px-2 py-0.5 rounded-md bg-[#090B12]/90 border border-white/12 flex items-center gap-1 pointer-events-none">
               <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#F0B95B] fill-[#F0B95B]" />
               <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-[#F4F3EE]">
                 {formatScore(media.averageScore)}
@@ -116,10 +127,10 @@ export const MediaCard = React.memo(function MediaCard({
             }}
             title={entry ? tr("Modifier dans ma bibliothèque") : tr("Ajouter à ma bibliothèque")}
             className={cn(
-              "absolute bottom-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center border transition-[transform,opacity,background-color,border-color] duration-250 ease-out cursor-pointer active:scale-90",
+              "absolute bottom-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center border transition-[transform,opacity,background-color,border-color] duration-280 ease-[cubic-bezier(0.34,1.56,0.64,1)] cursor-pointer active:scale-90",
               entry
-                ? "bg-[#0B1E18]/92 border-emerald-400/50 text-emerald-300 opacity-95 hover:bg-emerald-500/35 hover:scale-105"
-                : "bg-[#090B12]/92 border-white/22 text-white opacity-95 sm:opacity-0 sm:translate-y-2 sm:scale-90 sm:group-hover:opacity-100 sm:group-hover:translate-y-0 sm:group-hover:scale-100 hover:bg-accent hover:border-accent"
+                ? "bg-[#0B1E18]/92 border-emerald-400/50 text-emerald-300 opacity-95 hover:bg-emerald-500/35 hover:scale-110"
+                : "bg-[#090B12]/92 border-white/22 text-white opacity-95 sm:opacity-0 sm:translate-y-2.5 sm:scale-85 sm:group-hover:opacity-100 sm:group-hover:translate-y-0 sm:group-hover:scale-100 hover:bg-accent hover:border-accent hover:scale-110"
             )}
           >
             {entry ? <Edit3 className="w-3.5 h-3.5" /> : <Plus className="w-4 h-4" />}
@@ -127,7 +138,7 @@ export const MediaCard = React.memo(function MediaCard({
 
           {/* Bottom Left Format Tag */}
           <div className="absolute bottom-2.5 left-2.5 z-10 pointer-events-none">
-            <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#090B12]/88 text-[#D2D5E0] border border-white/[0.1]">
+            <span className="shiori-poster-format inline-block text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#090B12]/88 text-[#D2D5E0] border border-white/[0.1]">
               {tFormat(media.format)}
             </span>
           </div>
@@ -140,7 +151,7 @@ export const MediaCard = React.memo(function MediaCard({
         draggable={false}
         className="mt-2.5 block min-w-0 select-none"
       >
-        <h3 className="text-[13.5px] font-semibold text-[#F2F1EC] group-hover:text-accent-hover transition-colors line-clamp-1 leading-snug">
+        <h3 className="shiori-poster-title text-[13.5px] font-semibold text-[#F2F1EC] group-hover:text-accent-hover line-clamp-1 leading-snug">
           {title}
         </h3>
         <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-[#7E8397] min-w-0">

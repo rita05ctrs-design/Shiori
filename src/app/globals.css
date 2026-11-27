@@ -441,27 +441,47 @@ select option {
 }
 
 .shiori-poster-shell {
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), border-color 240ms ease;
+  transform-style: preserve-3d;
+  transition:
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 240ms ease;
+}
+
+.shiori-poster-shell[data-tilting="true"] {
+  transition:
+    transform 95ms linear,
+    border-color 200ms ease;
 }
 
 .shiori-poster-glow {
   opacity: 0;
   transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
   background: radial-gradient(
-    ellipse 85% 85% at 50% 55%,
-    rgb(var(--shiori-accent-rgb) / 0.42) 0%,
-    rgb(var(--shiori-secondary-rgb) / 0.2) 48%,
+    ellipse 88% 88% at var(--mx, 50%) var(--my, 50%),
+    rgb(var(--shiori-accent-rgb) / 0.46) 0%,
+    rgb(var(--shiori-secondary-rgb) / 0.22) 48%,
     transparent 74%
   );
-  transform: scale(1.09);
+  transform: scale(1.1);
+}
+
+.shiori-poster-glare {
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+  background: radial-gradient(
+    circle 150px at var(--mx, 50%) var(--my, 35%),
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.08) 44%,
+    transparent 72%
+  );
 }
 
 .shiori-poster-rim {
   opacity: 0;
   transition: opacity 240ms ease-out;
   box-shadow:
-    inset 0 0 0 1.5px rgb(var(--shiori-accent-rgb) / 0.72),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    inset 0 0 0 1.5px rgb(var(--shiori-accent-rgb) / 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 .shiori-poster-img {
@@ -478,24 +498,109 @@ select option {
   transition: opacity 280ms ease-out;
 }
 
+.shiori-poster-score {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), border-color 220ms ease;
+}
+
+.shiori-poster-format {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), color 220ms ease, border-color 220ms ease;
+}
+
+.shiori-poster-title {
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms ease;
+}
+
 .group:active .shiori-poster-shell {
-  transform: translate3d(0, -1px, 0) scale(0.978);
+  transform: perspective(880px) translate3d(0, -1px, 0) scale(0.976);
   transition-duration: 110ms;
+}
+
+/* Satisfying spring micro-animations for interactive buttons & likes */
+@keyframes shiori-heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.34);
+  }
+  68% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shiori-pop-ring {
+  0% {
+    opacity: 0.75;
+    transform: scale(0.55);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.95);
+  }
+}
+
+@keyframes shiori-count-pop {
+  0% {
+    transform: scale(1.26);
+  }
+  60% {
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.shiori-heart-pop {
+  animation: shiori-heart-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.shiori-pop-ring {
+  animation: shiori-pop-ring 460ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.shiori-count-pop {
+  animation: shiori-count-pop 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .group:hover .shiori-poster-shell {
-    transform: translate3d(0, -7px, 0) scale(1.022);
+    transform: perspective(880px) translate3d(0, -8px, 0)
+      rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(1.028);
+    border-color: rgb(var(--shiori-accent-rgb) / 0.62);
+  }
+
+  .shiori-detail-poster:hover {
+    transform: perspective(1000px) translate3d(0, -4px, 0)
+      rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(1.018);
     border-color: rgb(var(--shiori-accent-rgb) / 0.55);
   }
 
+  .shiori-detail-poster:hover .shiori-poster-glow,
+  .shiori-detail-poster:hover .shiori-poster-glare,
+  .shiori-detail-poster:hover .shiori-poster-rim {
+    opacity: 1;
+  }
+
+  .shiori-detail-poster:hover .shiori-poster-img {
+    transform: scale(1.045);
+  }
+
+  .shiori-detail-poster:hover .shiori-poster-sheen {
+    transform: translate3d(140%, 0, 0) skewX(-22deg);
+  }
+
   .group:hover .shiori-poster-glow,
+  .group:hover .shiori-poster-glare,
   .group:hover .shiori-poster-rim {
     opacity: 1;
   }
 
   .group:hover .shiori-poster-img {
-    transform: scale(1.075);
+    transform: scale(1.08);
   }
 
   .group:hover .shiori-poster-sheen {
@@ -506,8 +611,23 @@ select option {
     opacity: 1;
   }
 
+  .group:hover .shiori-poster-score {
+    transform: translate3d(0, -1px, 0) scale(1.07);
+    border-color: rgba(240, 185, 91, 0.55);
+  }
+
+  .group:hover .shiori-poster-format {
+    transform: translate3d(2px, 0, 0);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .group:hover .shiori-poster-title {
+    transform: translate3d(2px, 0, 0);
+  }
+
   .group:active .shiori-poster-shell {
-    transform: translate3d(0, -3px, 0) scale(0.992);
+    transform: perspective(880px) translate3d(0, -3px, 0) scale(0.99);
   }
 }
 
@@ -524,10 +644,17 @@ select option {
   .badge-rose-aura,
   .shiori-poster-shell,
   .shiori-poster-glow,
+  .shiori-poster-glare,
   .shiori-poster-rim,
   .shiori-poster-img,
   .shiori-poster-sheen,
-  .shiori-poster-vignette {
+  .shiori-poster-vignette,
+  .shiori-poster-score,
+  .shiori-poster-format,
+  .shiori-poster-title,
+  .shiori-heart-pop,
+  .shiori-pop-ring,
+  .shiori-count-pop {
     animation: none !important;
     transition: none !important;
   }
@@ -535,7 +662,8 @@ select option {
   .shiori-card-lift:hover,
   .shiori-card-lift:active,
   .group:hover .shiori-poster-shell,
-  .group:hover .shiori-poster-img {
+  .group:hover .shiori-poster-img,
+  .shiori-detail-poster:hover {
     transform: none !important;
   }
 }
@@ -551,10 +679,17 @@ html[data-motion="reduced"] .badge-gold-aura,
 html[data-motion="reduced"] .badge-rose-aura,
 html[data-motion="reduced"] .shiori-poster-shell,
 html[data-motion="reduced"] .shiori-poster-glow,
+html[data-motion="reduced"] .shiori-poster-glare,
 html[data-motion="reduced"] .shiori-poster-rim,
 html[data-motion="reduced"] .shiori-poster-img,
 html[data-motion="reduced"] .shiori-poster-sheen,
-html[data-motion="reduced"] .shiori-poster-vignette {
+html[data-motion="reduced"] .shiori-poster-vignette,
+html[data-motion="reduced"] .shiori-poster-score,
+html[data-motion="reduced"] .shiori-poster-format,
+html[data-motion="reduced"] .shiori-poster-title,
+html[data-motion="reduced"] .shiori-heart-pop,
+html[data-motion="reduced"] .shiori-pop-ring,
+html[data-motion="reduced"] .shiori-count-pop {
   animation: none !important;
   transition: none !important;
 }
@@ -562,6 +697,7 @@ html[data-motion="reduced"] .shiori-poster-vignette {
 html[data-motion="reduced"] .shiori-card-lift:hover,
 html[data-motion="reduced"] .shiori-card-lift:active,
 html[data-motion="reduced"] .group:hover .shiori-poster-shell,
-html[data-motion="reduced"] .group:hover .shiori-poster-img {
+html[data-motion="reduced"] .group:hover .shiori-poster-img,
+html[data-motion="reduced"] .shiori-detail-poster:hover {
   transform: none !important;
 }

@@ -227,7 +227,7 @@ export function SeasonChronologySection({
           ref={setScrollRef}
           {...dragHandlers}
           className={cn(
-            "flex gap-2.5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar pb-1.5 -mx-1 px-1 select-none [transform:translateZ(0)]",
+            "flex gap-2.5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-1.5 -my-1 -mx-1 px-1 select-none [transform:translateZ(0)]",
             hasOverflow
               ? isDragging
                 ? "cursor-grabbing"
@@ -258,10 +258,10 @@ export function SeasonChronologySection({
             const cardInner = (
               <div
                 className={cn(
-                  "w-[205px] sm:w-[228px] shrink-0 rounded-xl p-2.5 border transition-all flex items-center gap-2.5 h-full",
+                  "w-[205px] sm:w-[228px] shrink-0 rounded-xl p-2.5 border transition-[transform,border-color,background-color] duration-200 flex items-center gap-2.5 h-full",
                   isCurrent
                     ? "bg-gradient-to-br from-accent/20 via-[#15111B] to-kinpaku/10 border-accent/65 shadow-[0_0_24px_rgba(229,72,77,0.22)] ring-1 ring-inset ring-kinpaku/25"
-                    : "bg-obsidian/70 border-white/[0.08] hover:border-white/[0.22] hover:bg-white/[0.05]"
+                    : "bg-obsidian/70 border-white/[0.08] hover:border-accent/45 hover:bg-white/[0.05] group-hover:-translate-y-0.5 group-active:scale-[0.98]"
                 )}
               >
                 {/* Compact Thumbnail */}
@@ -272,7 +272,7 @@ export function SeasonChronologySection({
                     draggable={false}
                     loading="lazy"
                     decoding="async"
-                    className="w-full h-full object-cover pointer-events-none"
+                    className="w-full h-full object-cover pointer-events-none transition-transform duration-300 ease-out group-hover:scale-110"
                   />
                   {item.format === "MOVIE" && (
                     <span className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded bg-obsidian/90 flex items-center justify-center">
