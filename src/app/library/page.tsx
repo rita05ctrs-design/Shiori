@@ -42,9 +42,14 @@ import {
   Leaf,
   X,
   CheckCircle2,
+  Radio,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import {
+  computeLiveAiringMetrics,
+  useWatchingAiring,
+} from "@/hooks/useWatchingAiring";
 import { CINEMA_EASE } from "@/components/motion/MotionPrimitives";
 import { LuxurySelect, type LuxurySelectOption } from "@/components/ui/LuxurySelect";
 import { ContinueWatchingSection } from "@/components/media/ContinueWatchingSection";
@@ -177,6 +182,7 @@ function LibraryPageInner() {
     toast,
   } = useShiori();
   const { t, tr, tStatus, tFormat, tGenre, tSeason, locale } = useTranslation();
+  const { airingMap } = useWatchingAiring(library);
   const yearCopy = useMemo(() => getYearFilterCopy(contentLanguage), [contentLanguage]);
   const yearEraOptions = useMemo(() => getYearEraOptions(contentLanguage), [contentLanguage]);
 
@@ -1349,10 +1355,13 @@ function LibraryPageInner() {
           <div className={cn("grid gap-4 sm:gap-5", gridColsClass)}>
             {visibleEntries.map((entry) => {
               const cfg = STATUS_CONFIG[entry.status];
-              const exactPct = getProgressPercent(entry);
+              const liveAiring = computeLiveAiringMetrics(entry, airingMap.get(entry.mediaId));
+              const displayTotalUnits = liveAiring?.totalKnown ?? entry.totalUnits;
+              const exactPct = liveAiring ? liveAiring.watchedPct : getProgressPercent(entry);
               const barPct = exactPct ?? Math.min(85, Math.max(8, entry.progress * 3));
+              const airedBarPct = liveAiring?.airedPct ?? null;
               const unit = entry.type === "MANGA" ? t("common.chShort") : t("common.epShort");
-              const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
+              const atCap = Boolean(displayTotalUnits && entry.progress >= displayTotalUnits);
 
               return (
                 <div key={entry.mediaId} className="group h-full">
@@ -1457,11 +1466,44 @@ function LibraryPageInner() {
                         )}
                       </div>
 
-                      <div className="space-y-2.5">
+                      <div className="space-y-2">
+                        {liveAiring && liveAiring.latestAiredEpisode > 0 && (
+                          liveAiring.behindCount > 0 ? (
+                            <div className="flex items-center justify-between gap-2 px-2.5 py-1 rounded-lg bg-gradient-to-r from-accent/15 to-[#F0B95B]/15 border border-[#F0B95B]/40 text-[10.5px] font-semibold text-[#FDE68A]">
+                              <span className="inline-flex items-center gap-1.5 truncate">
+                                <Radio className="w-3 h-3 text-[#F0B95B] shrink-0 animate-pulse" />
+                                <span className="truncate">
+                                  {tr("Ép. {aired} sorti", {
+                                    aired: liveAiring.latestAiredEpisode,
+                                  })}
+                                </span>
+                              </span>
+                              <span className="font-mono text-[#F0B95B] shrink-0">
+                                +{liveAiring.behindCount} {tr("à voir")}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2 px-2.5 py-1 rounded-lg bg-emerald-500/12 border border-emerald-400/30 text-[10.5px] font-semibold text-emerald-300">
+                              <span className="inline-flex items-center gap-1.5 truncate">
+                                <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                <span className="truncate">
+                                  {tr("À jour · Ép. {aired}", {
+                                    aired: liveAiring.latestAiredEpisode,
+                                  })}
+                                </span>
+                              </span>
+                            </div>
+                          )
+                        )}
+
                         <div className="flex items-center justify-between gap-2 text-xs font-mono">
                           <span className="text-[#B6BAC9] truncate">
                             {unit} <strong className="text-white">{entry.progress}</strong>
-                            {entry.totalUnits ? ` / ${entry.totalUnits}` : " / ?"}
+                            {displayTotalUnits
+                              ? ` / ${displayTotalUnits}`
+                              : liveAiring && liveAiring.latestAiredEpisode > 0
+                                ? ` / ${liveAiring.latestAiredEpisode} ${tr("sortis")}`
+                                : " / ?"}
                             {entry.type === "MANGA" &&
                               ((entry.progressVolumes ?? 0) > 0 || entry.totalVolumes) && (
                                 <span className="ml-1.5 text-violet-300">
@@ -1475,10 +1517,16 @@ function LibraryPageInner() {
                           </span>
                         </div>
 
-                        <div className="h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
+                        <div className="relative h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
+                          {airedBarPct !== null && airedBarPct > barPct && (
+                            <div
+                              style={{ width: `${airedBarPct}%` }}
+                              className="absolute inset-y-0 left-0 rounded-full bg-[#F0B95B]/35 transition-all duration-300"
+                            />
+                          )}
                           <div
                             style={{ width: `${barPct}%` }}
-                            className="h-full rounded-full bg-gradient-to-r from-accent to-[#F0B95B] transition-all duration-300"
+                            className="relative z-10 h-full rounded-full bg-gradient-to-r from-accent to-[#F0B95B] transition-all duration-300"
                           />
                         </div>
 
@@ -1537,8 +1585,10 @@ function LibraryPageInner() {
         <div className="rounded-2xl card-surface overflow-hidden divide-y divide-white/[0.06]">
           {visibleEntries.map((entry) => {
             const cfg = STATUS_CONFIG[entry.status];
+            const liveAiring = computeLiveAiringMetrics(entry, airingMap.get(entry.mediaId));
+            const displayTotalUnits = liveAiring?.totalKnown ?? entry.totalUnits;
             const unit = entry.type === "MANGA" ? t("common.chShort") : t("common.epShort");
-            const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
+            const atCap = Boolean(displayTotalUnits && entry.progress >= displayTotalUnits);
 
             return (
               <div
@@ -1575,6 +1625,24 @@ function LibraryPageInner() {
                       >
                         {tStatus(entry.status, entry.type)}
                       </span>
+                      {liveAiring && liveAiring.latestAiredEpisode > 0 && (
+                        liveAiring.behindCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F0B95B]/16 border border-[#F0B95B]/45 text-[10px] font-semibold text-[#FDE68A]">
+                            <Radio className="w-2.5 h-2.5 text-[#F0B95B]" />
+                            {tr("Ép. {aired} sorti · +{behind}", {
+                              aired: liveAiring.latestAiredEpisode,
+                              behind: liveAiring.behindCount,
+                            })}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/14 border border-emerald-400/35 text-[10px] font-semibold text-emerald-300">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            {tr("À jour · Ép. {aired}", {
+                              aired: liveAiring.latestAiredEpisode,
+                            })}
+                          </span>
+                        )
+                      )}
                     </div>
                     <p className="text-xs text-[#83889C] mt-1 truncate">
                       {entry.format ? tFormat(entry.format) : entry.type}
@@ -1608,7 +1676,7 @@ function LibraryPageInner() {
                     </button>
                     <span className="w-20 sm:w-24 text-center font-mono text-xs text-[#D8DBE6]">
                       {unit} <strong className="text-white">{entry.progress}</strong>
-                      {entry.totalUnits ? `/${entry.totalUnits}` : "/?"}
+                      {displayTotalUnits ? `/${displayTotalUnits}` : "/?"}
                     </span>
                     <button
                       type="button"
@@ -1672,8 +1740,10 @@ function LibraryPageInner() {
               <tbody className="divide-y divide-white/[0.05] text-xs">
                 {visibleEntries.map((entry) => {
                   const cfg = STATUS_CONFIG[entry.status];
+                  const liveAiring = computeLiveAiringMetrics(entry, airingMap.get(entry.mediaId));
+                  const displayTotalUnits = liveAiring?.totalKnown ?? entry.totalUnits;
                   const unit = entry.type === "MANGA" ? t("common.chShort") : t("common.epShort");
-                  const atCap = Boolean(entry.totalUnits && entry.progress >= entry.totalUnits);
+                  const atCap = Boolean(displayTotalUnits && entry.progress >= displayTotalUnits);
                   return (
                     <tr
                       key={entry.mediaId}
@@ -1721,27 +1791,48 @@ function LibraryPageInner() {
                         </span>
                       </td>
                       <td className="px-3 whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1.5 font-mono">
-                          <button
-                            type="button"
-                            onClick={() => incrementProgress(entry.mediaId, -1)}
-                            disabled={entry.progress <= 0}
-                            className="w-6 h-6 rounded bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="min-w-[68px] text-center text-[#D8DBE6]">
-                            {unit} <strong className="text-white">{entry.progress}</strong>
-                            {entry.totalUnits ? `/${entry.totalUnits}` : "/?"}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => incrementProgress(entry.mediaId, 1)}
-                            disabled={atCap}
-                            className="w-6 h-6 rounded bg-accent/25 hover:bg-accent disabled:opacity-35 flex items-center justify-center text-accent-fg cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
+                        <div className="flex flex-col items-start gap-1">
+                          <div className="inline-flex items-center gap-1.5 font-mono">
+                            <button
+                              type="button"
+                              onClick={() => incrementProgress(entry.mediaId, -1)}
+                              disabled={entry.progress <= 0}
+                              className="w-6 h-6 rounded bg-white/[0.05] hover:bg-white/[0.12] disabled:opacity-35 flex items-center justify-center text-white cursor-pointer"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="min-w-[68px] text-center text-[#D8DBE6]">
+                              {unit} <strong className="text-white">{entry.progress}</strong>
+                              {displayTotalUnits ? `/${displayTotalUnits}` : "/?"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => incrementProgress(entry.mediaId, 1)}
+                              disabled={atCap}
+                              className="w-6 h-6 rounded bg-accent/25 hover:bg-accent disabled:opacity-35 flex items-center justify-center text-accent-fg cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                          {liveAiring && liveAiring.latestAiredEpisode > 0 && (
+                            <span
+                              className={cn(
+                                "text-[10px] font-semibold",
+                                liveAiring.behindCount > 0
+                                  ? "text-[#F0B95B]"
+                                  : "text-emerald-300"
+                              )}
+                            >
+                              {liveAiring.behindCount > 0
+                                ? tr("Ép. {aired} sorti · +{behind}", {
+                                    aired: liveAiring.latestAiredEpisode,
+                                    behind: liveAiring.behindCount,
+                                  })
+                                : tr("À jour · Ép. {aired}", {
+                                    aired: liveAiring.latestAiredEpisode,
+                                  })}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 text-center font-mono whitespace-nowrap">

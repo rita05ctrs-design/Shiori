@@ -130,6 +130,7 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "");
   const [bannerUrl, setBannerUrl] = useState(profile.bannerUrl ?? "");
   const [isActivityPublic, setIsActivityPublic] = useState(profile.isActivityPublic !== false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showBadgesPanel, setShowBadgesPanel] = useState(false);
   const [showSeiyuuPanel, setShowSeiyuuPanel] = useState(false);
@@ -210,21 +211,46 @@ export default function SettingsPage() {
     setAvatarUrl(profile.avatarUrl ?? "");
     setBannerUrl(profile.bannerUrl ?? "");
     setIsActivityPublic(profile.isActivityPublic !== false);
-  }, [profile]);
+  }, [
+    profile.id,
+    profile.displayName,
+    profile.username,
+    profile.bio,
+    profile.accentColor,
+    profile.avatarUrl,
+    profile.bannerUrl,
+    profile.isActivityPublic,
+  ]);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (savingProfile) return;
     const trimmedAvatar = avatarUrl.trim();
     const trimmedBanner = bannerUrl.trim();
-    updateProfile({
-      displayName: displayName.trim() || "Membre Shiori",
-      username: username.trim().replace(/\s+/g, "_") || "shiori_user",
-      bio: bio.trim(),
-      accentColor,
-      avatarUrl: trimmedAvatar ? trimmedAvatar : null,
-      bannerUrl: trimmedBanner ? trimmedBanner : null,
-      isActivityPublic,
-    });
+    const nextDisplayName = displayName.trim() || "Membre Shiori";
+    const nextUsername =
+      username
+        .trim()
+        .replace(/^@+/, "")
+        .replace(/\s+/g, "_") || "shiori_user";
+
+    setSavingProfile(true);
+    try {
+      const result = await updateProfile({
+        displayName: nextDisplayName,
+        username: nextUsername,
+        bio: bio.trim(),
+        accentColor,
+        avatarUrl: trimmedAvatar ? trimmedAvatar : null,
+        bannerUrl: trimmedBanner ? trimmedBanner : null,
+        isActivityPublic,
+      });
+      if (result.ok && result.username) {
+        setUsername(result.username);
+      }
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -563,7 +589,8 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <input
-                    type="url"
+                    type="text"
+                    inputMode="url"
                     value={avatarUrl}
                     onChange={(e) => setAvatarUrl(e.target.value)}
                     placeholder={copy.profile.avatarPlaceholder}
@@ -591,7 +618,8 @@ export default function SettingsPage() {
                     )}
                   </div>
                   <input
-                    type="url"
+                    type="text"
+                    inputMode="url"
                     value={bannerUrl}
                     onChange={(e) => setBannerUrl(e.target.value)}
                     placeholder={copy.profile.bannerPlaceholder}
@@ -694,7 +722,7 @@ export default function SettingsPage() {
                     onClick={() => {
                       const next = !isActivityPublic;
                       setIsActivityPublic(next);
-                      updateProfile({ isActivityPublic: next });
+                      void updateProfile({ isActivityPublic: next });
                     }}
                     className={cn(
                       "w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 cursor-pointer",
@@ -710,13 +738,18 @@ export default function SettingsPage() {
                   </button>
                 </div>
 
-                <div className="pt-1 flex justify-end">
+                <div className="pt-2 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="submit"
-                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-semibold shadow-accent transition-all cursor-pointer"
+                    disabled={savingProfile}
+                    className="px-5 py-2.5 rounded-xl bg-accent hover:bg-accent-hover disabled:opacity-60 text-accent-fg text-xs font-semibold shadow-accent transition-all inline-flex items-center gap-2 cursor-pointer"
                   >
-                    {copy.profile.saveProfile}
+                    {savingProfile && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{copy.profile.saveProfile}</span>
                   </button>
+                  <span className="text-[11px] font-mono text-[#7D8296]">
+                    @{username.trim().replace(/^@+/, "").replace(/\s+/g, "_") || profile.username}
+                  </span>
                 </div>
               </form>
 

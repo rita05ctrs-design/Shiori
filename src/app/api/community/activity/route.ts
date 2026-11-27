@@ -14,7 +14,7 @@ import {
   rateLimitResponse,
   sanitizeSafeImageUrl,
 } from "@/lib/server/rate-limit";
-import { normalizeRole } from "@/lib/server/role-resolver";
+import { resolvePublicProfileRole } from "@/lib/server/role-resolver";
 import type {
   ActivityCommentItem,
   BadgeRarity,
@@ -74,7 +74,10 @@ export async function GET(request: NextRequest) {
         if (pp.username) privateUsernames.add(String(pp.username).toLowerCase());
       }
       for (const rp of roleProfs ?? []) {
-        const r = normalizeRole(rp.role);
+        const r = resolvePublicProfileRole({
+          dbRole: rp.role,
+          username: rp.username ? String(rp.username) : null,
+        });
         if (r !== "user") {
           if (rp.id) roleByUserId.set(String(rp.id), r);
           if (rp.username) roleByUsername.set(String(rp.username).toLowerCase(), r);
@@ -109,6 +112,10 @@ export async function GET(request: NextRequest) {
             authorUsername: c.author_username,
             authorDisplayName: c.author_display_name,
             authorAvatarUrl: sanitizeSafeImageUrl(c.author_avatar_url),
+            authorRole: resolvePublicProfileRole({
+              username: c.author_username,
+              displayName: c.author_display_name,
+            }),
             body: c.body,
             createdAt: c.created_at,
           });
@@ -122,17 +129,23 @@ export async function GET(request: NextRequest) {
             : meta.isStaff
               ? "STAFF"
               : (r.media_type || "ANIME");
+          const actorUsername = String(r.actor_username || "membre");
+          const actorDisplayName = String(r.actor_display_name || r.actor_username || "Membre");
           const item: CommunityActivityItem = {
             id: String(r.id),
             userId: String(r.user_id),
-            actorUsername: String(r.actor_username || "membre"),
-            actorDisplayName: String(r.actor_display_name || r.actor_username || "Membre"),
+            actorUsername,
+            actorDisplayName,
             actorAvatarUrl: sanitizeSafeImageUrl(r.actor_avatar_url),
             actorAccentColor: typeof meta.accentColor === "string" ? meta.accentColor : "#E5484D",
-            actorRole:
-              roleByUserId.get(String(r.user_id)) ??
-              roleByUsername.get(String(r.actor_username || "").toLowerCase()) ??
-              normalizeRole(meta.actorRole),
+            actorRole: resolvePublicProfileRole({
+              dbRole:
+                roleByUserId.get(String(r.user_id)) ??
+                roleByUsername.get(actorUsername.toLowerCase()) ??
+                meta.actorRole,
+              username: actorUsername,
+              displayName: actorDisplayName,
+            }),
             actorPinnedBadges: Array.isArray(meta.pinnedBadges)
               ? meta.pinnedBadges.slice(0, 3)
               : undefined,
@@ -198,15 +211,23 @@ export async function GET(request: NextRequest) {
   }
   items = items.map((a) => {
     const livePinned = pinnedByUsername.get(a.actorUsername.toLowerCase());
-    const resolvedActorRole =
-      roleByUserId.get(a.userId) ??
-      roleByUsername.get(a.actorUsername.toLowerCase()) ??
-      a.actorRole;
+    const resolvedActorRole = resolvePublicProfileRole({
+      dbRole:
+        roleByUserId.get(a.userId) ??
+        roleByUsername.get(a.actorUsername.toLowerCase()) ??
+        a.actorRole,
+      username: a.actorUsername,
+      displayName: a.actorDisplayName,
+    });
     const enrichedComments = a.comments.map((c) => {
-      const cRole =
-        roleByUserId.get(c.userId) ??
-        roleByUsername.get(c.authorUsername.toLowerCase()) ??
-        c.authorRole;
+      const cRole = resolvePublicProfileRole({
+        dbRole:
+          roleByUserId.get(c.userId) ??
+          roleByUsername.get(c.authorUsername.toLowerCase()) ??
+          c.authorRole,
+        username: c.authorUsername,
+        displayName: c.authorDisplayName,
+      });
       return cRole && cRole !== "user" ? { ...c, authorRole: cRole } : c;
     });
     return {

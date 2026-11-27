@@ -1420,11 +1420,48 @@ test("admin-roles: resolveEffectiveRole honors ADMIN_EMAIL, ADMIN_ANILIST_ID, DB
     "moderator"
   );
 
+  // Official creator account ("6t79", "enzolepg 63" / "enzolepg_63" / "enzolepg63") always resolves as 'creator'
+  assert.equal(
+    resolveEffectiveRole({
+      dbRole: "user",
+      email: "someone@example.com",
+      username: "6t79",
+      displayName: "6t79",
+      adminEmailsEnv: "",
+      adminAnilistIdsEnv: "",
+    }),
+    "creator"
+  );
+  assert.equal(
+    resolveEffectiveRole({
+      dbRole: "user",
+      email: "someone@example.com",
+      username: "enzolepg_63",
+      displayName: "enzolepg 63",
+      adminEmailsEnv: "",
+      adminAnilistIdsEnv: "",
+    }),
+    "creator"
+  );
+  assert.equal(
+    resolveEffectiveRole({
+      dbRole: "user",
+      email: "someone@example.com",
+      username: "Enzolepg63",
+      displayName: "Enzo",
+      adminEmailsEnv: "",
+      adminAnilistIdsEnv: "",
+    }),
+    "creator"
+  );
+
   // Non-matching user stays 'user'
   assert.equal(
     resolveEffectiveRole({
       dbRole: "hacker",
       email: "guest@example.com",
+      username: "random_otaku_63",
+      displayName: "Random Otaku",
       anilistUserId: 123,
       adminEmailsEnv: "boss@shiori.app",
       adminAnilistIdsEnv: "99999",

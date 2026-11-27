@@ -16,8 +16,18 @@ import type {
   UserRole,
 } from "@/types/media";
 import { normalizeContentLanguage } from "@/lib/i18n";
+import { resolvePublicProfileRole } from "@/lib/server/role-resolver";
 
 let volumesColumnsSupported = true;
+
+function isAnyMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "PGRST204" ||
+    error.code === "42703" ||
+    Boolean(error.message && /could not find the .* column|column .* does not exist/i.test(error.message))
+  );
+}
 
 function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -106,6 +116,8 @@ export async function ensureSupabaseProfile(
     "id, username, display_name, avatar_url, banner_url, bio, accent_color, role, is_activity_public, preferred_language, favorite_staff, unlocked_badges, pinned_badges, created_at";
   const selectCols =
     "id, username, display_name, avatar_url, banner_url, bio, accent_color, is_activity_public, preferred_language, favorite_staff, unlocked_badges, pinned_badges, created_at";
+  const selectCoreCols =
+    "id, username, display_name, avatar_url, bio, accent_color, is_activity_public, created_at";
 
   let existingRes = await supabase
     .from("profiles")
@@ -120,26 +132,40 @@ export async function ensureSupabaseProfile(
       .eq("id", user.id)
       .maybeSingle();
   }
+  if (existingRes.error) {
+    existingRes = await supabase
+      .from("profiles")
+      .select(selectCoreCols)
+      .eq("id", user.id)
+      .maybeSingle();
+  }
   const existing = existingRes.data;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapRow = (row: any): CloudProfileSnapshot => ({
-    id: String(row.id),
-    username: String(row.username || baseUsername),
-    displayName: String(row.display_name || rawName),
-    avatarUrl: row.avatar_url ?? null,
-    bannerUrl: row.banner_url ?? null,
-    bio: String(row.bio ?? ""),
-    accentColor: String(row.accent_color || "#E5484D"),
-    role:
-      row.role === "creator" || row.role === "moderator" ? row.role : "user",
-    isActivityPublic: row.is_activity_public !== false,
-    preferredLanguage: normalizeContentLanguage(row.preferred_language),
-    favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
-    unlockedBadges: Array.isArray(row.unlocked_badges) ? row.unlocked_badges : [],
-    pinnedBadges: Array.isArray(row.pinned_badges) ? row.pinned_badges.slice(0, 3) : [],
-    joinedAt: String(row.created_at || new Date().toISOString()),
-  });
+  const mapRow = (row: any): CloudProfileSnapshot => {
+    const resolvedUsername = String(row.username || baseUsername);
+    const resolvedDisplayName = String(row.display_name || rawName);
+    return {
+      id: String(row.id),
+      username: resolvedUsername,
+      displayName: resolvedDisplayName,
+      avatarUrl: row.avatar_url ?? null,
+      bannerUrl: row.banner_url ?? null,
+      bio: String(row.bio ?? ""),
+      accentColor: String(row.accent_color || "#E5484D"),
+      role: resolvePublicProfileRole({
+        dbRole: row.role,
+        username: resolvedUsername,
+        displayName: resolvedDisplayName,
+      }),
+      isActivityPublic: row.is_activity_public !== false,
+      preferredLanguage: normalizeContentLanguage(row.preferred_language),
+      favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
+      unlockedBadges: Array.isArray(row.unlocked_badges) ? row.unlocked_badges : [],
+      pinnedBadges: Array.isArray(row.pinned_badges) ? row.pinned_badges.slice(0, 3) : [],
+      joinedAt: String(row.created_at || new Date().toISOString()),
+    };
+  };
 
   if (existing) {
     return { ok: true, profile: mapRow(existing) };
@@ -154,29 +180,146 @@ export async function ensureSupabaseProfile(
     is_activity_public: true,
   };
 
-  const { data: created, error } = await supabase
+  let createRes = await supabase
     .from("profiles")
     .upsert(insertPayload, { onConflict: "id" })
-    .select(selectCols)
+    .select(selectCoreCols)
     .maybeSingle();
 
-  if (!error) {
-    return { ok: true, profile: created ? mapRow(created) : undefined };
+  if (!createRes.error) {
+    return { ok: true, profile: createRes.data ? mapRow(createRes.data) : undefined };
   }
 
   // Retry with unique suffix if username collided with another member
   const retryUsername = `${baseUsername.slice(0, 20)}_${user.id.slice(0, 5)}`;
-  const retry = await supabase
+  createRes = await supabase
     .from("profiles")
     .upsert({ ...insertPayload, username: retryUsername }, { onConflict: "id" })
-    .select(selectCols)
+    .select(selectCoreCols)
     .maybeSingle();
 
   return {
-    ok: !retry.error,
-    profile: retry.data ? mapRow(retry.data) : undefined,
-    error: retry.error?.message,
+    ok: !createRes.error,
+    profile: createRes.data ? mapRow(createRes.data) : undefined,
+    error: createRes.error?.message,
   };
+}
+
+/**
+ * Immediately saves the user's core identity (displayName, username, bio, avatar, banner,
+ * accentColor, visibility) to Supabase `public.profiles` AND `auth.users` metadata.
+ * Gracefully strips optional columns (`banner_url`, `is_activity_public`) if the connected
+ * Supabase schema hasn't run newer migrations yet, and surfaces username conflicts explicitly.
+ */
+export async function saveProfileIdentityToCloud(
+  userId: string,
+  payload: {
+    displayName: string;
+    username: string;
+    bio?: string;
+    accentColor?: string;
+    avatarUrl?: string | null;
+    bannerUrl?: string | null;
+    isActivityPublic?: boolean;
+  }
+): Promise<{
+  ok: boolean;
+  username: string;
+  code?: "USERNAME_TAKEN" | "ERROR";
+  error?: string;
+}> {
+  const supabase = getSupabaseBrowserClient();
+  const cleanUsername =
+    payload.username
+      .trim()
+      .replace(/^@+/, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 30) || `user_${userId.slice(0, 6)}`;
+  const cleanDisplayName = payload.displayName.trim().slice(0, 60) || cleanUsername;
+
+  if (!supabase) {
+    return { ok: false, username: cleanUsername, code: "ERROR", error: "Supabase non configuré." };
+  }
+
+  const fullIdentityRow: Record<string, unknown> = {
+    id: userId,
+    username: cleanUsername,
+    display_name: cleanDisplayName,
+  };
+  if (payload.bio !== undefined) fullIdentityRow.bio = payload.bio;
+  if (payload.accentColor !== undefined) fullIdentityRow.accent_color = payload.accentColor || "#E5484D";
+  if (payload.avatarUrl !== undefined) fullIdentityRow.avatar_url = payload.avatarUrl;
+  if (payload.bannerUrl !== undefined) fullIdentityRow.banner_url = payload.bannerUrl;
+  if (payload.isActivityPublic !== undefined) {
+    fullIdentityRow.is_activity_public = payload.isActivityPublic;
+  }
+
+  const coreIdentityRow: Record<string, unknown> = {
+    id: userId,
+    username: cleanUsername,
+    display_name: cleanDisplayName,
+    ...(payload.bio !== undefined ? { bio: payload.bio } : {}),
+    ...(payload.accentColor !== undefined
+      ? { accent_color: payload.accentColor || "#E5484D" }
+      : {}),
+    ...(payload.avatarUrl !== undefined ? { avatar_url: payload.avatarUrl } : {}),
+  };
+
+  const minimalIdentityRow = {
+    id: userId,
+    username: cleanUsername,
+    display_name: cleanDisplayName,
+  };
+
+  try {
+    let res = await supabase.from("profiles").upsert(fullIdentityRow, { onConflict: "id" });
+
+    if (isAnyMissingColumnError(res.error)) {
+      res = await supabase.from("profiles").upsert(coreIdentityRow, { onConflict: "id" });
+    }
+    if (isAnyMissingColumnError(res.error)) {
+      res = await supabase.from("profiles").upsert(minimalIdentityRow, { onConflict: "id" });
+    }
+
+    if (res.error) {
+      if (res.error.code === "23505") {
+        return {
+          ok: false,
+          username: cleanUsername,
+          code: "USERNAME_TAKEN",
+          error: "Ce nom d'utilisateur est déjà pris.",
+        };
+      }
+      return {
+        ok: false,
+        username: cleanUsername,
+        code: "ERROR",
+        error: res.error.message,
+      };
+    }
+
+    // Best-effort sync to Supabase Auth user metadata so reloads/fallbacks always match
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          display_name: cleanDisplayName,
+          full_name: cleanDisplayName,
+          username: cleanUsername,
+        },
+      });
+    } catch {
+      // non-fatal: public.profiles already succeeded
+    }
+
+    return { ok: true, username: cleanUsername };
+  } catch (err) {
+    return {
+      ok: false,
+      username: cleanUsername,
+      code: "ERROR",
+      error: err instanceof Error ? err.message : "Erreur de sauvegarde du profil.",
+    };
+  }
 }
 
 /**
@@ -213,15 +356,19 @@ export async function syncPublicProfileToCloud(
       .replace(/\s+/g, "_")
       .slice(0, 30) || `user_${userId.slice(0, 6)}`;
 
-  const row = {
+  const coreRow = {
     id: userId,
     username: cleanUsername,
     display_name: payload.displayName.trim() || cleanUsername,
     avatar_url: payload.avatarUrl,
-    banner_url: payload.bannerUrl ?? null,
     bio: payload.bio ?? "",
     accent_color: payload.accentColor || "#E5484D",
     is_activity_public: payload.isActivityPublic,
+  };
+
+  const fullRow = {
+    ...coreRow,
+    banner_url: payload.bannerUrl ?? null,
     preferred_language: payload.preferredLanguage ?? "fr",
     favorite_staff: payload.favoriteStaff.slice(0, 30),
     favorite_media: payload.favoriteMedia.slice(0, 40),
@@ -235,20 +382,27 @@ export async function syncPublicProfileToCloud(
   };
 
   try {
-    const { error } = await supabase.from("profiles").upsert(row, { onConflict: "id" });
-    if (!error) return { synced: true };
+    let res = await supabase.from("profiles").upsert(fullRow, { onConflict: "id" });
+
+    if (isAnyMissingColumnError(res.error)) {
+      res = await supabase.from("profiles").upsert(coreRow, { onConflict: "id" });
+    }
+    if (!res.error) return { synced: true };
 
     // Handle username unique conflict gracefully by keeping existing username or suffixing
-    if (error.code === "23505") {
-      const retry = await supabase
+    if (res.error.code === "23505") {
+      const suffixed = `${cleanUsername.slice(0, 22)}_${userId.slice(0, 5)}`;
+      let retry = await supabase
         .from("profiles")
-        .upsert(
-          { ...row, username: `${cleanUsername.slice(0, 22)}_${userId.slice(0, 5)}` },
-          { onConflict: "id" }
-        );
+        .upsert({ ...fullRow, username: suffixed }, { onConflict: "id" });
+      if (isAnyMissingColumnError(retry.error)) {
+        retry = await supabase
+          .from("profiles")
+          .upsert({ ...coreRow, username: suffixed }, { onConflict: "id" });
+      }
       return { synced: !retry.error, error: retry.error?.message };
     }
-    return { synced: false, error: error.message };
+    return { synced: false, error: res.error.message };
   } catch (err) {
     return { synced: false, error: err instanceof Error ? err.message : "Erreur sync profil" };
   }

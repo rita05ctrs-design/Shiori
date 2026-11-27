@@ -11,7 +11,7 @@ import {
   rateLimitResponse,
   sanitizeSafeImageUrl,
 } from "@/lib/server/rate-limit";
-import { normalizeRole } from "@/lib/server/role-resolver";
+import { resolvePublicProfileRole } from "@/lib/server/role-resolver";
 import type { PublicUserProfile } from "@/types/media";
 
 export const runtime = "nodejs";
@@ -50,7 +50,11 @@ function mapSupabasePublicProfile(row: any): PublicUserProfile {
     accentColor: typeof row.accent_color === "string" && HEX_COLOR_RE.test(row.accent_color)
       ? row.accent_color
       : "#E5484D",
-    role: normalizeRole(row.role),
+    role: resolvePublicProfileRole({
+      dbRole: row.role,
+      username: String(row.username || ""),
+      displayName,
+    }),
     isActivityPublic: isPublic,
     joinedAt: row.joined_at ?? row.created_at ?? new Date().toISOString(),
     favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
@@ -177,7 +181,11 @@ export async function POST(request: NextRequest) {
       avatarInitials: displayName.slice(0, 2).toUpperCase(),
       bio: typeof body?.bio === "string" ? body.bio.trim().slice(0, 400) : "",
       accentColor,
-      role: actor.role,
+      role: resolvePublicProfileRole({
+        dbRole: actor.role,
+        username,
+        displayName,
+      }),
       isActivityPublic,
       joinedAt: typeof body?.joinedAt === "string" ? body.joinedAt : new Date().toISOString(),
       favoriteStaff: Array.isArray(body?.favoriteStaff) ? body.favoriteStaff.slice(0, 30) : [],
@@ -213,15 +221,18 @@ export async function POST(request: NextRequest) {
       try {
         const supabase = await getSupabaseServerClient();
         if (supabase) {
-          const baseRow = {
+          const coreRow = {
             id: actor.id,
             username: publicProfile.username,
             display_name: publicProfile.displayName,
             avatar_url: publicProfile.avatarUrl,
-            banner_url: publicProfile.bannerUrl ?? null,
             bio: publicProfile.bio,
             accent_color: publicProfile.accentColor,
             is_activity_public: publicProfile.isActivityPublic,
+          };
+          const fullRow = {
+            ...coreRow,
+            banner_url: publicProfile.bannerUrl ?? null,
             favorite_staff: publicProfile.favoriteStaff,
             favorite_media: isActivityPublic ? publicProfile.favoriteMedia : [],
             stats_summary: {
@@ -232,18 +243,42 @@ export async function POST(request: NextRequest) {
             unlocked_badges: publicProfile.unlockedBadges ?? [],
             pinned_badges: publicProfile.pinnedBadges ?? [],
           };
-          const { error } = await supabase
-            .from("profiles")
-            .upsert(baseRow, { onConflict: "id" });
 
-          if (!error) {
+          const isMissingCol = (err: { code?: string; message?: string } | null) =>
+            Boolean(
+              err &&
+                (err.code === "PGRST204" ||
+                  err.code === "42703" ||
+                  /could not find the .* column|column .* does not exist/i.test(err.message ?? ""))
+            );
+
+          let upsertErr = (
+            await supabase.from("profiles").upsert(fullRow, { onConflict: "id" })
+          ).error;
+
+          if (isMissingCol(upsertErr)) {
+            upsertErr = (
+              await supabase.from("profiles").upsert(coreRow, { onConflict: "id" })
+            ).error;
+          }
+
+          if (!upsertErr) {
             savedToSupabase = true;
-          } else if (error.code === "23505") {
+          } else if (upsertErr.code === "23505") {
             const uniqueUsername = `${publicProfile.username.slice(0, 22)}_${actor.id.slice(0, 5)}`;
-            const retry = await supabase
-              .from("profiles")
-              .upsert({ ...baseRow, username: uniqueUsername }, { onConflict: "id" });
-            if (!retry.error) {
+            let retryErr = (
+              await supabase
+                .from("profiles")
+                .upsert({ ...fullRow, username: uniqueUsername }, { onConflict: "id" })
+            ).error;
+            if (isMissingCol(retryErr)) {
+              retryErr = (
+                await supabase
+                  .from("profiles")
+                  .upsert({ ...coreRow, username: uniqueUsername }, { onConflict: "id" })
+              ).error;
+            }
+            if (!retryErr) {
               savedToSupabase = true;
               publicProfile.username = uniqueUsername;
             } else {

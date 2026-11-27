@@ -5,10 +5,13 @@ import {
   type ActiveActor,
 } from "@/lib/server/social-store";
 export {
+  isCanonicalCreatorIdentity,
   isCreatorRole,
   isStaffRole,
+  normalizeIdentityHandle,
   normalizeRole,
   resolveEffectiveRole,
+  resolvePublicProfileRole,
 } from "@/lib/server/role-resolver";
 
 export type CreatorGuardResult =

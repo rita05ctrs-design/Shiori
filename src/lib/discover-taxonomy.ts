@@ -7,13 +7,17 @@ export type SituationGroupId =
   | "life_power";
 
 export interface TagOption {
-  id: string; // Exact official AniList tag name
+  id: string; // Exact official AniList tag name (or ambiance preset id)
   label: string; // Clean French display label
+  hint?: string; // Optional vibe description
   group?: Exclude<SituationGroupId, "ALL">;
+  /** Optional multi-filter bundle for Ambiance vibes (combines official AniList genres & tags) */
+  presetGenres?: string[];
+  presetTags?: string[];
 }
 
 export interface TagCategory {
-  id: "genres" | "situations" | "universes" | "themes" | "demographics";
+  id: "genres" | "ambiance" | "situations" | "universes" | "themes" | "demographics";
   label: string;
   description: string;
   items: TagOption[];
@@ -33,6 +37,7 @@ export const GENRE_OPTIONS: TagOption[] = [
   { id: "Adventure", label: "Aventure" },
   { id: "Comedy", label: "Comédie" },
   { id: "Drama", label: "Drame" },
+  { id: "Ecchi", label: "Ecchi" },
   { id: "Fantasy", label: "Fantastique" },
   { id: "Horror", label: "Horreur" },
   { id: "Mahou Shoujo", label: "Magical Girl" },
@@ -46,6 +51,135 @@ export const GENRE_OPTIONS: TagOption[] = [
   { id: "Sports", label: "Sport" },
   { id: "Supernatural", label: "Surnaturel" },
   { id: "Thriller", label: "Thriller" },
+];
+
+export const AMBIANCE_OPTIONS: TagOption[] = [
+  {
+    id: "vibe_flirt",
+    label: "Flirt & Taquineries",
+    hint: "Flirt à gogo, jeux de séduction & alchimie complice",
+    presetGenres: ["Romance", "Comedy"],
+    presetTags: ["Heterosexual"],
+  },
+  {
+    id: "vibe_flirt_spicy",
+    label: "Séduction & Tension",
+    hint: "Flirt assumé, rapprochements & tension électrique",
+    presetGenres: ["Romance", "Ecchi"],
+    presetTags: [],
+  },
+  {
+    id: "vibe_gyaru_tease",
+    label: "Taquineries & Gyaru",
+    hint: "Personnages taquins, charme solaire & dynamique joueuse",
+    presetGenres: ["Romance"],
+    presetTags: ["Gyaru"],
+  },
+  {
+    id: "vibe_sweet_romance",
+    label: "Romance douce & Papillons",
+    hint: "Tendresse, premiers émois & moments réconfortants",
+    presetGenres: ["Romance", "Slice of Life"],
+    presetTags: [],
+  },
+  {
+    id: "vibe_cozy_chill",
+    label: "Cozy & Apaisant",
+    hint: "Ambiance zen, calme et sans stress pour décompresser",
+    presetGenres: [],
+    presetTags: ["Iyashikei"],
+  },
+  {
+    id: "vibe_feel_good",
+    label: "Chaleureux & Feel-Good",
+    hint: "Liens sincères, famille de cœur & bonne humeur",
+    presetGenres: [],
+    presetTags: ["Found Family"],
+  },
+  {
+    id: "vibe_cute_sol",
+    label: "Mignon & Léger",
+    hint: "Quotidien joyeux, doux et plein de charme",
+    presetGenres: [],
+    presetTags: ["Cute Girls Doing Cute Things"],
+  },
+  {
+    id: "vibe_hilarious",
+    label: "Humour déjanté",
+    hint: "Gags explosifs, situations improbables & fous rires",
+    presetGenres: ["Comedy"],
+    presetTags: ["Slapstick"],
+  },
+  {
+    id: "vibe_absurd",
+    label: "Absurde & Décalé",
+    hint: "Humour barré, imprévisible et hors normes",
+    presetGenres: [],
+    presetTags: ["Surreal Comedy"],
+  },
+  {
+    id: "vibe_parody",
+    label: "Parodie & Second degré",
+    hint: "Clins d'œil méta, satire et autodérision",
+    presetGenres: [],
+    presetTags: ["Parody"],
+  },
+  {
+    id: "vibe_emotional",
+    label: "Émouvant & Larmes",
+    hint: "Émotions intenses et récits bouleversants",
+    presetGenres: ["Drama"],
+    presetTags: ["Tragedy"],
+  },
+  {
+    id: "vibe_poetic",
+    label: "Poétique & Contemplatif",
+    hint: "Atmosphère mélancolique, profonde et réflexive",
+    presetGenres: [],
+    presetTags: ["Philosophy"],
+  },
+  {
+    id: "vibe_nostalgic",
+    label: "Nostalgique & Initiatique",
+    hint: "Souvenirs de jeunesse & passage à l'âge adulte",
+    presetGenres: [],
+    presetTags: ["Coming of Age"],
+  },
+  {
+    id: "vibe_suspense",
+    label: "Tension & Paranoïa",
+    hint: "Suspense haletant, complots et retournements",
+    presetGenres: ["Thriller"],
+    presetTags: ["Conspiracy"],
+  },
+  {
+    id: "vibe_noir",
+    label: "Noir & Mystérieux",
+    hint: "Atmosphère crépusculaire, ombres et mystères",
+    presetGenres: [],
+    presetTags: ["Noir"],
+  },
+  {
+    id: "vibe_dark_brutal",
+    label: "Sombre & Viscéral",
+    hint: "Ton cru, mature et sans concession",
+    presetGenres: [],
+    presetTags: ["Gore"],
+  },
+  {
+    id: "vibe_horror_cosmic",
+    label: "Angoissant & Oppressant",
+    hint: "Frissons, inconnu et malaise psychologique",
+    presetGenres: ["Horror"],
+    presetTags: ["Cosmic Horror"],
+  },
+  {
+    id: "vibe_epic_hype",
+    label: "Épique & Adrénaline",
+    hint: "Montée d'adrénaline, frissons & combats grandioses",
+    presetGenres: ["Action"],
+    presetTags: ["Super Power"],
+  },
 ];
 
 export const SITUATION_TAGS: TagOption[] = [
@@ -82,7 +216,7 @@ export const SITUATION_TAGS: TagOption[] = [
   { id: "Pandemic", label: "Pandémie / Épidémie", group: "survival_tension" },
   { id: "Terrorism", label: "Terrorisme / Crise", group: "survival_tension" },
 
-  // Relations & Romance (13)
+  // Relations & Romance (30 — official verified AniList tags)
   { id: "Love Triangle", label: "Triangle amoureux", group: "romance_relations" },
   { id: "Unrequited Love", label: "Amour non partagé", group: "romance_relations" },
   { id: "Fake Relationship", label: "Fausse relation", group: "romance_relations" },
@@ -92,10 +226,27 @@ export const SITUATION_TAGS: TagOption[] = [
   { id: "Matchmaking", label: "Entremetteur", group: "romance_relations" },
   { id: "Age Gap", label: "Écart d'âge", group: "romance_relations" },
   { id: "Interspecies", label: "Romance inter-espèces", group: "romance_relations" },
+  { id: "Heterosexual", label: "Couple homme / femme", group: "romance_relations" },
+  { id: "Tsundere", label: "Tsundere (Froid puis tendre)", group: "romance_relations" },
+  { id: "Yandere", label: "Yandere (Amour obsessionnel)", group: "romance_relations" },
+  { id: "Kuudere", label: "Kuudere (Calme & réservé)", group: "romance_relations" },
+  { id: "Gyaru", label: "Romance avec Gyaru", group: "romance_relations" },
+  { id: "Tomboy", label: "Garçon manqué", group: "romance_relations" },
+  { id: "Ojou-sama", label: "Héritière / Ojou-sama", group: "romance_relations" },
+  { id: "Office Lady", label: "Romance au bureau", group: "romance_relations" },
+  { id: "Maids", label: "Maid / Domestique", group: "romance_relations" },
+  { id: "Butler", label: "Majordome", group: "romance_relations" },
+  { id: "Crossdressing", label: "Travestissement / Quiproquo", group: "romance_relations" },
   { id: "Female Harem", label: "Harem féminin", group: "romance_relations" },
   { id: "Male Harem", label: "Harem masculin", group: "romance_relations" },
+  { id: "Mixed Gender Harem", label: "Harem mixte", group: "romance_relations" },
   { id: "Cheating", label: "Infidélité / Tromperie", group: "romance_relations" },
   { id: "Polyamorous", label: "Polyamour", group: "romance_relations" },
+  { id: "Teens' Love", label: "Romance passionnée", group: "romance_relations" },
+  { id: "Monster Girl", label: "Romance Monster Girl", group: "romance_relations" },
+  { id: "Succubus", label: "Succube & séduction", group: "romance_relations" },
+  { id: "Boys' Love", label: "Boys' Love (BL)", group: "romance_relations" },
+  { id: "Yuri", label: "Girls' Love (Yuri)", group: "romance_relations" },
 
   // Drame & Destin (12)
   { id: "Amnesia", label: "Amnésie", group: "drama_psyche" },
@@ -202,10 +353,17 @@ export const FILTER_CATEGORIES: TagCategory[] = [
     items: GENRE_OPTIONS,
   },
   {
+    id: "ambiance",
+    label: "Ambiance",
+    description:
+      "Filtrez par atmosphère ressentie : flirt à gogo, séduction, cosy apaisant, humour déjanté, tension sombre, émotions...",
+    items: AMBIANCE_OPTIONS,
+  },
+  {
     id: "situations",
     label: "Situations",
     description:
-      "64 situations & scénarios : isekai, boucles temporelles, jeu mortel, exil, fausse relation, gestion de royaume, amnésie...",
+      "81 situations & scénarios : isekai, boucles temporelles, jeu mortel, romance, tsundere, fausse relation, gestion de royaume...",
     items: SITUATION_TAGS,
   },
   {
@@ -423,6 +581,7 @@ export const MOOD_PRESETS: MoodPreset[] = [
 const ALL_TAG_LABELS = new Map<string, string>(
   [
     ...GENRE_OPTIONS,
+    ...AMBIANCE_OPTIONS,
     ...SITUATION_TAGS,
     ...UNIVERSE_TAGS,
     ...THEME_TAGS,

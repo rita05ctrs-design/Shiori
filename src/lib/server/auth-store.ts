@@ -237,6 +237,8 @@ export function toPublicProfile(account: StoredAccount): UserProfile {
     dbRole: account.role,
     email: account.email,
     anilistUserId: account.anilistOAuth?.userId ?? null,
+    username: account.username,
+    displayName: account.displayName,
   });
 
   return {

@@ -1,5 +1,7 @@
 export type DonationPlatform = "kofi" | "buymeacoffee" | "paypal" | "generic";
 
+export const DEFAULT_DONATION_URL = "https://ko-fi.com/6t799";
+
 export interface ResolvedDonationLink {
   configured: boolean;
   url: string | null;

@@ -7,7 +7,11 @@ import {
   resolveServerActor,
 } from "@/lib/server/social-store";
 import { sanitizeSafeImageUrl } from "@/lib/server/rate-limit";
-import { normalizeRole } from "@/lib/server/role-resolver";
+import {
+  normalizeIdentityHandle,
+  normalizeRole,
+  resolvePublicProfileRole,
+} from "@/lib/server/role-resolver";
 import type {
   BadgeRarity,
   CommunityActivityItem,
@@ -58,7 +62,11 @@ export async function GET(
           role:
             requesterId && String(row.id) === requesterId && requester.role === "creator"
               ? "creator"
-              : normalizeRole(row.role),
+              : resolvePublicProfileRole({
+                  dbRole: row.role,
+                  username: String(row.username || ""),
+                  displayName,
+                }),
           isActivityPublic: row.is_activity_public !== false,
           joinedAt: row.joined_at ?? new Date().toISOString(),
           favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
@@ -87,10 +95,27 @@ export async function GET(
   // 2) Fallback to local / community profile store
   if (!profile) {
     const localList = getAllLocalCommunityProfiles();
+    const cleanedNorm = normalizeIdentityHandle(cleaned);
     profile =
       localList.find(
-        (p) => p.username.toLowerCase() === lower || p.id.toLowerCase() === lower
+        (p) =>
+          p.username.toLowerCase() === lower ||
+          p.id.toLowerCase() === lower ||
+          (cleanedNorm.length >= 3 &&
+            (normalizeIdentityHandle(p.username) === cleanedNorm ||
+              normalizeIdentityHandle(p.displayName) === cleanedNorm))
       ) ?? null;
+  }
+
+  if (profile) {
+    profile = {
+      ...profile,
+      role: resolvePublicProfileRole({
+        dbRole: profile.role,
+        username: profile.username,
+        displayName: profile.displayName,
+      }),
+    };
   }
 
   if (!profile) {

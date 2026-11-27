@@ -911,6 +911,8 @@ export async function resolveServerActor(): Promise<ActiveActor> {
           dbRole,
           email: user.email ?? null,
           anilistUserId,
+          username,
+          displayName,
         });
 
         return {
@@ -944,6 +946,8 @@ export async function resolveServerActor(): Promise<ActiveActor> {
           dbRole: acct.role,
           email: acct.email,
           anilistUserId,
+          username: acct.username,
+          displayName: acct.displayName,
         });
         return {
           id: acct.id,
@@ -1010,7 +1014,14 @@ export function getAllLocalCommunityProfiles(): PublicUserProfile[] {
   const byUsername = new Map<string, PublicUserProfile>();
 
   for (const p of socialDb.profiles) {
-    byUsername.set(p.username.toLowerCase(), p);
+    byUsername.set(p.username.toLowerCase(), {
+      ...p,
+      role: resolveEffectiveRole({
+        dbRole: p.role,
+        username: p.username,
+        displayName: p.displayName,
+      }),
+    });
   }
 
   // Also include any registered local server accounts from .shiori-data/accounts.json
@@ -1022,6 +1033,8 @@ export function getAllLocalCommunityProfiles(): PublicUserProfile[] {
         dbRole: u.role,
         email: u.email,
         anilistUserId: u.anilistOAuth?.userId ?? null,
+        username: u.username,
+        displayName: u.displayName,
       });
       if (byUsername.has(key)) {
         const existing = byUsername.get(key)!;
@@ -1247,6 +1260,8 @@ export function updateLocalUserAdminGrants(
       dbRole: nextRole,
       email: acct.email,
       anilistUserId: acct.anilistOAuth?.userId ?? null,
+      username: acct.username,
+      displayName: acct.displayName,
     });
   }
 

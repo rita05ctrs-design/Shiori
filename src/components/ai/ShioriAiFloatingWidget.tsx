@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -21,15 +21,31 @@ export function ShioriAiFloatingWidget() {
   const pathname = usePathname();
   const { t, tr } = useTranslation();
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Close the floating assistant when navigating to another page
   useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  // Close on Escape or when clicking/tapping anywhere outside the widget
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    if (open) {
-      document.addEventListener("keydown", onKey);
-    }
-    return () => document.removeEventListener("keydown", onKey);
+    const onOutsidePointer = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (target && containerRef.current && !containerRef.current.contains(target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onOutsidePointer, true);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onOutsidePointer, true);
+    };
   }, [open]);
 
   if (pathname.startsWith("/assistant")) {
@@ -37,7 +53,7 @@ export function ShioriAiFloatingWidget() {
   }
 
   return (
-    <div className="hidden md:block fixed bottom-6 right-6 z-[60]">
+    <div ref={containerRef} className="hidden md:block fixed bottom-6 right-6 z-[60]">
       <AnimatePresence>
         {open && (
           <motion.div

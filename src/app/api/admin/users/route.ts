@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ADMIN_GRANTABLE_BADGE_IDS, BADGE_BY_ID } from "@/lib/badges";
-import { normalizeRole, requireCreatorActor } from "@/lib/server/admin-auth";
+import {
+  normalizeRole,
+  requireCreatorActor,
+  resolvePublicProfileRole,
+} from "@/lib/server/admin-auth";
 import { sanitizeSafeImageUrl } from "@/lib/server/rate-limit";
 import {
   getAllLocalCommunityProfiles,
@@ -72,12 +76,20 @@ export async function GET(request: NextRequest) {
       if (Array.isArray(rows)) {
         for (const row of rows) {
           const id = String(row.id);
+          const uname = String(row.username || `user_${id.slice(0, 6)}`);
+          const dname = String(row.display_name || row.username || "Membre Shiori");
           const role =
-            id === guard.actor.id ? "creator" : normalizeRole(row.role);
+            id === guard.actor.id
+              ? "creator"
+              : resolvePublicProfileRole({
+                  dbRole: row.role,
+                  username: uname,
+                  displayName: dname,
+                });
           byId.set(id, {
             id,
-            username: String(row.username || `user_${id.slice(0, 6)}`),
-            displayName: String(row.display_name || row.username || "Membre Shiori"),
+            username: uname,
+            displayName: dname,
             avatarUrl: sanitizeSafeImageUrl(row.avatar_url),
             accentColor: typeof row.accent_color === "string" ? row.accent_color : "#E5484D",
             role,
@@ -102,7 +114,14 @@ export async function GET(request: NextRequest) {
         displayName: p.displayName,
         avatarUrl: p.avatarUrl,
         accentColor: p.accentColor || "#E5484D",
-        role: p.id === guard.actor.id ? "creator" : normalizeRole(p.role),
+        role:
+          p.id === guard.actor.id
+            ? "creator"
+            : resolvePublicProfileRole({
+                dbRole: p.role,
+                username: p.username,
+                displayName: p.displayName,
+              }),
         joinedAt: p.joinedAt,
         unlockedBadges: p.unlockedBadges ?? [],
         pinnedBadges: p.pinnedBadges ?? [],

@@ -50,6 +50,7 @@ export async function PUT(request: NextRequest) {
     if (Array.isArray(body.activity)) {
       current.activity = body.activity.slice(0, 200);
     }
+    let usernameTaken = false;
     if (body.profile && typeof body.profile === "object") {
       if (typeof body.profile.displayName === "string" && body.profile.displayName.trim()) {
         current.displayName = body.profile.displayName.trim().slice(0, 60);
@@ -58,7 +59,11 @@ export async function PUT(request: NextRequest) {
       if (typeof body.profile.username === "string" && body.profile.username.trim()) {
         const nextSlug = slugifyUsername(body.profile.username);
         const taken = db.users.some((u, i) => i !== idx && u.username === nextSlug);
-        if (!taken) current.username = nextSlug;
+        if (taken) {
+          usernameTaken = true;
+        } else {
+          current.username = nextSlug;
+        }
       }
       if (typeof body.profile.bio === "string") {
         current.bio = body.profile.bio.slice(0, 400);
@@ -124,6 +129,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      usernameTaken,
       user: toPublicProfile(current),
     });
   } catch {

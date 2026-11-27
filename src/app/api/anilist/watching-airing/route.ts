@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const pastStart = nowSec - 14 * 86400;
+    const pastStart = nowSec - 30 * 86400;
 
     const query = `
       query ($ids: [Int], $pastStart: Int, $now: Int) {

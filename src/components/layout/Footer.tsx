@@ -44,8 +44,8 @@ export function Footer() {
             <p className="text-xs text-[#A3A7B8] flex items-center gap-1.5">
               <Crown className="w-3.5 h-3.5 text-[#F0B95B] shrink-0" />
               <span>
-                {tr("Conçu et développé avec passion par le")}{" "}
-                <span className="text-[#FDE68A] font-medium">{tr("créateur de Shiori")}</span>.
+                {tr("Conçu et développé avec passion par")}{" "}
+                <span className="text-[#FDE68A] font-semibold">6t79</span>.
               </span>
             </p>
 

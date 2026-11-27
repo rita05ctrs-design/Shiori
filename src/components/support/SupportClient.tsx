@@ -8,9 +8,7 @@ import {
   Copy,
   Crown,
   ExternalLink,
-  Globe,
   Heart,
-  Server,
   ShieldCheck,
   Sparkles,
   Users,
@@ -27,31 +25,22 @@ interface SupportClientProps {
 
 const FUND_USES = [
   {
-    icon: Server,
-    title: "Serveurs & Base de données",
-    accent: "text-[#E5484D]",
-    bg: "bg-[#E5484D]/12 border-[#E5484D]/30",
-    share: "Hébergement & Cloud",
-    description:
-      "Financement de l'hébergement, de la base Supabase, de la synchronisation de votre bibliothèque et de la messagerie communautaire 24h/24.",
-  },
-  {
-    icon: Globe,
-    title: "Domaine & Infrastructure",
+    icon: Sparkles,
+    title: "Financer Antigravity (IA de développement)",
     accent: "text-[#F0B95B]",
     bg: "bg-[#F0B95B]/12 border-[#F0B95B]/35",
-    share: "DNS, CDN & Fiabilité",
+    share: "Seul coût réel",
     description:
-      "Renouvellement du nom de domaine, certificats sécurisés, cache rapide des visuels et déploiement continu des nouvelles fonctionnalités.",
+      "Aujourd'hui, le seul outil financé pour créer et améliorer Shiori est Antigravity, l'intelligence artificielle utilisée pour coder les nouvelles fonctionnalités et faire évoluer l'application.",
   },
   {
-    icon: Sparkles,
-    title: "Shiori IA & Traduction",
-    accent: "text-sky-300",
-    bg: "bg-sky-400/12 border-sky-400/30",
-    share: "Gemini IA & Vocal",
+    icon: Heart,
+    title: "Encourager 6t79 & garder Shiori 100 % gratuit",
+    accent: "text-[#E5484D]",
+    bg: "bg-[#E5484D]/12 border-[#E5484D]/30",
+    share: "Soutien facultatif",
     description:
-      "Couverture des quotas d'API pour l'assistant Shiori IA, la transcription vocale universelle, la traduction des synopsis et le guide de reprise Manga/Manhwa.",
+      "Shiori reste entièrement gratuit, sans publicité et sans abonnement. Chaque geste est totalement libre et encourage simplement son créateur à continuer d'améliorer l'application.",
   },
 ];
 
@@ -123,7 +112,7 @@ export function SupportClient({ donation }: SupportClientProps) {
             </h1>
 
             <p className="text-sm sm:text-base text-[#B6BAC9] leading-relaxed">
-              {tr("Shiori est conçu et maintenu avec passion par un créateur indépendant pour offrir aux amateurs d'animés et de mangas un espace soigné, rapide et sans trackers publicitaires. Chaque contribution — même symbolique — aide directement à maintenir les serveurs, le nom de domaine et l'assistant IA accessibles à tous.")}
+              {tr("Shiori est un projet indépendant, 100 % gratuit et sans publicité, développé par 6t79. Aucun frais de serveur ou d'hébergement ne vous est inventé ici : le seul coût financé aujourd'hui est Antigravity, l'IA utilisée pour concevoir, coder et faire évoluer l'application. Chaque soutien est totalement libre et facultatif.")}
             </p>
 
             {/* Primary Configurable Donation Action */}
@@ -174,7 +163,7 @@ export function SupportClient({ donation }: SupportClientProps) {
           </div>
         </section>
 
-        {/* Transparency Breakdown: Where funds go */}
+        {/* Transparency Breakdown: Honest & Zero Inventions */}
         <section className="space-y-5">
           <div className="space-y-1">
             <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#F0B95B]">
@@ -184,11 +173,11 @@ export function SupportClient({ donation }: SupportClientProps) {
               {tr("À quoi sert votre soutien ?")}
             </h2>
             <p className="text-sm text-[#9599AC]">
-              {tr("100 % des dons sont réinvestis dans l'infrastructure technique et l'évolution continue de Shiori.")}
+              {tr("En toute honnêteté : Shiori ne vous invente aucune facture. Voici exactement à quoi sert votre soutien.")}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
             {FUND_USES.map((item) => {
               const Icon = item.icon;
               return (
@@ -272,7 +261,7 @@ export function SupportClient({ donation }: SupportClientProps) {
                     2
                   </span>
                   <span>
-                    {tr("Le créateur vérifie votre soutien et active manuellement le badge doré Supporter directement sur votre compte depuis l'administration Shiori.")}
+                    {tr("6t79 vérifie votre soutien et active manuellement le badge doré Supporter directement sur votre compte depuis l'administration Shiori.")}
                   </span>
                 </li>
                 <li className="flex items-start gap-3">

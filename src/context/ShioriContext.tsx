@@ -27,6 +27,7 @@ import {
   fetchCloudUiPreferences,
   fetchCloudUserBadges,
   removeEntryFromCloud,
+  saveProfileIdentityToCloud,
   syncAniListImportBrowser,
   syncEntriesBatchToCloud,
   syncEntryToCloud,
@@ -36,6 +37,7 @@ import {
   uploadProfileAvatar,
   type ActivityBackfillItem,
 } from "@/lib/supabase/sync";
+import { resolvePublicProfileRole } from "@/lib/server/role-resolver";
 import { clampProgress, computeProgressStep } from "@/lib/library-utils";
 import {
   evaluateAllBadges,
@@ -57,6 +59,7 @@ import {
   normalizeContentLanguage,
 } from "@/lib/i18n";
 import { translateUi } from "@/lib/ui-translations";
+import { translatePhrase } from "@/lib/ui-phrases";
 import type {
   ActivityEvent,
   AmbianceSettings,
@@ -242,7 +245,9 @@ interface ShioriContextValue {
   isAuthenticated: boolean;
   isCreator: boolean;
   supabaseReady: boolean;
-  updateProfile: (updates: Partial<UserProfile>) => void;
+  updateProfile: (
+    updates: Partial<UserProfile>
+  ) => Promise<{ ok: boolean; error?: string; username?: string }>;
   uploadAvatar: (file: File) => Promise<{ ok: boolean; url?: string; storage?: string; error?: string }>;
   updateNotificationPrefs: (prefs: Partial<NotificationPrefs>) => void;
 
@@ -705,8 +710,11 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         if (data.user) void hydrateSupabaseUser(data.user);
       });
 
-      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.user) {
+      const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+        if (
+          session?.user &&
+          (event === "SIGNED_IN" || event === "INITIAL_SESSION")
+        ) {
           void hydrateSupabaseUser(session.user);
         }
       });
@@ -774,7 +782,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Authoritatively sync role from server (covers ADMIN_EMAIL, ADMIN_ANILIST_ID & DB role)
+  // Authoritatively sync role from server (covers ADMIN_EMAIL, ADMIN_ANILIST_ID, Creator handle & DB role)
   useEffect(() => {
     if (!hydrated || !isAuthenticated) {
       setProfile((prev) => (prev.role && prev.role !== "user" ? { ...prev, role: "user" } : prev));
@@ -785,11 +793,18 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (cancelled || !data) return;
-        const resolvedRole =
-          data.authenticated && (data.role === "creator" || data.role === "moderator")
-            ? data.role
-            : "user";
-        setProfile((prev) => (prev.role === resolvedRole ? prev : { ...prev, role: resolvedRole }));
+        setProfile((prev) => {
+          const serverRole =
+            data.authenticated && (data.role === "creator" || data.role === "moderator")
+              ? data.role
+              : "user";
+          const resolvedRole = resolvePublicProfileRole({
+            dbRole: serverRole,
+            username: prev.username,
+            displayName: prev.displayName,
+          });
+          return prev.role === resolvedRole ? prev : { ...prev, role: resolvedRole };
+        });
       })
       .catch(() => {
         // non-fatal
@@ -797,7 +812,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, isAuthenticated, profile.id]);
+  }, [hydrated, isAuthenticated, profile.id, profile.username, profile.displayName]);
 
   // Automatically sync signed-in Shiori server account changes to disk
   const lastSyncWarnRef = useRef<number>(0);
@@ -3445,21 +3460,180 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     [pushNotification, toast]
   );
 
+  const profileRef = useRef<UserProfile>(profile);
+  profileRef.current = profile;
+
   const updateProfile = useCallback(
-    (updates: Partial<UserProfile>) => {
-      setProfile((prev) => {
-        const next = { ...prev, ...updates };
-        if (updates.displayName) {
-          next.avatarInitials = updates.displayName.trim().slice(0, 2).toUpperCase() || "SH";
+    async (
+      updates: Partial<UserProfile>
+    ): Promise<{ ok: boolean; error?: string; username?: string }> => {
+      const current = profileRef.current;
+      const nextDisplayName =
+        updates.displayName !== undefined
+          ? updates.displayName.trim().slice(0, 60) || current.displayName || "Membre Shiori"
+          : current.displayName;
+      const nextUsername =
+        updates.username !== undefined
+          ? updates.username
+              .trim()
+              .replace(/^@+/, "")
+              .replace(/\s+/g, "_")
+              .slice(0, 30) || current.username || "shiori_user"
+          : current.username;
+
+      const nextProfile: UserProfile = {
+        ...current,
+        ...updates,
+        displayName: nextDisplayName,
+        username: nextUsername,
+        avatarInitials: nextDisplayName.slice(0, 2).toUpperCase() || "SH",
+        role:
+          current.mode === "supabase" || current.mode === "account"
+            ? resolvePublicProfileRole({
+                dbRole: current.role,
+                username: nextUsername,
+                displayName: nextDisplayName,
+              })
+            : "user",
+      };
+
+      profileRef.current = nextProfile;
+      setProfile(nextProfile);
+      try {
+        localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(nextProfile));
+      } catch {
+        // ignore storage quota
+      }
+
+      if (current.mode === "supabase") {
+        const res = await saveProfileIdentityToCloud(current.id, {
+          displayName: nextProfile.displayName,
+          username: nextProfile.username,
+          bio: nextProfile.bio,
+          accentColor: nextProfile.accentColor,
+          avatarUrl: nextProfile.avatarUrl ?? null,
+          bannerUrl: nextProfile.bannerUrl ?? null,
+          isActivityPublic: nextProfile.isActivityPublic ?? true,
+        });
+
+        if (!res.ok) {
+          if (res.code === "USERNAME_TAKEN") {
+            profileRef.current = current;
+            setProfile(current);
+            try {
+              localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(current));
+            } catch {
+              // ignore
+            }
+          }
+          toast({
+            title:
+              res.code === "USERNAME_TAKEN"
+                ? translatePhrase(contentLanguage, "Ce nom d'utilisateur est déjà pris")
+                : translatePhrase(contentLanguage, "Impossible d'enregistrer le profil"),
+            description: res.error,
+            variant: "warning",
+          });
+          return { ok: false, error: res.error };
         }
-        return next;
-      });
+
+        const finalProfile =
+          res.username && res.username !== nextProfile.username
+            ? { ...nextProfile, username: res.username }
+            : nextProfile;
+        profileRef.current = finalProfile;
+        setProfile(finalProfile);
+        try {
+          localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(finalProfile));
+        } catch {
+          // ignore
+        }
+
+        toast({
+          title: translatePhrase(contentLanguage, "Profil enregistré"),
+          variant: "success",
+        });
+        return { ok: true, username: finalProfile.username };
+      }
+
+      if (current.mode === "account") {
+        try {
+          const res = await fetch("/api/user/sync", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              profile: {
+                displayName: nextProfile.displayName,
+                username: nextProfile.username,
+                bio: nextProfile.bio,
+                accentColor: nextProfile.accentColor,
+                avatarUrl: nextProfile.avatarUrl ?? null,
+                bannerUrl: nextProfile.bannerUrl ?? null,
+                isActivityPublic: nextProfile.isActivityPublic ?? true,
+                preferredLanguage: contentLanguage,
+                notificationPrefs: nextProfile.notificationPrefs,
+              },
+            }),
+          });
+          const data = await res.json().catch(() => null);
+          if (!res.ok) {
+            toast({
+              title: translatePhrase(contentLanguage, "Impossible d'enregistrer le profil"),
+              description: data?.error,
+              variant: "warning",
+            });
+            return { ok: false, error: data?.error };
+          }
+          if (data?.usernameTaken) {
+            const revertedUsername = data?.user?.username || current.username;
+            const reconciled = { ...nextProfile, username: revertedUsername };
+            profileRef.current = reconciled;
+            setProfile(reconciled);
+            try {
+              localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(reconciled));
+            } catch {
+              // ignore
+            }
+            toast({
+              title: translatePhrase(contentLanguage, "Ce nom d'utilisateur est déjà pris"),
+              description: translatePhrase(
+                contentLanguage,
+                "Votre nom d'affichage a été mis à jour, mais ce @handle est déjà utilisé."
+              ),
+              variant: "warning",
+            });
+            return {
+              ok: false,
+              error: "Ce nom d'utilisateur est déjà pris.",
+              username: revertedUsername,
+            };
+          }
+          if (data?.user) {
+            const merged: UserProfile = { ...nextProfile, ...data.user };
+            profileRef.current = merged;
+            setProfile(merged);
+            try {
+              localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(merged));
+            } catch {
+              // ignore
+            }
+          }
+        } catch {
+          toast({
+            title: translatePhrase(contentLanguage, "Impossible d'enregistrer le profil"),
+            variant: "warning",
+          });
+          return { ok: false, error: "Erreur réseau." };
+        }
+      }
+
       toast({
-        title: "Profil enregistré",
+        title: translatePhrase(contentLanguage, "Profil enregistré"),
         variant: "success",
       });
+      return { ok: true, username: nextProfile.username };
     },
-    [toast]
+    [contentLanguage, toast]
   );
 
   const updateNotificationPrefs = useCallback(

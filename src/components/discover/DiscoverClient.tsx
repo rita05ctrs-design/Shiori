@@ -1209,10 +1209,85 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   const hasActiveFilters = Boolean(debouncedSearch.trim()) || activeFilterCount > 0;
   const formats = type === "ANIME" ? animeFormatOptions : mangaFormatOptions;
 
+  const isAmbianceSelected = useCallback(
+    (item: { presetGenres?: string[]; presetTags?: string[]; id: string }) => {
+      const pGenres = item.presetGenres ?? [];
+      const pTags = item.presetTags ?? [];
+      if (pGenres.length === 0 && pTags.length === 0) {
+        return selectedTags.includes(item.id);
+      }
+      return (
+        pGenres.every((g) => selectedGenres.includes(g)) &&
+        pTags.every((tg) => selectedTags.includes(tg))
+      );
+    },
+    [selectedGenres, selectedTags]
+  );
+
+  const toggleAmbiance = useCallback(
+    (item: { presetGenres?: string[]; presetTags?: string[]; id: string }) => {
+      setActiveMoodId(null);
+      const pGenres = item.presetGenres ?? [];
+      const pTags = item.presetTags ?? [];
+      if (pGenres.length === 0 && pTags.length === 0) {
+        setSelectedTags((prev) =>
+          prev.includes(item.id) ? prev.filter((t) => t !== item.id) : [...prev, item.id]
+        );
+        return;
+      }
+
+      const active =
+        pGenres.every((g) => selectedGenres.includes(g)) &&
+        pTags.every((tg) => selectedTags.includes(tg));
+
+      if (active) {
+        if (pGenres.length > 0) {
+          setSelectedGenres((prev) => prev.filter((g) => !pGenres.includes(g)));
+          setGenreMinRanks((prev) => {
+            const next = { ...prev };
+            for (const g of pGenres) delete next[g];
+            return next;
+          });
+          setDebouncedGenreMinRanks((prev) => {
+            const next = { ...prev };
+            for (const g of pGenres) delete next[g];
+            return next;
+          });
+        }
+        if (pTags.length > 0) {
+          setSelectedTags((prev) => prev.filter((tg) => !pTags.includes(tg)));
+        }
+      } else {
+        if (pGenres.length > 0) {
+          setSelectedGenres((prev) => Array.from(new Set([...prev, ...pGenres])));
+          setGenreMinRanks((prev) => {
+            const next = { ...prev };
+            for (const g of pGenres) {
+              if (next[g] === undefined) next[g] = 0;
+            }
+            return next;
+          });
+          setDebouncedGenreMinRanks((prev) => {
+            const next = { ...prev };
+            for (const g of pGenres) {
+              if (next[g] === undefined) next[g] = 0;
+            }
+            return next;
+          });
+        }
+        if (pTags.length > 0) {
+          setSelectedTags((prev) => Array.from(new Set([...prev, ...pTags])));
+        }
+      }
+    },
+    [selectedGenres, selectedTags]
+  );
+
   // Compute counts per category tab
   const categoryCounts = useMemo(() => {
     const counts: Record<TagCategory["id"], number> = {
       genres: selectedGenres.length,
+      ambiance: 0,
       situations: 0,
       universes: 0,
       themes: 0,
@@ -1220,10 +1295,14 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
     };
     for (const cat of FILTER_CATEGORIES) {
       if (cat.id === "genres") continue;
-      counts[cat.id] = cat.items.filter((i) => selectedTags.includes(i.id)).length;
+      if (cat.id === "ambiance") {
+        counts.ambiance = cat.items.filter((i) => isAmbianceSelected(i)).length;
+      } else {
+        counts[cat.id] = cat.items.filter((i) => selectedTags.includes(i.id)).length;
+      }
     }
     return counts;
-  }, [selectedGenres, selectedTags]);
+  }, [selectedGenres, selectedTags, isAmbianceSelected]);
 
   // If user types in mini tag search, search across ALL categories cleanly
   const tagSearchTrimmed = tagSearch.trim().toLowerCase();
@@ -1232,19 +1311,40 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
   const searchedAllItems = useMemo(() => {
     if (!tagSearchTrimmed) return null;
-    const matches: { id: string; label: string; isGenre: boolean; catLabel: string }[] = [];
+    const matches: {
+      id: string;
+      label: string;
+      hint?: string;
+      isGenre: boolean;
+      isAmbiance: boolean;
+      presetGenres?: string[];
+      presetTags?: string[];
+      catLabel: string;
+    }[] = [];
     for (const cat of FILTER_CATEGORIES) {
       for (const item of cat.items) {
-        const displayLabel = cat.id === "genres" ? tGenre(item.id) : contentLanguage === "fr" ? item.label : item.id;
+        const displayLabel =
+          cat.id === "genres"
+            ? tGenre(item.id)
+            : cat.id === "ambiance"
+              ? tr(item.label)
+              : contentLanguage === "fr"
+                ? item.label
+                : item.id;
         if (
           displayLabel.toLowerCase().includes(tagSearchTrimmed) ||
           item.label.toLowerCase().includes(tagSearchTrimmed) ||
+          (item.hint && item.hint.toLowerCase().includes(tagSearchTrimmed)) ||
           item.id.toLowerCase().includes(tagSearchTrimmed)
         ) {
           matches.push({
             id: item.id,
             label: displayLabel,
+            hint: item.hint ? tr(item.hint) : undefined,
             isGenre: cat.id === "genres",
+            isAmbiance: cat.id === "ambiance",
+            presetGenres: item.presetGenres,
+            presetTags: item.presetTags,
             catLabel: tr(cat.label),
           });
         }
@@ -1376,7 +1476,15 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               type="button"
               whileHover={{ y: -1 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => setShowFilters((v) => !v)}
+              onClick={() => {
+                setShowFilters((v) => {
+                  const next = !v;
+                  if (next && selectedTags.length === 0) {
+                    setActiveCategory("genres");
+                  }
+                  return next;
+                });
+              }}
               className={cn(
                 "inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
                 showFilters || activeFilterCount > 0
@@ -1953,22 +2061,31 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                           searchedAllItems.map((m) => {
                             const selected = m.isGenre
                               ? selectedGenres.includes(m.id)
-                              : selectedTags.includes(m.id);
+                              : m.isAmbiance
+                                ? isAmbianceSelected(m)
+                                : selectedTags.includes(m.id);
                             return (
                               <motion.button
-                                key={`${m.isGenre ? "g" : "t"}-${m.id}`}
+                                key={`${m.isGenre ? "g" : m.isAmbiance ? "a" : "t"}-${m.id}`}
                                 type="button"
+                                title={m.hint}
                                 whileHover={{ y: -1 }}
                                 whileTap={{ scale: 0.93 }}
                                 onClick={() =>
-                                  m.isGenre ? toggleGenre(m.id) : toggleTag(m.id)
+                                  m.isGenre
+                                    ? toggleGenre(m.id)
+                                    : m.isAmbiance
+                                      ? toggleAmbiance(m)
+                                      : toggleTag(m.id)
                                 }
                                 className={cn(
                                   "px-3 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer",
                                   selected
                                     ? m.isGenre
                                       ? "bg-accent border-accent-hover text-accent-fg shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.4)]"
-                                      : "bg-violet-500/25 border-violet-400/60 text-violet-100 shadow-[0_4px_16px_rgba(139,92,246,0.3)]"
+                                      : m.isAmbiance
+                                        ? "bg-gradient-to-r from-[#E5484D]/26 to-[#F0B95B]/24 border-[#F0B95B]/60 text-[#FDE68A] shadow-[0_4px_16px_rgba(240,185,91,0.28)]"
+                                        : "bg-violet-500/25 border-violet-400/60 text-violet-100 shadow-[0_4px_16px_rgba(139,92,246,0.3)]"
                                     : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:bg-white/[0.08]"
                                 )}
                               >
@@ -1990,30 +2107,42 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                           )
                           .map((item) => {
                             const isGenreCat = visibleCategory.id === "genres";
+                            const isAmbianceCat = visibleCategory.id === "ambiance";
                             const selected = isGenreCat
                               ? selectedGenres.includes(item.id)
-                              : selectedTags.includes(item.id);
+                              : isAmbianceCat
+                                ? isAmbianceSelected(item)
+                                : selectedTags.includes(item.id);
                             const pillLabel = isGenreCat
                               ? tGenre(item.id)
-                              : contentLanguage === "fr"
-                                ? item.label
-                                : item.id;
+                              : isAmbianceCat
+                                ? tr(item.label)
+                                : contentLanguage === "fr"
+                                  ? item.label
+                                  : item.id;
 
                             return (
                               <motion.button
                                 key={item.id}
                                 type="button"
+                                title={item.hint ? tr(item.hint) : undefined}
                                 whileHover={{ y: -1.5 }}
                                 whileTap={{ scale: 0.93 }}
                                 onClick={() =>
-                                  isGenreCat ? toggleGenre(item.id) : toggleTag(item.id)
+                                  isGenreCat
+                                    ? toggleGenre(item.id)
+                                    : isAmbianceCat
+                                      ? toggleAmbiance(item)
+                                      : toggleTag(item.id)
                                 }
                                 className={cn(
                                   "px-3.5 py-1.5 rounded-full text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer",
                                   selected
                                     ? isGenreCat
                                       ? "bg-accent border-accent-hover text-accent-fg shadow-[0_6px_18px_rgb(var(--shiori-accent-rgb)/0.42)]"
-                                      : "bg-violet-500/25 border-violet-400/60 text-violet-100 shadow-[0_6px_18px_rgba(139,92,246,0.3)]"
+                                      : isAmbianceCat
+                                        ? "bg-gradient-to-r from-[#E5484D]/26 to-[#F0B95B]/24 border-[#F0B95B]/60 text-[#FDE68A] shadow-[0_6px_18px_rgba(240,185,91,0.3)]"
+                                        : "bg-violet-500/25 border-violet-400/60 text-violet-100 shadow-[0_6px_18px_rgba(139,92,246,0.3)]"
                                     : "bg-white/[0.03] border-white/[0.075] text-[#B8BCCB] hover:text-white hover:border-white/[0.18] hover:bg-white/[0.07]"
                                 )}
                               >

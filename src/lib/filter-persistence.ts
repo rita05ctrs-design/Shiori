@@ -333,6 +333,7 @@ export interface PersistedDiscoverState {
 
 const VALID_DISCOVER_CATEGORIES = new Set<string>([
   "genres",
+  "ambiance",
   "situations",
   "universes",
   "themes",
@@ -346,7 +347,7 @@ export const DEFAULT_DISCOVER_STATE: PersistedDiscoverState = {
   genreMinRanks: {},
   selectedTags: [],
   activeMoodId: null,
-  activeCategory: "situations",
+  activeCategory: "genres",
   situationGroup: "ALL",
   year: "ALL",
   season: "ALL",
@@ -416,7 +417,7 @@ export function sanitizeDiscoverState(
     activeCategory:
       raw?.activeCategory && VALID_DISCOVER_CATEGORIES.has(raw.activeCategory)
         ? raw.activeCategory
-        : "situations",
+        : "genres",
     situationGroup: (raw?.situationGroup as SituationGroupId) || "ALL",
     year: typeof raw?.year === "string" && raw.year.trim() ? raw.year : "ALL",
     season:
@@ -526,7 +527,7 @@ export function searchParamsToDiscoverState(
     genreMinRanks: parsedGenreMinRanks,
     selectedTags: parsedTags,
     activeMoodId: moodPreset ? moodPreset.id : null,
-    activeCategory: fallbackUi?.activeCategory ?? "situations",
+    activeCategory: fallbackUi?.activeCategory ?? "genres",
     situationGroup: fallbackUi?.situationGroup ?? "ALL",
     year: params.get("year") ?? "ALL",
     season: params.get("season") ?? "ALL",
