@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  ADMIN_GRANTS_STATS_KEY,
+  applyAdminGrantRole,
+  applyAdminGrantsToBadges,
+  readAdminGrantsLedger,
+} from "@/lib/server/admin-grants-store";
+import {
   getAllLocalCommunityProfiles,
   isAuthenticatedActor,
   isSeedBotAccount,
@@ -119,7 +125,16 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  let list = Array.from(byKey.values());
+  const grantsLedger = await readAdminGrantsLedger();
+  let list = Array.from(byKey.values()).map((p) => {
+    const grantEntry = grantsLedger.users[p.id];
+    if (!grantEntry) return p;
+    return {
+      ...p,
+      role: applyAdminGrantRole(p.role ?? "user", grantEntry),
+      unlockedBadges: applyAdminGrantsToBadges(p.unlockedBadges, grantEntry),
+    };
+  });
   if (q) {
     list = list.filter(
       (p) =>
@@ -224,6 +239,26 @@ export async function POST(request: NextRequest) {
       try {
         const supabase = await getSupabaseServerClient();
         if (supabase) {
+          let preservedAdminGrants: unknown;
+          try {
+            const { data: existingRow } = await supabase
+              .from("profiles")
+              .select("stats_summary")
+              .eq("id", actor.id)
+              .maybeSingle();
+            if (
+              existingRow?.stats_summary &&
+              typeof existingRow.stats_summary === "object" &&
+              ADMIN_GRANTS_STATS_KEY in (existingRow.stats_summary as Record<string, unknown>)
+            ) {
+              preservedAdminGrants = (existingRow.stats_summary as Record<string, unknown>)[
+                ADMIN_GRANTS_STATS_KEY
+              ];
+            }
+          } catch {
+            // non-fatal
+          }
+
           const coreRow = {
             id: actor.id,
             username: publicProfile.username,
@@ -242,6 +277,9 @@ export async function POST(request: NextRequest) {
               ...publicProfile.stats,
               libraryPreview: isActivityPublic ? (publicProfile.libraryPreview ?? []) : [],
               sharedCollections: isActivityPublic ? (publicProfile.sharedCollections ?? []) : [],
+              ...(preservedAdminGrants !== undefined
+                ? { [ADMIN_GRANTS_STATS_KEY]: preservedAdminGrants }
+                : {}),
             },
             unlocked_badges: publicProfile.unlockedBadges ?? [],
             pinned_badges: publicProfile.pinnedBadges ?? [],

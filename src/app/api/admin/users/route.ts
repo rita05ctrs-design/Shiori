@@ -7,6 +7,12 @@ import {
 } from "@/lib/server/admin-auth";
 import { sanitizeSafeImageUrl } from "@/lib/server/rate-limit";
 import {
+  applyAdminGrantRole,
+  applyAdminGrantsToBadges,
+  readAdminGrantsLedger,
+  saveAdminGrantPatch,
+} from "@/lib/server/admin-grants-store";
+import {
   getAllLocalCommunityProfiles,
   isSeedBotAccount,
   updateLocalUserAdminGrants,
@@ -214,12 +220,23 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const ledger = await readAdminGrantsLedger();
   const roleWeight: Record<UserRole, number> = { creator: 0, moderator: 1, user: 2 };
-  let users = Array.from(byId.values()).sort(
-    (a, b) =>
-      roleWeight[a.role] - roleWeight[b.role] ||
-      new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime()
-  );
+  let users = Array.from(byId.values())
+    .map((u) => {
+      const grantEntry = ledger.users[u.id];
+      if (!grantEntry) return u;
+      return {
+        ...u,
+        role: applyAdminGrantRole(u.role, grantEntry),
+        unlockedBadges: applyAdminGrantsToBadges(u.unlockedBadges, grantEntry),
+      };
+    })
+    .sort(
+      (a, b) =>
+        roleWeight[a.role] - roleWeight[b.role] ||
+        new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime()
+    );
 
   const totalCount = users.length;
 
@@ -269,8 +286,18 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    let updatedSupabase = false;
-    let finalBadges: UnlockedBadgeRecord[] | undefined;
+    // 1) Always persist into the durable multi-layer admin-grants ledger first
+    //    (local disk + Supabase site_settings + Creator's own profiles.stats_summary)
+    //    so grants NEVER vanish on refresh even when cross-user profiles RLS blocks direct writes.
+    const savedGrant = await saveAdminGrantPatch({
+      targetUserId: userId,
+      creatorUserId: guard.actor.id,
+      grantBadgeId: action === "grant_badge" ? badgeId : undefined,
+      revokeBadgeId: action === "revoke_badge" ? badgeId : undefined,
+    });
+
+    let baseCloudBadges: UnlockedBadgeRecord[] = [];
+    let foundInSupabase = false;
 
     if (UUID_RE.test(userId)) {
       try {
@@ -296,18 +323,15 @@ export async function PATCH(request: NextRequest) {
           }
 
           if (row) {
-            const current: UnlockedBadgeRecord[] = Array.isArray(row.unlocked_badges)
-              ? row.unlocked_badges
+            foundInSupabase = true;
+            baseCloudBadges = Array.isArray(row.unlocked_badges)
+              ? (row.unlocked_badges as UnlockedBadgeRecord[])
               : [];
-            const map = new Map<string, UnlockedBadgeRecord>();
-            for (const b of current) {
-              if (b?.badgeId) map.set(b.badgeId, b);
-            }
+
+            const nextBadges = applyAdminGrantsToBadges(baseCloudBadges, savedGrant.entry);
             const nowIso = new Date().toISOString();
+
             if (action === "grant_badge") {
-              if (!map.has(badgeId)) {
-                map.set(badgeId, { badgeId, unlockedAt: nowIso });
-              }
               try {
                 await supabase
                   .from("user_badges")
@@ -316,10 +340,9 @@ export async function PATCH(request: NextRequest) {
                     { onConflict: "user_id,badge_id" }
                   );
               } catch {
-                // non-fatal if RLS on user_badges restricts non-service-role writes
+                // non-fatal if RLS restricts non-service-role writes
               }
             } else {
-              map.delete(badgeId);
               try {
                 await supabase
                   .from("user_badges")
@@ -331,28 +354,24 @@ export async function PATCH(request: NextRequest) {
               }
             }
 
-            const nextBadges = Array.from(map.values());
             const nextPinned =
               action === "revoke_badge" && Array.isArray(row.pinned_badges)
                 ? row.pinned_badges.filter((p: unknown) => p !== badgeId)
                 : row.pinned_badges;
 
-            const { error: updErr } = await supabase
+            // Attempt direct update on target `profiles` row (verifying `.select("id")` returns a row)
+            await supabase
               .from("profiles")
               .update({
                 unlocked_badges: nextBadges,
                 ...(Array.isArray(nextPinned) ? { pinned_badges: nextPinned } : {}),
               })
-              .eq("id", userId);
-
-            if (!updErr) {
-              updatedSupabase = true;
-              finalBadges = nextBadges;
-            }
+              .eq("id", userId)
+              .select("id");
           }
         }
       } catch {
-        // non-fatal
+        // non-fatal — durable ledger already persisted above
       }
     }
 
@@ -361,16 +380,18 @@ export async function PATCH(request: NextRequest) {
       revokeBadgeId: action === "revoke_badge" ? badgeId : undefined,
     });
 
-    if (!updatedSupabase && !localRes.found) {
-      return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
-    }
+    const mergedBadges = applyAdminGrantsToBadges(
+      foundInSupabase ? baseCloudBadges : localRes.unlockedBadges ?? [],
+      savedGrant.entry
+    );
 
     return NextResponse.json({
       ok: true,
       userId,
       action,
       badgeId,
-      unlockedBadges: finalBadges ?? localRes.unlockedBadges ?? [],
+      unlockedBadges: mergedBadges,
+      persistedToCloud: savedGrant.persistedToCloud,
     });
   }
 
@@ -388,31 +409,34 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    let updatedSupabase = false;
+    const savedGrant = await saveAdminGrantPatch({
+      targetUserId: userId,
+      creatorUserId: guard.actor.id,
+      role: targetRole,
+    });
+
     if (UUID_RE.test(userId)) {
       try {
         const supabase = getSupabaseAdminClient() ?? (await getSupabaseServerClient());
         if (supabase) {
-          const { error } = await supabase
+          await supabase
             .from("profiles")
             .update({ role: targetRole })
-            .eq("id", userId);
-          if (!error) updatedSupabase = true;
+            .eq("id", userId)
+            .select("id");
         }
       } catch {
-        // non-fatal
+        // non-fatal — durable ledger already persisted
       }
     }
 
-    const localRes = updateLocalUserAdminGrants(userId, { role: targetRole });
-    if (!updatedSupabase && !localRes.found) {
-      return NextResponse.json({ error: "Utilisateur introuvable." }, { status: 404 });
-    }
+    updateLocalUserAdminGrants(userId, { role: targetRole });
 
     return NextResponse.json({
       ok: true,
       userId,
       role: targetRole,
+      persistedToCloud: savedGrant.persistedToCloud,
     });
   }
 

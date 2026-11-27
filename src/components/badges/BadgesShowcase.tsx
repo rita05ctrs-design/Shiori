@@ -3,7 +3,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
+  GripVertical,
   LayoutGrid,
   Lock,
   Minimize2,
@@ -11,6 +14,7 @@ import {
   Sparkles,
   Target,
   Trophy,
+  X,
 } from "lucide-react";
 import {
   BADGE_CATEGORY_LABELS,
@@ -27,6 +31,8 @@ interface BadgesShowcaseProps {
   pinnedBadges: string[];
   canPin?: boolean;
   onTogglePin?: (badgeId: string) => void;
+  onMovePin?: (badgeId: string, direction: "left" | "right") => void;
+  onReorderPins?: (nextOrder: string[]) => void;
   onPreviewUnlock?: (badgeId: string) => void;
   title?: string;
   subtitle?: string;
@@ -51,6 +57,8 @@ export function BadgesShowcase({
   pinnedBadges,
   canPin = false,
   onTogglePin,
+  onMovePin,
+  onReorderPins,
   onPreviewUnlock,
   title,
   subtitle,
@@ -62,6 +70,7 @@ export function BadgesShowcase({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [expandedCompact, setExpandedCompact] = useState(false);
   const [viewMode, setViewMode] = useState<"mini" | "full">(defaultViewMode);
+  const [draggingPinId, setDraggingPinId] = useState<string | null>(null);
 
   // If user navigated via explicit #badges anchor (e.g. "Voir mes badges ->"), expand automatically
   useEffect(() => {
@@ -70,14 +79,152 @@ export function BadgesShowcase({
     }
   }, []);
 
+  const badgeById = useMemo(
+    () => new Map<string, EvaluatedBadge>(badges.map((b) => [b.id, b])),
+    [badges]
+  );
+
+  const orderedPinnedBadges = useMemo(
+    () =>
+      pinnedBadges
+        .map((id) => badgeById.get(id))
+        .filter((b): b is EvaluatedBadge => Boolean(b && b.unlocked)),
+    [badgeById, pinnedBadges]
+  );
+
+  const handleDropPin = (targetBadgeId: string) => {
+    if (!draggingPinId || draggingPinId === targetBadgeId || !onReorderPins) {
+      setDraggingPinId(null);
+      return;
+    }
+    const fromIdx = pinnedBadges.indexOf(draggingPinId);
+    const toIdx = pinnedBadges.indexOf(targetBadgeId);
+    if (fromIdx === -1 || toIdx === -1) {
+      setDraggingPinId(null);
+      return;
+    }
+    const next = [...pinnedBadges];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    onReorderPins(next);
+    setDraggingPinId(null);
+  };
+
+  const renderPinnedOrganizer = () => {
+    if (!canPin || orderedPinnedBadges.length === 0) return null;
+    const canReorder = Boolean(onMovePin || onReorderPins);
+
+    return (
+      <div className="rounded-2xl bg-obsidian/75 border border-white/[0.08] p-3 sm:p-3.5 space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.14em] text-kinpaku">
+            <Pin className="w-3 h-3 fill-current" />
+            <span>
+              {tr("Ordre des badges épinglés")} ({orderedPinnedBadges.length}/3)
+            </span>
+          </span>
+          {canReorder && orderedPinnedBadges.length > 1 && (
+            <span className="text-[11px] text-[#858A9E]">
+              {tr("Utilisez les flèches ou glissez pour choisir l'ordre #1 → #3")}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {orderedPinnedBadges.map((badge, idx) => {
+            const meta = RARITY_META[badge.rarity];
+            const isFirst = idx === 0;
+            const isLast = idx === orderedPinnedBadges.length - 1;
+            return (
+              <div
+                key={badge.id}
+                draggable={Boolean(onReorderPins && orderedPinnedBadges.length > 1)}
+                onDragStart={() => setDraggingPinId(badge.id)}
+                onDragOver={(e) => {
+                  if (draggingPinId && draggingPinId !== badge.id) e.preventDefault();
+                }}
+                onDrop={() => handleDropPin(badge.id)}
+                onDragEnd={() => setDraggingPinId(null)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 pl-2 pr-1.5 py-1.5 rounded-xl border transition-all",
+                  meta.bg,
+                  meta.border,
+                  draggingPinId === badge.id && "opacity-50 scale-95",
+                  onReorderPins && orderedPinnedBadges.length > 1 && "cursor-grab active:cursor-grabbing"
+                )}
+              >
+                {onReorderPins && orderedPinnedBadges.length > 1 && (
+                  <GripVertical className="w-3 h-3 text-white/45 shrink-0" />
+                )}
+                <span className="px-1.5 py-0.5 rounded-md bg-black/45 border border-[#F0B95B]/45 font-mono text-[10px] font-extrabold text-[#FDE68A] shrink-0">
+                  #{idx + 1}
+                </span>
+                <span
+                  className={cn(
+                    "w-5 h-5 rounded-md bg-gradient-to-br flex items-center justify-center shrink-0",
+                    meta.iconBg
+                  )}
+                >
+                  <BadgeIcon iconKey={badge.iconKey} className="w-3 h-3 text-[#08090E]" />
+                </span>
+                <span className="text-xs font-semibold text-white whitespace-nowrap pr-0.5">
+                  {badge.title}
+                </span>
+
+                {onMovePin && orderedPinnedBadges.length > 1 && (
+                  <div className="inline-flex items-center gap-0.5 pl-1 border-l border-white/15">
+                    <button
+                      type="button"
+                      disabled={isFirst}
+                      onClick={() => onMovePin(badge.id, "left")}
+                      aria-label={tr("Déplacer avant")}
+                      title={tr("Déplacer avant")}
+                      className="w-5 h-5 rounded-md bg-black/35 hover:bg-white/20 disabled:opacity-30 flex items-center justify-center text-white transition-colors cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isLast}
+                      onClick={() => onMovePin(badge.id, "right")}
+                      aria-label={tr("Déplacer après")}
+                      title={tr("Déplacer après")}
+                      className="w-5 h-5 rounded-md bg-black/35 hover:bg-white/20 disabled:opacity-30 flex items-center justify-center text-white transition-colors cursor-pointer"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                {onTogglePin && (
+                  <button
+                    type="button"
+                    onClick={() => onTogglePin(badge.id)}
+                    aria-label={tr("Retirer")}
+                    title={tr("Retirer")}
+                    className="w-5 h-5 rounded-md bg-black/25 hover:bg-rose-500/35 flex items-center justify-center text-white/70 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const unlockedBadgesSorted = useMemo(() => {
-    const pinnedSet = new Set(pinnedBadges);
     return badges
       .filter((b) => b.unlocked)
       .sort((a, b) => {
-        const aPin = pinnedSet.has(a.id) ? 1 : 0;
-        const bPin = pinnedSet.has(b.id) ? 1 : 0;
-        if (bPin !== aPin) return bPin - aPin;
+        const aIdx = pinnedBadges.indexOf(a.id);
+        const bIdx = pinnedBadges.indexOf(b.id);
+        const aPin = aIdx !== -1;
+        const bPin = bIdx !== -1;
+        if (aPin && bPin) return aIdx - bIdx;
+        if (aPin !== bPin) return aPin ? -1 : 1;
         if (RARITY_RANK[b.rarity] !== RARITY_RANK[a.rarity]) {
           return RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity];
         }
@@ -189,6 +336,9 @@ export function BadgesShowcase({
           />
         </div>
 
+        {/* Custom Pinned Order Bar (#1 -> #3) right inside compact mode */}
+        {renderPinnedOrganizer()}
+
         {/* Miniature Unlocked Badges Strip */}
         {unlockedBadgesSorted.length === 0 ? (
           <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs text-[#8A8FA4]">
@@ -205,7 +355,8 @@ export function BadgesShowcase({
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
             {unlockedBadgesSorted.map((badge) => {
               const meta = RARITY_META[badge.rarity];
-              const isPinned = pinnedBadges.includes(badge.id);
+              const pinIdx = pinnedBadges.indexOf(badge.id);
+              const isPinned = pinIdx !== -1;
               return (
                 <button
                   key={badge.id}
@@ -231,7 +382,10 @@ export function BadgesShowcase({
                     {badge.title}
                   </span>
                   {isPinned && (
-                    <Pin className="w-2.5 h-2.5 text-kinpaku fill-current shrink-0" />
+                    <span className="inline-flex items-center gap-0.5 text-[10px] font-mono font-bold text-kinpaku shrink-0">
+                      <Pin className="w-2.5 h-2.5 fill-current" />
+                      <span>#{pinIdx + 1}</span>
+                    </span>
                   )}
                 </button>
               );
@@ -336,6 +490,9 @@ export function BadgesShowcase({
         </div>
       </div>
 
+      {/* Custom Pinned Order Bar (#1 -> #3) */}
+      {renderPinnedOrganizer()}
+
       {/* Category Filters + Status Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 max-w-full">
@@ -394,7 +551,8 @@ export function BadgesShowcase({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {displayedBadges.map((badge) => {
             const meta = RARITY_META[badge.rarity];
-            const isPinned = pinnedBadges.includes(badge.id);
+            const pinIdx = pinnedBadges.indexOf(badge.id);
+            const isPinned = pinIdx !== -1;
 
             if (badge.unlocked) {
               const unlockedDateLabel = badge.unlockedAt
@@ -468,7 +626,7 @@ export function BadgesShowcase({
                     </div>
                   </div>
 
-                  {/* Footer Row: Date + Pin Action + Animation Replay */}
+                  {/* Footer Row: Date + Pin Action + Reorder Arrows + Animation Replay */}
                   <div className="relative z-10 pt-2.5 border-t border-white/[0.08] flex items-center justify-between gap-2">
                     <span className="text-[10.5px] font-mono text-[#A6AAB8]">
                       {unlockedDateLabel}
@@ -486,6 +644,31 @@ export function BadgesShowcase({
                         </button>
                       )}
 
+                      {canPin && isPinned && onMovePin && pinnedBadges.length > 1 && (
+                        <div className="inline-flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={pinIdx === 0}
+                            onClick={() => onMovePin(badge.id, "left")}
+                            aria-label={tr("Déplacer avant")}
+                            title={tr("Déplacer avant")}
+                            className="w-6 h-7 rounded-lg bg-white/[0.07] hover:bg-white/[0.16] disabled:opacity-30 border border-white/[0.1] text-white flex items-center justify-center transition-colors cursor-pointer"
+                          >
+                            <ChevronLeft className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pinIdx === pinnedBadges.length - 1}
+                            onClick={() => onMovePin(badge.id, "right")}
+                            aria-label={tr("Déplacer après")}
+                            title={tr("Déplacer après")}
+                            className="w-6 h-7 rounded-lg bg-white/[0.07] hover:bg-white/[0.16] disabled:opacity-30 border border-white/[0.1] text-white flex items-center justify-center transition-colors cursor-pointer"
+                          >
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+
                       {canPin && onTogglePin && (
                         <button
                           type="button"
@@ -498,7 +681,9 @@ export function BadgesShowcase({
                           )}
                         >
                           <Pin className={cn("w-3 h-3", isPinned && "fill-current")} />
-                          <span>{isPinned ? tr("Épinglé") : tr("Épingler")}</span>
+                          <span>
+                            {isPinned ? `${tr("Épinglé")} #${pinIdx + 1}` : tr("Épingler")}
+                          </span>
                         </button>
                       )}
                     </div>

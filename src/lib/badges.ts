@@ -486,7 +486,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
     id: "supporter",
     title: "Supporter",
-    description: "Soutien généreux contribuant aux serveurs et à l'indépendance de Shiori.",
+    description: "Soutien généreux contribuant au développement et à l'indépendance de Shiori.",
     category: "social",
     rarity: "gold",
     iconKey: "heart",

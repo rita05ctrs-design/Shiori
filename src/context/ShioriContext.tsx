@@ -292,6 +292,8 @@ interface ShioriContextValue {
   dismissBadgeUnlock: () => void;
   previewBadgeUnlock: (badgeId: string) => void;
   togglePinBadge: (badgeId: string) => void;
+  movePinnedBadge: (badgeId: string, direction: "left" | "right") => void;
+  reorderPinnedBadges: (nextOrder: string[]) => void;
   recordSocialInteraction: () => void;
   signInWithSupabase: (email: string, password: string) => Promise<{ ok: boolean; message: string }>;
   signUpWithSupabase: (
@@ -685,24 +687,31 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         if (cloudStats) {
           setAnilistStats(cloudStats);
         }
-        if (cloudBadges) {
-          if (cloudBadges.unlockedBadges.length > 0) {
-            hasStoredBadgesRef.current = true;
-            setUnlockedBadges((prev) => {
-              const map = new Map<string, string>();
-              for (const b of prev) map.set(b.badgeId, b.unlockedAt);
-              for (const b of cloudBadges.unlockedBadges) {
-                if (!map.has(b.badgeId)) map.set(b.badgeId, b.unlockedAt);
-              }
-              return Array.from(map.entries()).map(([badgeId, unlockedAt]) => ({
-                badgeId,
-                unlockedAt,
-              }));
-            });
-          }
-          if (cloudBadges.pinnedBadges.length > 0) {
-            setPinnedBadges(cloudBadges.pinnedBadges.slice(0, 3));
-          }
+        const cloudProfileBadges = cloudProf?.unlockedBadges ?? [];
+        const cloudTableBadges = cloudBadges?.unlockedBadges ?? [];
+        if (cloudProfileBadges.length > 0 || cloudTableBadges.length > 0) {
+          hasStoredBadgesRef.current = true;
+          setUnlockedBadges((prev) => {
+            const map = new Map<string, string>();
+            for (const b of prev) map.set(b.badgeId, b.unlockedAt);
+            for (const b of cloudProfileBadges) {
+              if (!map.has(b.badgeId)) map.set(b.badgeId, b.unlockedAt);
+            }
+            for (const b of cloudTableBadges) {
+              if (!map.has(b.badgeId)) map.set(b.badgeId, b.unlockedAt);
+            }
+            return Array.from(map.entries()).map(([badgeId, unlockedAt]) => ({
+              badgeId,
+              unlockedAt,
+            }));
+          });
+        }
+        const cloudPinned =
+          cloudBadges && cloudBadges.pinnedBadges.length > 0
+            ? cloudBadges.pinnedBadges
+            : cloudProf?.pinnedBadges ?? [];
+        if (cloudPinned.length > 0) {
+          setPinnedBadges(cloudPinned.slice(0, 3));
         }
       };
 
@@ -782,7 +791,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Authoritatively sync role from server (covers ADMIN_EMAIL, ADMIN_ANILIST_ID, Creator handle & DB role)
+  // Authoritatively sync role & Creator-granted special badges from server
   useEffect(() => {
     if (!hydrated || !isAuthenticated) {
       setProfile((prev) => (prev.role && prev.role !== "user" ? { ...prev, role: "user" } : prev));
@@ -805,6 +814,34 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           });
           return prev.role === resolvedRole ? prev : { ...prev, role: resolvedRole };
         });
+
+        // Merge any Creator-granted special badges (Bêta-testeur, Supporter, VIP) & apply revocations
+        const granted: UnlockedBadgeRecord[] = Array.isArray(data.grantedBadges)
+          ? data.grantedBadges
+          : [];
+        const revoked = new Set<string>(
+          Array.isArray(data.revokedBadgeIds) ? data.revokedBadgeIds : []
+        );
+        if (granted.length > 0 || revoked.size > 0) {
+          setUnlockedBadges((prev) => {
+            const map = new Map<string, string>();
+            for (const b of prev) {
+              if (!revoked.has(b.badgeId)) map.set(b.badgeId, b.unlockedAt);
+            }
+            for (const g of granted) {
+              if (g?.badgeId && !map.has(g.badgeId)) {
+                map.set(g.badgeId, g.unlockedAt || new Date().toISOString());
+              }
+            }
+            return Array.from(map.entries()).map(([badgeId, unlockedAt]) => ({
+              badgeId,
+              unlockedAt,
+            }));
+          });
+          if (revoked.size > 0) {
+            setPinnedBadges((prev) => prev.filter((id) => !revoked.has(id)));
+          }
+        }
       })
       .catch(() => {
         // non-fatal
@@ -2160,6 +2197,39 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [evaluatedBadges, pinnedBadges, profile.id, profile.mode, profile.username, toast, unlockedBadges]
+  );
+
+  const reorderPinnedBadges = useCallback(
+    (nextOrder: string[]) => {
+      const unlockedSet = new Set(unlockedBadges.map((b) => b.badgeId));
+      const clean = Array.from(
+        new Set(nextOrder.filter((id) => typeof id === "string" && unlockedSet.has(id)))
+      ).slice(0, 3);
+      setPinnedBadges(clean);
+      try {
+        localStorage.setItem(STORAGE_KEYS.pinnedBadges, JSON.stringify(clean));
+      } catch {
+        // ignore
+      }
+      if (profile.mode === "supabase") {
+        void syncUserBadgesToCloud(profile.id, unlockedBadges, clean);
+      }
+    },
+    [profile.id, profile.mode, unlockedBadges]
+  );
+
+  const movePinnedBadge = useCallback(
+    (badgeId: string, direction: "left" | "right") => {
+      const idx = pinnedBadges.indexOf(badgeId);
+      if (idx === -1) return;
+      const targetIdx = direction === "left" ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= pinnedBadges.length) return;
+      const next = [...pinnedBadges];
+      const [moved] = next.splice(idx, 1);
+      next.splice(targetIdx, 0, moved);
+      reorderPinnedBadges(next);
+    },
+    [pinnedBadges, reorderPinnedBadges]
   );
 
   const recordSocialInteraction = useCallback(() => {
@@ -4065,6 +4135,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     dismissBadgeUnlock,
     previewBadgeUnlock,
     togglePinBadge,
+    movePinnedBadge,
+    reorderPinnedBadges,
     recordSocialInteraction,
     signInWithSupabase,
     signUpWithSupabase,

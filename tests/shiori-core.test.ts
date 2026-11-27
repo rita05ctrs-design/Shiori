@@ -38,6 +38,11 @@ import {
   resolveEffectiveRole,
 } from "../src/lib/server/role-resolver.ts";
 import {
+  applyAdminGrantRole,
+  applyAdminGrantsToBadges,
+  type AdminUserGrantEntry,
+} from "../src/lib/admin-grants-utils.ts";
+import {
   DEFAULT_SITE_CONFIG,
   sanitizeCtaHref,
   sanitizeSiteConfigInput,
@@ -1647,4 +1652,35 @@ test("i18n UI_PHRASES: 100% of tr() literal keys exist in all 7 languages with i
   assert.equal(formatSeason("SPRING", 2026, "ja"), "2026年春");
   assert.equal(formatRelativeTime(new Date().toISOString(), "en"), "Just now");
   assert.equal(formatRelativeTime(new Date().toISOString(), "ja"), "たった今");
+});
+
+test("admin-grants-utils: overlays granted special badges, honors revocations, and protects Creator role", () => {
+  const baseBadges = [
+    { badgeId: "anime_10", unlockedAt: "2026-01-01T00:00:00.000Z" },
+    { badgeId: "vip", unlockedAt: "2026-01-02T00:00:00.000Z" },
+  ];
+  const entry: AdminUserGrantEntry = {
+    grantedBadges: [
+      { badgeId: "beta_tester", unlockedAt: "2026-02-01T00:00:00.000Z" },
+      { badgeId: "supporter", unlockedAt: "2026-02-02T00:00:00.000Z" },
+    ],
+    revokedBadgeIds: ["vip"],
+    role: "moderator",
+    updatedAt: "2026-02-02T00:00:00.000Z",
+  };
+
+  const merged = applyAdminGrantsToBadges(baseBadges, entry);
+  const ids = merged.map((b) => b.badgeId);
+  assert.ok(ids.includes("anime_10"), "normal unlocked badges are preserved");
+  assert.ok(ids.includes("beta_tester"), "granted beta_tester persists");
+  assert.ok(ids.includes("supporter"), "granted supporter persists");
+  assert.ok(!ids.includes("vip"), "revoked special badge is removed");
+
+  assert.equal(applyAdminGrantRole("user", entry), "moderator");
+  assert.equal(
+    applyAdminGrantRole("creator", { ...entry, role: "user" }),
+    "creator",
+    "creator role can never be downgraded by a ledger entry"
+  );
+  assert.equal(applyAdminGrantRole("user", undefined), "user");
 });

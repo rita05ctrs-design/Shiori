@@ -366,6 +366,27 @@ export async function syncPublicProfileToCloud(
     is_activity_public: payload.isActivityPublic,
   };
 
+  // Preserve any Creator-owned `_shioriAdminGrants` stored on `stats_summary` so debounced
+  // profile syncs never overwrite special badge grants.
+  let preservedAdminGrants: unknown;
+  try {
+    const { data: existingStatsRow } = await supabase
+      .from("profiles")
+      .select("stats_summary")
+      .eq("id", userId)
+      .maybeSingle();
+    if (
+      existingStatsRow?.stats_summary &&
+      typeof existingStatsRow.stats_summary === "object" &&
+      "_shioriAdminGrants" in (existingStatsRow.stats_summary as Record<string, unknown>)
+    ) {
+      preservedAdminGrants = (existingStatsRow.stats_summary as Record<string, unknown>)
+        ._shioriAdminGrants;
+    }
+  } catch {
+    // non-fatal
+  }
+
   const fullRow = {
     ...coreRow,
     banner_url: payload.bannerUrl ?? null,
@@ -376,6 +397,9 @@ export async function syncPublicProfileToCloud(
       ...payload.stats,
       libraryPreview: (payload.libraryPreview ?? []).slice(0, 80),
       sharedCollections: (payload.sharedCollections ?? []).slice(0, 12),
+      ...(preservedAdminGrants !== undefined
+        ? { _shioriAdminGrants: preservedAdminGrants }
+        : {}),
     },
     unlocked_badges: payload.unlockedBadges.slice(0, 60),
     pinned_badges: payload.pinnedBadges.slice(0, 3),

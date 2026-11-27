@@ -1051,6 +1051,83 @@ export function AdminDashboardClient({
               </div>
             </div>
 
+            {/* Creator-Only Reference Guide for Special Badges & Moderator Role */}
+            <div className="rounded-2xl border border-[#F0B95B]/25 bg-gradient-to-br from-[#16120B]/90 via-[#0B0D14]/95 to-[#090A10] p-4 sm:p-5 space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-[#F0B95B] shrink-0" />
+                  <h3 className="text-xs sm:text-sm font-bold text-[#FDE68A]">
+                    {tr("À quoi servent les badges spéciaux ? (Visible uniquement par le Créateur)")}
+                  </h3>
+                </div>
+                <span className="text-[10.5px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#F0B95B]/12 border border-[#F0B95B]/35 text-[#F0B95B]">
+                  {tr("Guide Créateur")}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="rounded-xl bg-[#07080C]/85 border border-amber-400/25 p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FDE68A]">
+                      <Sparkles className="w-3.5 h-3.5 text-[#F0B95B]" />
+                      {tr("Bêta-testeur")}
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/35">
+                      {tr("Or")}
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-[#A2A6B8] leading-relaxed">
+                    {tr("Récompense les premiers membres qui ont testé Shiori et remonté des retours. Débloque un trophée exclusif (impossible à gagner automatiquement), épinglable à côté du pseudo.")}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-[#07080C]/85 border border-[#F0B95B]/30 p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FDE68A]">
+                      <Heart className="w-3.5 h-3.5 text-[#E5484D]" />
+                      {tr("Supporter")}
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/35">
+                      {tr("Or")}
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-[#A2A6B8] leading-relaxed">
+                    {tr("Remercie un membre ayant soutenu Shiori sur Ko-fi. Débloque le médaillon cœur doré Supporter, épinglable sur son profil public et dans toute la communauté.")}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-[#07080C]/85 border border-violet-400/30 p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-200">
+                      <Crown className="w-3.5 h-3.5 text-violet-300" />
+                      {tr("VIP")}
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-200 border border-violet-400/40">
+                      {tr("Légendaire")}
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-[#A2A6B8] leading-relaxed">
+                    {tr("Distinction d'honneur réservée à vos proches, amis ou membres clés. Débloque un badge Légendaire avec aura holographique brillante épinglable à côté du pseudo.")}
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-[#07080C]/85 border border-[#E5484D]/30 p-3.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FCA5A5]">
+                      <Shield className="w-3.5 h-3.5 text-[#E5484D]" />
+                      {tr("Modérateur")} (+ Mod)
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#E5484D]/15 text-[#FCA5A5] border border-[#E5484D]/40">
+                      {tr("Rôle")}
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-[#A2A6B8] leading-relaxed">
+                    {tr("Affiche le badge rouge « Modérateur » à côté du pseudo du membre sur son profil et dans le fil communautaire, sans lui ouvrir les réglages réservés au Créateur.")}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {usersLoading ? (
               <div className="py-12 flex items-center justify-center gap-2 text-sm text-[#8D92A4]">
                 <Loader2 className="w-4 h-4 animate-spin text-[#F0B95B]" />

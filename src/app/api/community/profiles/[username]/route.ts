@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  applyAdminGrantRole,
+  applyAdminGrantsToBadges,
+  readAdminGrantsLedger,
+} from "@/lib/server/admin-grants-store";
+import {
   getAllLocalCommunityProfiles,
   isAuthenticatedActor,
   readSocialDb,
@@ -108,13 +113,20 @@ export async function GET(
   }
 
   if (profile) {
-    profile = {
-      ...profile,
-      role: resolvePublicProfileRole({
+    const grantsLedger = await readAdminGrantsLedger();
+    const grantEntry = grantsLedger.users[profile.id];
+    const resolvedRole = applyAdminGrantRole(
+      resolvePublicProfileRole({
         dbRole: profile.role,
         username: profile.username,
         displayName: profile.displayName,
       }),
+      grantEntry
+    );
+    profile = {
+      ...profile,
+      role: resolvedRole,
+      unlockedBadges: applyAdminGrantsToBadges(profile.unlockedBadges, grantEntry),
     };
   }
 

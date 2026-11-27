@@ -67,6 +67,8 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
     pinnedBadges: ownPinnedBadges,
     socialInteractionsCount: ownSocialCount,
     togglePinBadge,
+    movePinnedBadge,
+    reorderPinnedBadges,
     previewBadgeUnlock,
     isUserBlocked,
     blockUser,
@@ -596,6 +598,8 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
         pinnedBadges={displayProfile.pinnedBadges ?? []}
         canPin={isOwnProfile}
         onTogglePin={isOwnProfile ? togglePinBadge : undefined}
+        onMovePin={isOwnProfile ? movePinnedBadge : undefined}
+        onReorderPins={isOwnProfile ? reorderPinnedBadges : undefined}
         onPreviewUnlock={isOwnProfile ? previewBadgeUnlock : undefined}
         defaultViewMode="mini"
       />

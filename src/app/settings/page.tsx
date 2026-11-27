@@ -106,6 +106,8 @@ export default function SettingsPage() {
     evaluatedBadges,
     pinnedBadges,
     togglePinBadge,
+    movePinnedBadge,
+    reorderPinnedBadges,
     previewBadgeUnlock,
     contentLanguage,
     setContentLanguage,
@@ -836,6 +838,8 @@ export default function SettingsPage() {
                     pinnedBadges={pinnedBadges}
                     canPin
                     onTogglePin={togglePinBadge}
+                    onMovePin={movePinnedBadge}
+                    onReorderPins={reorderPinnedBadges}
                     onPreviewUnlock={previewBadgeUnlock}
                     compact
                   />
