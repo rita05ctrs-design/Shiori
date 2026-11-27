@@ -206,14 +206,43 @@ export function createDefaultLibrary(): LibraryEntry[] {
   return entries;
 }
 
+/**
+ * Returns true ONLY when a local library array consists exclusively of unmodified
+ * entries from the legacy starter demo library (same mediaId, status, progress, score, notes).
+ * Used to auto-clean old untouched demo data in `localStorage` without ever deleting
+ * entries that a visitor actually added or edited themselves.
+ */
+export function isUntouchedDemoLibrary(entries: readonly LibraryEntry[]): boolean {
+  if (!Array.isArray(entries) || entries.length === 0) return false;
+  const demo = createDefaultLibrary();
+  if (demo.length === 0 || entries.length > demo.length) return false;
+
+  const demoById = new Map<number, LibraryEntry>();
+  for (const item of demo) {
+    demoById.set(item.mediaId, item);
+  }
+
+  return entries.every((entry) => {
+    const preset = demoById.get(entry.mediaId);
+    if (!preset) return false;
+    return (
+      entry.status === preset.status &&
+      entry.progress === preset.progress &&
+      entry.score === preset.score &&
+      Boolean(entry.isFavorite) === Boolean(preset.isFavorite) &&
+      (entry.notes ?? "") === (preset.notes ?? "")
+    );
+  });
+}
+
 export function createDefaultProfile(): UserProfile {
   return {
     id: "local-curator",
     username: "kuro_shiori",
-    displayName: "Kuro",
-    email: "kuro@shiori.app",
-    bio: "Collectionneur d'histoires nocturnes — seinen, fantasy mélancolique & animation d'auteur.",
-    avatarInitials: "KU",
+    displayName: "Invité",
+    email: "",
+    bio: "",
+    avatarInitials: "IN",
     avatarUrl: null,
     accentColor: "#E5484D",
     isActivityPublic: true,
@@ -224,21 +253,12 @@ export function createDefaultProfile(): UserProfile {
       milestones: true,
       recommendations: true,
     },
-    joinedAt: new Date(Date.now() - 45 * 86400 * 1000).toISOString(),
+    joinedAt: new Date().toISOString(),
   };
 }
 
 export function createDefaultNotifications(): ShioriNotification[] {
-  return [
-    {
-      id: "notif-local-welcome",
-      kind: "SYSTEM",
-      title: "Mode découverte local actif",
-      body: "Votre session invité contient une sélection d'exemple modifiable. Créez un compte pour synchroniser votre bibliothèque et recevoir vos vraies notifications.",
-      isRead: true,
-      createdAt: new Date().toISOString(),
-    },
-  ];
+  return [];
 }
 
 export function createDefaultActivity(entries: LibraryEntry[]): ActivityEvent[] {

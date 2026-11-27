@@ -14,6 +14,7 @@ import {
   createDefaultLibrary,
   createDefaultNotifications,
   createDefaultProfile,
+  isUntouchedDemoLibrary,
 } from "@/data/default-library";
 import {
   getSupabaseBrowserClient,
@@ -399,17 +400,13 @@ function isLibraryEntry(item: MediaItem | LibraryEntry): item is LibraryEntry {
 
 export function ShioriProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
-  const [library, setLibrary] = useState<LibraryEntry[]>(() => createDefaultLibrary());
+  const [library, setLibrary] = useState<LibraryEntry[]>([]);
   const [profile, setProfile] = useState<UserProfile>(() => createDefaultProfile());
-  const [notifications, setNotifications] = useState<ShioriNotification[]>(() =>
-    createDefaultNotifications()
-  );
+  const [notifications, setNotifications] = useState<ShioriNotification[]>([]);
   const [socialNotifications, setSocialNotifications] = useState<ShioriNotification[]>([]);
   const [readNotifIds, setReadNotifIds] = useState<string[]>([]);
   const [dismissedNotifIds, setDismissedNotifIds] = useState<string[]>([]);
-  const [activity, setActivity] = useState<ActivityEvent[]>(() =>
-    createDefaultActivity(createDefaultLibrary())
-  );
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [anilistStats, setAnilistStats] = useState<AniListUserStatsSnapshot | null>(null);
   const [anilistConnection, setAnilistConnection] = useState<AniListConnectionStatus>(
     DEFAULT_ANILIST_CONNECTION
@@ -478,28 +475,62 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
   // Hydrate from localStorage on mount
   useEffect(() => {
     try {
-      const savedLib = localStorage.getItem(STORAGE_KEYS.library);
-      if (savedLib) {
-        const parsed = JSON.parse(savedLib);
-        if (Array.isArray(parsed)) setLibrary(parsed);
-      }
       const savedProfile = localStorage.getItem(STORAGE_KEYS.profile);
+      let parsedProfile: Partial<UserProfile> | null = null;
       if (savedProfile) {
-        const parsedProfile = JSON.parse(savedProfile);
-        // Security: never trust cached client-side role; always resolve authoritatively from server
-        setProfile((prev) => ({ ...prev, ...parsedProfile, role: "user" }));
+        parsedProfile = JSON.parse(savedProfile) as Partial<UserProfile>;
+        const isLegacyDemoProfile =
+          parsedProfile?.id === "local-curator" &&
+          parsedProfile?.displayName === "Kuro" &&
+          parsedProfile?.email === "kuro@shiori.app";
+        if (isLegacyDemoProfile) {
+          localStorage.removeItem(STORAGE_KEYS.profile);
+          setProfile(createDefaultProfile());
+        } else {
+          // Security: never trust cached client-side role; always resolve authoritatively from server
+          setProfile((prev) => ({ ...prev, ...parsedProfile, role: "user" }));
+        }
         if (parsedProfile?.preferredLanguage) {
           setContentLanguageState(normalizeContentLanguage(parsedProfile.preferredLanguage));
         }
       }
+
+      const isLocalGuestProfile = !parsedProfile || parsedProfile.mode === "local";
+      let purgedLegacyDemo = false;
+
+      const savedLib = localStorage.getItem(STORAGE_KEYS.library);
+      if (savedLib) {
+        const parsed = JSON.parse(savedLib);
+        if (Array.isArray(parsed)) {
+          if (isLocalGuestProfile && isUntouchedDemoLibrary(parsed as LibraryEntry[])) {
+            purgedLegacyDemo = true;
+            setLibrary([]);
+            localStorage.removeItem(STORAGE_KEYS.library);
+            localStorage.removeItem(STORAGE_KEYS.activity);
+            localStorage.removeItem(STORAGE_KEYS.notifications);
+            localStorage.removeItem(STORAGE_KEYS.badges);
+            localStorage.removeItem(STORAGE_KEYS.pinnedBadges);
+          } else {
+            setLibrary(parsed);
+          }
+        }
+      }
+
       const savedLang = localStorage.getItem(STORAGE_KEYS.contentLanguage);
       if (savedLang) {
         setContentLanguageState(normalizeContentLanguage(savedLang));
       }
-      const savedNotifs = localStorage.getItem(STORAGE_KEYS.notifications);
-      if (savedNotifs) {
-        const parsed = JSON.parse(savedNotifs);
-        if (Array.isArray(parsed)) setNotifications(parsed);
+      if (!purgedLegacyDemo) {
+        const savedNotifs = localStorage.getItem(STORAGE_KEYS.notifications);
+        if (savedNotifs) {
+          const parsed = JSON.parse(savedNotifs);
+          if (Array.isArray(parsed)) {
+            const cleaned = parsed.filter(
+              (n: { id?: string }) => n?.id !== "notif-local-welcome"
+            );
+            setNotifications(cleaned);
+          }
+        }
       }
       const savedReadNotifs = localStorage.getItem(STORAGE_KEYS.readNotifs);
       if (savedReadNotifs) {
@@ -511,10 +542,12 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(savedDismissedNotifs);
         if (Array.isArray(parsed)) setDismissedNotifIds(parsed.map(String));
       }
-      const savedActivity = localStorage.getItem(STORAGE_KEYS.activity);
-      if (savedActivity) {
-        const parsed = JSON.parse(savedActivity);
-        if (Array.isArray(parsed)) setActivity(parsed);
+      if (!purgedLegacyDemo) {
+        const savedActivity = localStorage.getItem(STORAGE_KEYS.activity);
+        if (savedActivity) {
+          const parsed = JSON.parse(savedActivity);
+          if (Array.isArray(parsed)) setActivity(parsed);
+        }
       }
       const savedAniListStats = localStorage.getItem(STORAGE_KEYS.anilistStats);
       if (savedAniListStats) {
@@ -542,16 +575,18 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           );
         }
       }
-      const savedBadges = localStorage.getItem(STORAGE_KEYS.badges);
-      if (savedBadges !== null) {
-        hasStoredBadgesRef.current = true;
-        const parsed = JSON.parse(savedBadges);
-        if (Array.isArray(parsed)) setUnlockedBadges(parsed);
-      }
-      const savedPinned = localStorage.getItem(STORAGE_KEYS.pinnedBadges);
-      if (savedPinned) {
-        const parsed = JSON.parse(savedPinned);
-        if (Array.isArray(parsed)) setPinnedBadges(parsed.slice(0, 3));
+      if (!purgedLegacyDemo) {
+        const savedBadges = localStorage.getItem(STORAGE_KEYS.badges);
+        if (savedBadges !== null) {
+          hasStoredBadgesRef.current = true;
+          const parsed = JSON.parse(savedBadges);
+          if (Array.isArray(parsed)) setUnlockedBadges(parsed);
+        }
+        const savedPinned = localStorage.getItem(STORAGE_KEYS.pinnedBadges);
+        if (savedPinned) {
+          const parsed = JSON.parse(savedPinned);
+          if (Array.isArray(parsed)) setPinnedBadges(parsed.slice(0, 3));
+        }
       }
       const savedSocialCount = localStorage.getItem(STORAGE_KEYS.socialCount);
       if (savedSocialCount !== null) {
@@ -681,8 +716,12 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             setHomeSections(normalizeHomeSections(cloudUiPrefs.homeSections));
           }
         }
-        if (cloudLib && cloudLib.length > 0) {
+        if (cloudLib !== null) {
           setLibrary(cloudLib);
+          if (cloudLib.length === 0) {
+            setActivity([]);
+            setFavoriteOrder([]);
+          }
         }
         if (cloudStats) {
           setAnilistStats(cloudStats);
@@ -3275,11 +3314,10 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        const defLib = createDefaultLibrary();
         setProfile(createDefaultProfile());
-        setLibrary(defLib);
+        setLibrary([]);
         setNotifications(createDefaultNotifications());
-        setActivity(createDefaultActivity(defLib));
+        setActivity([]);
         setFavoriteStaff([]);
         setFavoriteOrder([]);
         setCollections([]);
@@ -3853,7 +3891,8 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
         // If email confirmation is disabled on the Supabase project, session is live right away
         if (data.session && data.user) {
           const keepLib = options?.keepCurrentLibrary ?? true;
-          const nextLib = keepLib ? library : [];
+          const cleanLocalLib = isUntouchedDemoLibrary(library) ? [] : library;
+          const nextLib = keepLib ? cleanLocalLib : [];
           setProfile((prev) => ({
             ...prev,
             id: data.user!.id,
@@ -3865,7 +3904,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
             mode: "supabase",
           }));
           setLibrary(nextLib);
-          if (!keepLib) {
+          if (!keepLib || nextLib.length === 0) {
             setFavoriteStaff([]);
             setFavoriteOrder([]);
             setCollections([]);
@@ -3880,7 +3919,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           setReadNotifIds([]);
           setDismissedNotifIds([]);
           if (keepLib && nextLib.length > 0) {
-            void syncEntriesBatchToCloud(data.user.id, nextLib);
+            await syncEntriesBatchToCloud(data.user.id, nextLib);
           }
           toast({
             title: `Bienvenue sur Shiori, ${displayName} !`,
@@ -3902,6 +3941,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
 
       // Built-in Shiori Server Registration (active immediately!)
       const keepLib = options?.keepCurrentLibrary ?? true;
+      const cleanLocalLib = isUntouchedDemoLibrary(library) ? [] : library;
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3910,7 +3950,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
           password,
           displayName,
           username: options?.username,
-          initialLibrary: keepLib ? library : [],
+          initialLibrary: keepLib ? cleanLocalLib : [],
         }),
       });
       const data = await res.json();
@@ -3923,7 +3963,7 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
       setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
       setActivity(Array.isArray(data.activity) ? data.activity : []);
       // Reset guest/demo state so a newly registered account never inherits demo badges or staff
-      if (!keepLib) {
+      if (!keepLib || cleanLocalLib.length === 0) {
         setFavoriteStaff([]);
         setFavoriteOrder([]);
         setCollections([]);
@@ -3983,11 +4023,34 @@ export function ShioriProvider({ children }: { children: React.ReactNode }) {
     }
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
 
-    const defLib = createDefaultLibrary();
+    if (typeof window !== "undefined") {
+      for (const key of [
+        STORAGE_KEYS.library,
+        STORAGE_KEYS.profile,
+        STORAGE_KEYS.notifications,
+        STORAGE_KEYS.activity,
+        STORAGE_KEYS.anilistStats,
+        STORAGE_KEYS.favoriteStaff,
+        STORAGE_KEYS.favoriteOrder,
+        STORAGE_KEYS.badges,
+        STORAGE_KEYS.pinnedBadges,
+        STORAGE_KEYS.socialCount,
+        STORAGE_KEYS.collections,
+        STORAGE_KEYS.readNotifs,
+        STORAGE_KEYS.dismissedNotifs,
+      ]) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     setProfile(createDefaultProfile());
-    setLibrary(defLib);
+    setLibrary([]);
     setNotifications(createDefaultNotifications());
-    setActivity(createDefaultActivity(defLib));
+    setActivity([]);
     setFavoriteStaff([]);
     setFavoriteOrder([]);
     setCollections([]);
