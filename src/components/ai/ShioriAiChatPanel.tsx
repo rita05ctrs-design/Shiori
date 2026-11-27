@@ -164,12 +164,14 @@ function FormattedChatText({ text }: { text: string }) {
 
 interface ShioriAiChatPanelProps {
   compact?: boolean;
+  fullScreen?: boolean;
   onClose?: () => void;
   onNavigate?: () => void;
 }
 
 export function ShioriAiChatPanel({
   compact = false,
+  fullScreen = false,
   onClose,
   onNavigate,
 }: ShioriAiChatPanelProps) {
@@ -986,24 +988,48 @@ export function ShioriAiChatPanel({
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden bg-surface-solid border border-white/[0.11]",
-        compact
-          ? "h-full rounded-2xl shadow-[0_28px_80px_rgba(0,0,0,0.88)]"
-          : "rounded-2xl sm:rounded-3xl min-h-[340px] sm:min-h-[450px] h-[calc(100dvh-16.5rem)] sm:h-[calc(100dvh-16rem)] max-h-[760px] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
+        "flex flex-col overflow-hidden",
+        fullScreen
+          ? "flex-1 min-h-0 w-full h-full bg-obsidian"
+          : compact
+            ? "h-full rounded-2xl bg-surface-solid border border-white/[0.11] shadow-[0_28px_80px_rgba(0,0,0,0.88)]"
+            : "rounded-2xl sm:rounded-3xl bg-surface-solid border border-white/[0.11] min-h-[340px] sm:min-h-[450px] h-[calc(100dvh-16.5rem)] sm:h-[calc(100dvh-16rem)] max-h-[760px] shadow-[0_24px_70px_rgba(0,0,0,0.55)]"
       )}
     >
       {/* Header */}
-      <div className="px-3 sm:px-4 py-3.5 border-b border-white/[0.08] bg-gradient-to-r from-[#141724] via-[#11131E] to-[#191118] flex items-center justify-between gap-2 sm:gap-3 shrink-0">
+      <div
+        className={cn(
+          "border-b border-white/[0.08] shrink-0",
+          fullScreen
+            ? "bg-[#0B0D16]/90 backdrop-blur-md"
+            : "bg-gradient-to-r from-[#141724] via-[#11131E] to-[#191118]"
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-between gap-2 sm:gap-3",
+            fullScreen
+              ? "max-w-4xl mx-auto w-full px-3 sm:px-6 py-2.5 sm:py-3"
+              : "px-3 sm:px-4 py-3.5"
+          )}
+        >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent-deep border border-white/20 flex items-center justify-center shadow-[0_0_20px_rgba(229,72,77,0.45)] shrink-0">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <h2 className="text-sm font-bold text-[#F4F3EE] truncate">
-                {t("ai.pageTitle")}
+                {fullScreen ? (
+                  <>
+                    <span className="sm:hidden">{t("nav.profileAi")}</span>
+                    <span className="hidden sm:inline">{t("ai.pageTitle")}</span>
+                  </>
+                ) : (
+                  t("ai.pageTitle")
+                )}
               </h2>
-              <span className="px-1.5 py-0.5 rounded-md bg-kinpaku/15 border border-kinpaku/35 font-mono text-[9.5px] font-bold text-kinpaku uppercase tracking-wider">
+              <span className="px-1.5 py-0.5 rounded-md bg-kinpaku/15 border border-kinpaku/35 font-mono text-[9.5px] font-bold text-kinpaku uppercase tracking-wider shrink-0">
                 Gemini
               </span>
             </div>
@@ -1136,6 +1162,7 @@ export function ShioriAiChatPanel({
             </button>
           )}
         </div>
+        </div>
       </div>
 
       {/* Inline Saved Conversations Panel (Load or Delete saved AI chats & their recommended anime) */}
@@ -1148,7 +1175,12 @@ export function ShioriAiChatPanel({
             transition={{ duration: 0.18 }}
             className="overflow-hidden border-b border-white/[0.08] bg-[#0B0D16] shrink-0"
           >
-            <div className="p-3 space-y-2.5 max-h-[250px] overflow-y-auto overscroll-contain">
+            <div
+              className={cn(
+                "p-3 space-y-2.5 max-h-[250px] overflow-y-auto overscroll-contain",
+                fullScreen && "max-w-4xl mx-auto w-full sm:px-6"
+              )}
+            >
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] font-mono uppercase tracking-[0.14em] text-kinpaku flex items-center gap-1.5">
                   <BookmarkCheck className="w-3.5 h-3.5" />
@@ -1247,31 +1279,56 @@ export function ShioriAiChatPanel({
       {/* Message Stream */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 bg-obsidian/55"
+        className={cn(
+          "flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4",
+          fullScreen
+            ? "px-3 sm:px-6 py-4 sm:py-6 bg-obsidian"
+            : "p-4 bg-obsidian/55"
+        )}
       >
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col justify-between gap-5 py-2">
-            <div className="space-y-3 text-center max-w-md mx-auto my-auto">
-              <div className="w-12 h-12 rounded-2xl bg-accent/14 border border-accent/35 mx-auto flex items-center justify-center">
-                <Bot className="w-6 h-6 text-accent" />
+          <div className="min-h-full flex flex-col justify-center gap-5 py-2">
+            <div
+              className={cn(
+                "space-y-3.5 text-center mx-auto w-full",
+                fullScreen ? "max-w-xl" : "max-w-md"
+              )}
+            >
+              <div
+                className={cn(
+                  "rounded-2xl bg-accent/14 border border-accent/35 mx-auto flex items-center justify-center shadow-[0_0_28px_rgb(var(--shiori-accent-rgb)/0.2)]",
+                  fullScreen ? "w-14 h-14" : "w-12 h-12"
+                )}
+              >
+                <Bot className={cn("text-accent", fullScreen ? "w-7 h-7" : "w-6 h-6")} />
               </div>
               <div>
-                <p className="text-base font-semibold text-[#F4F3EE]">
+                <p
+                  className={cn(
+                    "font-semibold text-[#F4F3EE]",
+                    fullScreen ? "text-lg sm:text-xl" : "text-base"
+                  )}
+                >
                   {t("ai.welcomeTitle")}
                 </p>
-                <p className="text-xs text-[#8E93A6] mt-1 leading-relaxed">
+                <p
+                  className={cn(
+                    "text-[#8E93A6] mt-1 leading-relaxed",
+                    fullScreen ? "text-xs sm:text-sm" : "text-xs"
+                  )}
+                >
                   {t("ai.welcomeSub")}
                 </p>
               </div>
 
               {/* Quick Starter Prompt Chips */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 text-left">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 text-left">
                 {starterPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     onClick={() => void sendMessage(prompt)}
-                    className="p-2.5 rounded-xl bg-white/[0.035] hover:bg-accent/14 border border-white/[0.08] hover:border-accent/40 text-xs text-[#D6D9E6] hover:text-white transition-all cursor-pointer leading-snug"
+                    className="p-3 rounded-xl bg-white/[0.035] hover:bg-accent/14 border border-white/[0.08] hover:border-accent/40 text-xs text-[#D6D9E6] hover:text-white transition-[transform,background-color,border-color,color] duration-150 hover:-translate-y-0.5 active:scale-[0.98] cursor-pointer leading-snug touch-manipulation"
                   >
                     <Sparkles className="w-3 h-3 text-kinpaku inline mr-1.5 -mt-0.5" />
                     {prompt}
@@ -1290,7 +1347,11 @@ export function ShioriAiChatPanel({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.2 }}
-                  className={cn("flex gap-2.5", isUser ? "justify-end" : "justify-start")}
+                  className={cn(
+                    "flex gap-2.5",
+                    isUser ? "justify-end" : "justify-start",
+                    fullScreen && "max-w-3xl mx-auto w-full"
+                  )}
                 >
                   {!isUser && (
                     <div className="w-7 h-7 rounded-lg bg-accent/18 border border-accent/35 flex items-center justify-center shrink-0 mt-0.5">
@@ -1515,7 +1576,12 @@ export function ShioriAiChatPanel({
         )}
 
         {errorMsg && (
-          <div className="px-3 py-2 rounded-xl bg-rose-500/12 border border-rose-500/30 text-xs text-rose-200">
+          <div
+            className={cn(
+              "px-3 py-2 rounded-xl bg-rose-500/12 border border-rose-500/30 text-xs text-rose-200",
+              fullScreen && "max-w-3xl mx-auto w-full"
+            )}
+          >
             {errorMsg}
           </div>
         )}
@@ -1535,7 +1601,12 @@ export function ShioriAiChatPanel({
           setVoiceErrorMsg(null);
           void sendMessage(input);
         }}
-        className="p-2.5 sm:p-3.5 border-t border-white/[0.07] bg-gradient-to-t from-[#090B12] via-[#0D101B] to-[#0F121E]/95 shrink-0 space-y-2"
+        className={cn(
+          "border-t border-white/[0.07] shrink-0 space-y-2",
+          fullScreen
+            ? "px-3 sm:px-6 py-2.5 sm:py-3.5 bg-[#090B12]/95 [&>*]:max-w-3xl [&>*]:mx-auto [&>*]:w-full"
+            : "p-2.5 sm:p-3.5 bg-gradient-to-t from-[#090B12] via-[#0D101B] to-[#0F121E]/95"
+        )}
       >
         <AnimatePresence initial={false} mode="wait">
           {isRequestingMic && (

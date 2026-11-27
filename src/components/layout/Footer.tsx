@@ -12,6 +12,7 @@ export function Footer() {
   const pathname = usePathname();
   const { setCommandOpen, isAuthenticated, isCreator, openAuthModal } = useShiori();
   const { t, tr } = useTranslation();
+  if (pathname.startsWith("/assistant")) return null;
   const hideOnMobile = pathname.startsWith("/messages");
 
   return (

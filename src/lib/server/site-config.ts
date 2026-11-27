@@ -2,7 +2,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import type { SiteConfig } from "@/types/media";
-import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  getSupabaseAdminClient,
+  getSupabasePublicServerClient,
+  getSupabaseServerClient,
+} from "@/lib/supabase/server";
 import {
   DEFAULT_SITE_CONFIG,
   sanitizeCtaHref,
@@ -12,6 +16,7 @@ import {
 export { DEFAULT_SITE_CONFIG, sanitizeCtaHref, sanitizeSiteConfigInput };
 
 const SITE_SETTINGS_KEY = "global_config";
+const SITE_CONFIG_TTL_MS = 30_000;
 
 const PROJECT_DATA_DIR = process.env.SHIORI_DATA_DIR
   ? path.resolve(process.env.SHIORI_DATA_DIR)
@@ -21,6 +26,7 @@ const TMP_DATA_DIR = path.join(os.tmpdir(), "shiori-data");
 let resolvedConfigDir: string | null = null;
 const globalConfigMem = globalThis as unknown as {
   __shioriSiteConfigCache?: SiteConfig;
+  __shioriSiteConfigFetchedAt?: number;
 };
 
 function getWritableConfigPath(): string | null {
@@ -69,6 +75,7 @@ function readLocalSiteConfig(): SiteConfig | null {
 
 function writeLocalSiteConfig(config: SiteConfig) {
   globalConfigMem.__shioriSiteConfigCache = config;
+  globalConfigMem.__shioriSiteConfigFetchedAt = Date.now();
   const filePath = getWritableConfigPath();
   if (!filePath) return;
   try {
@@ -81,9 +88,17 @@ function writeLocalSiteConfig(config: SiteConfig) {
 }
 
 export async function getSiteConfig(): Promise<SiteConfig> {
-  // 1) Try Supabase `public.site_settings`
+  if (
+    globalConfigMem.__shioriSiteConfigCache &&
+    globalConfigMem.__shioriSiteConfigFetchedAt &&
+    Date.now() - globalConfigMem.__shioriSiteConfigFetchedAt < SITE_CONFIG_TTL_MS
+  ) {
+    return globalConfigMem.__shioriSiteConfigCache;
+  }
+
+  // 1) Try Supabase `public.site_settings` using a cookie-less client so ISR routes (e.g. Home) remain cached
   try {
-    const client = getSupabaseAdminClient() ?? (await getSupabaseServerClient());
+    const client = getSupabaseAdminClient() ?? getSupabasePublicServerClient();
     if (client) {
       const { data, error } = await client
         .from("site_settings")
@@ -105,6 +120,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
         hydrated.updatedBy =
           (val.updatedBy as string | null) ?? (data.updated_by as string | null) ?? null;
         globalConfigMem.__shioriSiteConfigCache = hydrated;
+        globalConfigMem.__shioriSiteConfigFetchedAt = Date.now();
         return hydrated;
       }
     }
@@ -113,7 +129,10 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   }
 
   // 2) Fall back to local JSON / memory cache / defaults
-  return readLocalSiteConfig() ?? DEFAULT_SITE_CONFIG;
+  const fallback = readLocalSiteConfig() ?? DEFAULT_SITE_CONFIG;
+  globalConfigMem.__shioriSiteConfigCache = fallback;
+  globalConfigMem.__shioriSiteConfigFetchedAt = Date.now();
+  return fallback;
 }
 
 export async function saveSiteConfig(

@@ -20,6 +20,25 @@ export function getSupabaseAdminClient(): SupabaseClient | null {
   });
 }
 
+/**
+ * Cookie-less public Supabase client for reading public tables inside ISR/static
+ * Server Components without calling `cookies()` (keeps Next.js route caching active).
+ */
+export function getSupabasePublicServerClient(): SupabaseClient | null {
+  if (!isSupabaseConfigured()) return null;
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+}
+
 export async function getSupabaseServerClient() {
   if (!isSupabaseConfigured()) return null;
   const cookieStore = await cookies();

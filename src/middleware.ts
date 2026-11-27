@@ -15,6 +15,33 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Fast-path: skip remote Supabase Auth network calls for guests (no sb- cookie),
+  // Next.js prefetches, and client-side App Router soft navigations to regular pages.
+  // Full document loads, /admin, /auth, and /api routes still validate/refresh tokens normally.
+  const hasSupabaseCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith("sb-"));
+  if (!hasSupabaseCookie) {
+    return NextResponse.next();
+  }
+
+  const isPrefetch =
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.get("purpose") === "prefetch";
+  if (isPrefetch) {
+    return NextResponse.next();
+  }
+
+  const pathname = request.nextUrl.pathname;
+  const isRscSoftNav = request.headers.get("rsc") === "1";
+  if (
+    isRscSoftNav &&
+    !pathname.startsWith("/admin") &&
+    !pathname.startsWith("/auth")
+  ) {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({ request });
 
   try {
