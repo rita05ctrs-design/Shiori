@@ -510,6 +510,27 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
 export const ADMIN_GRANTABLE_BADGE_IDS = ["beta_tester", "supporter", "vip"] as const;
 export type AdminGrantableBadgeId = (typeof ADMIN_GRANTABLE_BADGE_IDS)[number];
 
+const ADMIN_GRANTABLE_SET = new Set<string>(ADMIN_GRANTABLE_BADGE_IDS);
+
+/**
+ * Extracts Creator-granted special badges (`beta_tester`, `supporter`, `vip`)
+ * in a deterministic, deduplicated order from either `UnlockedBadgeRecord[]`
+ * or raw badge ID strings.
+ */
+export function extractSpecialBadgeIds(
+  badges?: ReadonlyArray<{ badgeId?: string } | string> | null
+): AdminGrantableBadgeId[] {
+  if (!Array.isArray(badges) || badges.length === 0) return [];
+  const present = new Set<string>();
+  for (const item of badges) {
+    const id = typeof item === "string" ? item : item?.badgeId;
+    if (typeof id === "string" && ADMIN_GRANTABLE_SET.has(id)) {
+      present.add(id);
+    }
+  }
+  return ADMIN_GRANTABLE_BADGE_IDS.filter((id) => present.has(id));
+}
+
 export const BADGE_BY_ID = new Map<string, BadgeDefinition>(
   BADGE_DEFINITIONS.map((b) => [b.id, b])
 );

@@ -14,6 +14,12 @@ import {
   rateLimitResponse,
   sanitizeSafeImageUrl,
 } from "@/lib/server/rate-limit";
+import { extractSpecialBadgeIds } from "@/lib/badges";
+import {
+  applyAdminGrantRole,
+  applyAdminGrantsToBadges,
+  readAdminGrantsLedger,
+} from "@/lib/server/admin-grants-store";
 import { resolvePublicProfileRole } from "@/lib/server/role-resolver";
 import type {
   ActivityCommentItem,
@@ -21,6 +27,8 @@ import type {
   CommunityActivityItem,
   CommunityActivityKind,
   MediaType,
+  SpecialBadgeId,
+  UnlockedBadgeRecord,
   UserRole,
 } from "@/types/media";
 
@@ -40,17 +48,24 @@ export async function GET(request: NextRequest) {
   const privateUsernames = new Set<string>();
   const roleByUserId = new Map<string, UserRole>();
   const roleByUsername = new Map<string, UserRole>();
+  const pinnedByUserId = new Map<string, string[]>();
+  const pinnedByUsername = new Map<string, string[]>();
+  const badgesByUserId = new Map<string, UnlockedBadgeRecord[]>();
+  const badgesByUsername = new Map<string, UnlockedBadgeRecord[]>();
+  const userIdByUsername = new Map<string, string>();
 
   if (requesterId && requester.role !== "user") {
     roleByUserId.set(requesterId, requester.role);
     roleByUsername.set(requester.username.toLowerCase(), requester.role);
   }
 
+  const grantsLedgerPromise = readAdminGrantsLedger();
+
   // 1) Fetch public realtime activity from Supabase if tables exist
   try {
     const supabase = await getSupabaseServerClient();
     if (supabase) {
-      const [{ data: rows, error }, { data: privateProfs }, { data: roleProfs }] = await Promise.all([
+      const [{ data: rows, error }, { data: publicProfs }] = await Promise.all([
         supabase
           .from("activity_events")
           .select("*")
@@ -59,28 +74,36 @@ export async function GET(request: NextRequest) {
           .limit(50),
         supabase
           .from("public_profiles")
-          .select("id, username")
-          .eq("is_activity_public", false)
-          .limit(200),
-        supabase
-          .from("public_profiles")
-          .select("id, username, role")
-          .in("role", ["creator", "moderator"])
-          .limit(50),
+          .select("id, username, display_name, role, is_activity_public, unlocked_badges, pinned_badges")
+          .limit(300),
       ]);
 
-      for (const pp of privateProfs ?? []) {
-        if (pp.id) privateUserIds.add(String(pp.id));
-        if (pp.username) privateUsernames.add(String(pp.username).toLowerCase());
-      }
-      for (const rp of roleProfs ?? []) {
+      for (const pp of publicProfs ?? []) {
+        const pid = pp.id ? String(pp.id) : "";
+        const puname = pp.username ? String(pp.username).toLowerCase() : "";
+        if (pid && puname) userIdByUsername.set(puname, pid);
+        if (pp.is_activity_public === false) {
+          if (pid) privateUserIds.add(pid);
+          if (puname) privateUsernames.add(puname);
+        }
         const r = resolvePublicProfileRole({
-          dbRole: rp.role,
-          username: rp.username ? String(rp.username) : null,
+          dbRole: pp.role,
+          username: pp.username ? String(pp.username) : null,
+          displayName: pp.display_name ? String(pp.display_name) : null,
         });
         if (r !== "user") {
-          if (rp.id) roleByUserId.set(String(rp.id), r);
-          if (rp.username) roleByUsername.set(String(rp.username).toLowerCase(), r);
+          if (pid) roleByUserId.set(pid, r);
+          if (puname) roleByUsername.set(puname, r);
+        }
+        if (Array.isArray(pp.pinned_badges) && pp.pinned_badges.length > 0) {
+          const cleanPinned = pp.pinned_badges.slice(0, 3);
+          if (pid) pinnedByUserId.set(pid, cleanPinned);
+          if (puname) pinnedByUsername.set(puname, cleanPinned);
+        }
+        if (Array.isArray(pp.unlocked_badges) && pp.unlocked_badges.length > 0) {
+          const cleanBadges = pp.unlocked_badges as UnlockedBadgeRecord[];
+          if (pid) badgesByUserId.set(pid, cleanBadges);
+          if (puname) badgesByUsername.set(puname, cleanBadges);
         }
       }
 
@@ -198,37 +221,69 @@ export async function GET(request: NextRequest) {
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // Hydrate latest pinnedBadges and authoritative roles onto each activity & comment author
-  const pinnedByUsername = new Map<string, string[]>();
+  // Hydrate latest pinnedBadges, special distinctions and authoritative roles onto each activity & comment author
+  const grantsLedger = await grantsLedgerPromise;
   for (const p of localProfiles) {
-    if (Array.isArray(p.pinnedBadges) && p.pinnedBadges.length > 0) {
-      pinnedByUsername.set(p.username.toLowerCase(), p.pinnedBadges.slice(0, 3));
+    const uname = p.username.toLowerCase();
+    userIdByUsername.set(uname, p.id);
+    if (Array.isArray(p.pinnedBadges) && p.pinnedBadges.length > 0 && !pinnedByUsername.has(uname)) {
+      pinnedByUserId.set(p.id, p.pinnedBadges.slice(0, 3));
+      pinnedByUsername.set(uname, p.pinnedBadges.slice(0, 3));
     }
-    if (p.role && p.role !== "user") {
+    if (Array.isArray(p.unlockedBadges) && p.unlockedBadges.length > 0 && !badgesByUserId.has(p.id)) {
+      badgesByUserId.set(p.id, p.unlockedBadges);
+      badgesByUsername.set(uname, p.unlockedBadges);
+    }
+    if (p.role && p.role !== "user" && !roleByUserId.has(p.id)) {
       roleByUserId.set(p.id, p.role);
-      roleByUsername.set(p.username.toLowerCase(), p.role);
+      roleByUsername.set(uname, p.role);
     }
   }
+
+  const resolveSpecialBadges = (userId: string, unameRaw: string): SpecialBadgeId[] => {
+    const uname = unameRaw.toLowerCase();
+    const resolvedId = userId || userIdByUsername.get(uname) || "";
+    const base = badgesByUserId.get(resolvedId) ?? badgesByUsername.get(uname) ?? [];
+    const grantEntry = resolvedId ? grantsLedger.users[resolvedId] : undefined;
+    const mergedBadges = applyAdminGrantsToBadges(base, grantEntry);
+    return extractSpecialBadgeIds(mergedBadges);
+  };
+
   items = items.map((a) => {
-    const livePinned = pinnedByUsername.get(a.actorUsername.toLowerCase());
-    const resolvedActorRole = resolvePublicProfileRole({
+    const uname = a.actorUsername.toLowerCase();
+    const resolvedId = a.userId || userIdByUsername.get(uname) || "";
+    const grantEntry = resolvedId ? grantsLedger.users[resolvedId] : undefined;
+    const livePinned = pinnedByUserId.get(resolvedId) ?? pinnedByUsername.get(uname);
+    const baseActorRole = resolvePublicProfileRole({
       dbRole:
-        roleByUserId.get(a.userId) ??
-        roleByUsername.get(a.actorUsername.toLowerCase()) ??
+        roleByUserId.get(resolvedId) ??
+        roleByUsername.get(uname) ??
         a.actorRole,
       username: a.actorUsername,
       displayName: a.actorDisplayName,
     });
+    const resolvedActorRole = applyAdminGrantRole(baseActorRole, grantEntry);
+    const actorSpecialBadges = resolveSpecialBadges(resolvedId, a.actorUsername);
+
     const enrichedComments = a.comments.map((c) => {
-      const cRole = resolvePublicProfileRole({
+      const cUname = c.authorUsername.toLowerCase();
+      const cId = c.userId || userIdByUsername.get(cUname) || "";
+      const cGrant = cId ? grantsLedger.users[cId] : undefined;
+      const baseCRole = resolvePublicProfileRole({
         dbRole:
-          roleByUserId.get(c.userId) ??
-          roleByUsername.get(c.authorUsername.toLowerCase()) ??
+          roleByUserId.get(cId) ??
+          roleByUsername.get(cUname) ??
           c.authorRole,
         username: c.authorUsername,
         displayName: c.authorDisplayName,
       });
-      return cRole && cRole !== "user" ? { ...c, authorRole: cRole } : c;
+      const cRole = applyAdminGrantRole(baseCRole, cGrant);
+      const cSpecial = resolveSpecialBadges(cId, c.authorUsername);
+      return {
+        ...c,
+        ...(cRole && cRole !== "user" ? { authorRole: cRole } : {}),
+        ...(cSpecial.length > 0 ? { authorSpecialBadges: cSpecial } : {}),
+      };
     });
     return {
       ...a,
@@ -236,6 +291,7 @@ export async function GET(request: NextRequest) {
       ...(resolvedActorRole && resolvedActorRole !== "user"
         ? { actorRole: resolvedActorRole }
         : {}),
+      ...(actorSpecialBadges.length > 0 ? { actorSpecialBadges } : {}),
       comments: enrichedComments,
     };
   });

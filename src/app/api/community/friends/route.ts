@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { checkRateLimit, getClientIp, rateLimitResponse } from "@/lib/server/rate-limit";
 import {
+  applyAdminGrantRole,
+  applyAdminGrantsToBadges,
+  readAdminGrantsLedger,
+} from "@/lib/server/admin-grants-store";
+import { resolvePublicProfileRole } from "@/lib/server/role-resolver";
+import {
   ensureServerSupabaseProfile,
   getAllLocalCommunityProfiles,
   isAuthenticatedActor,
@@ -39,6 +45,11 @@ function mapSupabaseProfile(row: any): PublicUserProfile {
     avatarInitials: displayName.slice(0, 2).toUpperCase(),
     bio: String(row.bio ?? ""),
     accentColor: String(row.accent_color || "#E5484D"),
+    role: resolvePublicProfileRole({
+      dbRole: row.role,
+      username: String(row.username || ""),
+      displayName,
+    }),
     isActivityPublic: row.is_activity_public !== false,
     joinedAt: row.joined_at ?? row.created_at ?? new Date().toISOString(),
     favoriteStaff: Array.isArray(row.favorite_staff) ? row.favorite_staff : [],
@@ -160,6 +171,19 @@ async function loadAllKnownProfiles(): Promise<{
     if (!byId.has(p.id)) byId.set(p.id, p);
     const key = p.username.toLowerCase();
     if (!byUsername.has(key)) byUsername.set(key, p);
+  }
+
+  const grantsLedger = await readAdminGrantsLedger();
+  for (const [id, p] of byId.entries()) {
+    const grantEntry = grantsLedger.users[id];
+    if (!grantEntry) continue;
+    const enriched: PublicUserProfile = {
+      ...p,
+      role: applyAdminGrantRole(p.role ?? "user", grantEntry),
+      unlockedBadges: applyAdminGrantsToBadges(p.unlockedBadges, grantEntry),
+    };
+    byId.set(id, enriched);
+    byUsername.set(enriched.username.toLowerCase(), enriched);
   }
 
   return { byId, byUsername };

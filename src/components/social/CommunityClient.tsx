@@ -27,6 +27,8 @@ import { ActivityCard } from "@/components/social/ActivityCard";
 import { AniListActivityFeed } from "@/components/social/AniListActivityFeed";
 import { FriendActionButton } from "@/components/social/FriendActionButton";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
+import { SpecialBadgesSpotlight } from "@/components/badges/SpecialBadgesSpotlight";
+import { extractSpecialBadgeIds } from "@/lib/badges";
 import {
   clearSessionState,
   FILTER_STORAGE_KEYS,
@@ -570,13 +572,19 @@ export function CommunityClient() {
                               size="sm"
                             />
                             <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                                 <p className="text-xs font-semibold text-white truncate">
                                   {m.displayName}
                                 </p>
                                 <RoleBadge role={m.role} size="xs" />
                               </div>
-                              <p className="text-[10.5px] font-mono text-[#7D8296] truncate">
+                              <SpecialBadgesSpotlight
+                                unlockedBadges={m.unlockedBadges}
+                                variant="pill"
+                                size="sm"
+                                className="mt-1"
+                              />
+                              <p className="text-[10.5px] font-mono text-[#7D8296] truncate mt-0.5">
                                 @{m.username} · {m.stats.totalEntries} {t("common.titles")}
                               </p>
                             </div>
@@ -839,6 +847,11 @@ export function CommunityClient() {
                       </div>
                     </div>
 
+                    <SpecialBadgesSpotlight
+                      unlockedBadges={f.unlockedBadges}
+                      variant="card"
+                    />
+
                     <div className="flex items-center gap-2 pt-3 border-t border-white/[0.07]">
                       <Link
                         href={`/profile/${encodeURIComponent(f.username)}`}
@@ -898,17 +911,24 @@ export function CommunityClient() {
                           />
                         </Link>
                         <div className="min-w-0">
-                          <Link
-                            href={`/profile/${encodeURIComponent(m.username)}`}
-                            className="text-sm font-semibold text-white hover:text-accent-hover truncate block"
-                          >
-                            {m.displayName}
-                          </Link>
+                          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <Link
+                              href={`/profile/${encodeURIComponent(m.username)}`}
+                              className="text-sm font-semibold text-white hover:text-accent-hover truncate block"
+                            >
+                              {m.displayName}
+                            </Link>
+                            <RoleBadge role={m.role} size="xs" />
+                          </div>
                           <p className="text-xs font-mono text-[#7D8296] truncate">
                             @{m.username} · {m.stats.totalEntries} {t("common.titles")}
                           </p>
                         </div>
                       </div>
+                      <SpecialBadgesSpotlight
+                        unlockedBadges={m.unlockedBadges}
+                        variant="card"
+                      />
                       <div className="flex items-center gap-2 pt-2.5 border-t border-white/[0.07]">
                         <FriendActionButton
                           target={{
@@ -1001,9 +1021,20 @@ export function CommunityClient() {
                         </p>
                       )}
 
-                      {m.pinnedBadges && m.pinnedBadges.length > 0 && (
-                        <PinnedBadgesRow badgeIds={m.pinnedBadges} size="xs" />
-                      )}
+                      <SpecialBadgesSpotlight
+                        unlockedBadges={m.unlockedBadges}
+                        variant="card"
+                      />
+
+                      {(() => {
+                        const specialSet = new Set<string>(extractSpecialBadgeIds(m.unlockedBadges));
+                        const regularPinned = (m.pinnedBadges ?? []).filter(
+                          (id) => !specialSet.has(id)
+                        );
+                        return regularPinned.length > 0 ? (
+                          <PinnedBadgesRow badgeIds={regularPinned} size="xs" />
+                        ) : null;
+                      })()}
 
                       {m.favoriteStaff.length > 0 && (
                         <div className="flex items-center gap-1.5 flex-wrap">

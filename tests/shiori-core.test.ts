@@ -30,6 +30,7 @@ import {
   ADMIN_GRANTABLE_BADGE_IDS,
   evaluateAllBadges,
   extractBadgeMetrics,
+  extractSpecialBadgeIds,
 } from "../src/lib/badges.ts";
 import {
   isCreatorRole,
@@ -1683,4 +1684,10 @@ test("admin-grants-utils: overlays granted special badges, honors revocations, a
     "creator role can never be downgraded by a ledger entry"
   );
   assert.equal(applyAdminGrantRole("user", undefined), "user");
+
+  assert.deepEqual(extractSpecialBadgeIds(merged), ["beta_tester", "supporter"]);
+  assert.deepEqual(extractSpecialBadgeIds(["vip", "anime_10", "beta_tester", "vip"]), [
+    "beta_tester",
+    "vip",
+  ]);
 });

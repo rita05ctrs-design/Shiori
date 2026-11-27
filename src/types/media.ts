@@ -446,6 +446,7 @@ export interface ActivityCommentItem {
   authorAvatarUrl: string | null;
   authorAccentColor?: string;
   authorRole?: UserRole;
+  authorSpecialBadges?: SpecialBadgeId[];
   body: string;
   createdAt: string;
 }
@@ -458,6 +459,7 @@ export interface CommunityActivityItem {
   actorAvatarUrl: string | null;
   actorAccentColor?: string;
   actorRole?: UserRole;
+  actorSpecialBadges?: SpecialBadgeId[];
   actorPinnedBadges?: string[];
   kind: CommunityActivityKind;
   mediaId: number;

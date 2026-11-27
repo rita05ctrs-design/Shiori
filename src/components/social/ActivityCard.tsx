@@ -18,6 +18,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
+import { SpecialBadgesSpotlight } from "@/components/badges/SpecialBadgesSpotlight";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
 import { BADGE_BY_ID, RARITY_META } from "@/lib/badges";
 import { cn } from "@/lib/utils";
@@ -221,6 +222,11 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
                 {item.actorDisplayName}
               </Link>
               <RoleBadge role={item.actorRole} size="xs" />
+              <SpecialBadgesSpotlight
+                badgeIds={item.actorSpecialBadges}
+                variant="pill"
+                size="md"
+              />
               <Link
                 href={`/profile/${encodeURIComponent(item.actorUsername)}`}
                 className="text-xs font-mono text-[#7D8296] hover:text-white transition-colors truncate"
@@ -236,7 +242,9 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
                 </span>
               )}
               <PinnedBadgesRow
-                badgeIds={item.actorPinnedBadges}
+                badgeIds={(item.actorPinnedBadges ?? []).filter(
+                  (id) => !(item.actorSpecialBadges ?? []).includes(id as "beta_tester" | "supporter" | "vip")
+                )}
                 size="xs"
               />
             </div>
@@ -500,6 +508,11 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
                         {c.authorDisplayName}
                       </Link>
                       <RoleBadge role={c.authorRole} size="xs" />
+                      <SpecialBadgesSpotlight
+                        badgeIds={c.authorSpecialBadges}
+                        variant="pill"
+                        size="sm"
+                      />
                       <span className="text-[10px] text-[#7D8296]">
                         {tRelativeTime(c.createdAt)}
                       </span>

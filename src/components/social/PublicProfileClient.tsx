@@ -33,8 +33,9 @@ import { ProfileAffinityCard } from "@/components/social/ProfileAffinityCard";
 import { ProfileTopTenPodium } from "@/components/social/ProfileTopTenPodium";
 import { FavoritesOrganizer } from "@/components/favorites/FavoritesOrganizer";
 import { PinnedBadgesRow } from "@/components/badges/PinnedBadgesRow";
+import { SpecialBadgesSpotlight } from "@/components/badges/SpecialBadgesSpotlight";
 import { BadgesShowcase } from "@/components/badges/BadgesShowcase";
-import { evaluateAllBadges } from "@/lib/badges";
+import { evaluateAllBadges, extractSpecialBadgeIds } from "@/lib/badges";
 import type {
   CommunityActivityItem,
   PublicUserProfile,
@@ -411,6 +412,11 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                   {displayProfile.displayName}
                 </h1>
                 <RoleBadge role={displayProfile.role} size="md" />
+                <SpecialBadgesSpotlight
+                  unlockedBadges={displayProfile.unlockedBadges}
+                  variant="pill"
+                  size="lg"
+                />
                 <span className="px-2.5 py-0.5 rounded-full bg-white/[0.07] border border-white/[0.1] font-mono text-xs text-[#C8CCE0]">
                   @{displayProfile.username}
                 </span>
@@ -422,7 +428,12 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
                     {tr("Exemple")}
                   </span>
                 )}
-                <PinnedBadgesRow badgeIds={displayProfile.pinnedBadges} size="sm" />
+                <PinnedBadgesRow
+                  badgeIds={(displayProfile.pinnedBadges ?? []).filter(
+                    (id) => !extractSpecialBadgeIds(displayProfile.unlockedBadges).includes(id as "beta_tester" | "supporter" | "vip")
+                  )}
+                  size="sm"
+                />
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] text-[10.5px] font-mono text-[#9EA3B5]">
                   {displayProfile.isActivityPublic ? (
                     <>
@@ -527,6 +538,12 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
           </div>
         </div>
       </section>
+
+      {/* Creator-Granted Special Distinctions (Always Shown Large & Prominent) */}
+      <SpecialBadgesSpotlight
+        unlockedBadges={displayProfile.unlockedBadges}
+        variant="hero"
+      />
 
       {/* Stats KPI Strip */}
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
