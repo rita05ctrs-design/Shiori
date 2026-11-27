@@ -293,12 +293,12 @@ export function AmbientCanvas() {
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let dpr = Math.min(window.devicePixelRatio || 1, isMobileViewport ? 1.25 : 1.5);
+    // Cap ambient particle canvas to 1x DPR & ~30fps so drifting petals stay silky while cutting GPU fill-rate by ~4.5x during scrolling
+    const dpr = 1;
 
     const resize = () => {
       width = window.innerWidth;
       height = window.innerHeight;
-      dpr = Math.min(window.devicePixelRatio || 1, width < 768 ? 1.25 : 1.5);
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       canvas.style.width = `${width}px`;
@@ -327,8 +327,11 @@ export function AmbientCanvas() {
         return;
       }
 
+      const elapsed = now - lastTime;
+      if (elapsed < 32) return;
+
       // Normalize to 60fps steps, clamped to prevent jumps after tab switch
-      const dt = Math.min(33, now - lastTime) / 16.6667;
+      const dt = Math.min(48, elapsed) / 16.6667;
       lastTime = now;
 
       ctx.clearRect(0, 0, width, height);

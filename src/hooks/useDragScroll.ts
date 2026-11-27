@@ -3,27 +3,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface DragScrollOptions {
-  /** Multiplier for drag responsiveness (default 1.12) */
+  /** Multiplier for drag responsiveness (default 1.08) */
   dragSpeed?: number;
-  /** Friction factor per 60fps frame for inertia glide (0.90–0.96, default 0.935) */
+  /** Friction factor per 60fps frame for inertia glide (0.90–0.96, default 0.925) */
   friction?: number;
 }
 
 /**
- * Locked-120fps zero-re-render horizontal scrolling with cached scroll metrics,
- * rAF-batched drag/scroll updates (zero layout thrashing even on 1000Hz mice),
- * and frame-rate-independent inertia glide.
+ * Locked-120fps horizontal scroll & click-drag hook:
+ * - Caches maxScroll via ResizeObserver + MutationObserver (handles async items cleanly)
+ * - Batches scroll & mousemove updates to rAF (0 layout thrash even on 1000Hz mice)
+ * - Floating-point accumulator during inertia (eliminates Windows 1x-DPI integer scrollLeft stutter)
+ * - Toggles `shiori-rail-dragging` directly on the DOM node (0 React re-renders during drag)
+ * - Immediately yields to native wheel/touch input so inertia never fights user scrolling
  */
 export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
   options: DragScrollOptions = {}
 ) {
-  const { dragSpeed = 1.12, friction = 0.935 } = options;
+  const { dragSpeed = 1.08, friction = 0.925 } = options;
 
   const ref = useRef<T | null>(null);
   const trackThumbRef = useRef<HTMLDivElement | null>(null);
+  const [node, setNode] = useState<T | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const setRef = useCallback((el: T | null) => {
+    ref.current = el;
+    setNode((prev) => (prev === el ? prev : el));
+  }, []);
 
   const boundsRef = useRef({ left: false, right: true });
   const maxScrollRef = useRef(0);
@@ -78,40 +87,12 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     if (scrollRafRef.current) return;
     scrollRafRef.current = requestAnimationFrame(() => {
       scrollRafRef.current = 0;
+      if (maxScrollRef.current === 0 && ref.current) {
+        maxScrollRef.current = Math.max(0, ref.current.scrollWidth - ref.current.clientWidth);
+      }
       syncThumbAndBounds();
     });
   }, [syncThumbAndBounds]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    measureMaxScroll();
-    el.addEventListener("scroll", scheduleScrollSync, { passive: true });
-    window.addEventListener("resize", measureMaxScroll, { passive: true });
-
-    const ro = new ResizeObserver(() => measureMaxScroll());
-    ro.observe(el);
-
-    const state = stateRef.current;
-    return () => {
-      el.removeEventListener("scroll", scheduleScrollSync);
-      window.removeEventListener("resize", measureMaxScroll);
-      ro.disconnect();
-      if (scrollRafRef.current) {
-        cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = 0;
-      }
-      if (dragRafRef.current) {
-        cancelAnimationFrame(dragRafRef.current);
-        dragRafRef.current = 0;
-      }
-      if (state.rafId) {
-        cancelAnimationFrame(state.rafId);
-        state.rafId = 0;
-      }
-    };
-  }, [measureMaxScroll, scheduleScrollSync]);
 
   const stopInertia = useCallback(() => {
     if (stateRef.current.rafId) {
@@ -125,8 +106,51 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     pendingScrollLeftRef.current = null;
   }, []);
 
+  useEffect(() => {
+    const el = node ?? ref.current;
+    if (!el) return;
+
+    measureMaxScroll();
+    const onWheel = () => {
+      // Immediately yield running drag inertia if user scrolls via trackpad/wheel
+      if (stateRef.current.rafId) stopInertia();
+    };
+
+    el.addEventListener("scroll", scheduleScrollSync, { passive: true });
+    el.addEventListener("wheel", onWheel, { passive: true });
+    window.addEventListener("resize", measureMaxScroll, { passive: true });
+
+    const ro = new ResizeObserver(() => measureMaxScroll());
+    ro.observe(el);
+
+    const mo = new MutationObserver(() => measureMaxScroll());
+    mo.observe(el, { childList: true });
+
+    const state = stateRef.current;
+    return () => {
+      el.removeEventListener("scroll", scheduleScrollSync);
+      el.removeEventListener("wheel", onWheel);
+      window.removeEventListener("resize", measureMaxScroll);
+      ro.disconnect();
+      mo.disconnect();
+      el.classList.remove("shiori-rail-dragging");
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
+      }
+      if (dragRafRef.current) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = 0;
+      }
+      if (state.rafId) {
+        cancelAnimationFrame(state.rafId);
+        state.rafId = 0;
+      }
+    };
+  }, [node, measureMaxScroll, scheduleScrollSync, stopInertia]);
+
   const onTouchStart = useCallback(() => {
-    // Mobile touch uses native 120fps compositor scrolling with zero JS interception
+    // Mobile touch uses 100% native compositor scrolling with zero JS interference
     stateRef.current.lastTouchAt = performance.now();
     stateRef.current.pointerDown = false;
     stateRef.current.hasDragged = false;
@@ -142,7 +166,6 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
       if ((e.target as HTMLElement | null)?.closest("button")) return;
 
       stopInertia();
-      // Refresh cached scroll range once at drag start (never inside mousemove/scroll)
       maxScrollRef.current = Math.max(0, el.scrollWidth - el.clientWidth);
 
       const st = stateRef.current;
@@ -169,6 +192,8 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
 
         if (!st.hasDragged && Math.abs(dx) > 5) {
           st.hasDragged = true;
+          // Direct DOM class avoids a synchronous React re-render mid-drag
+          ref.current.classList.add("shiori-rail-dragging");
           setIsDragging(true);
         }
 
@@ -211,21 +236,25 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
 
         if (st.hasDragged) {
           st.suppressClickUntil = performance.now() + 200;
+          ref.current?.classList.remove("shiori-rail-dragging");
           setIsDragging(false);
 
           const timeSinceLastMove = performance.now() - st.lastTime;
-          if (timeSinceLastMove < 90 && Math.abs(st.velocity) > 0.08) {
-            let v = Math.max(-52, Math.min(52, st.velocity * 16 * dragSpeed));
+          if (timeSinceLastMove < 90 && Math.abs(st.velocity) > 0.1) {
+            let v = Math.max(-46, Math.min(46, st.velocity * 15 * dragSpeed));
+            // Floating-point accumulator prevents 1x-DPI integer scrollLeft stutter
+            let virtualScroll = ref.current ? ref.current.scrollLeft : 0;
             let prevTime = performance.now();
             const step = (now: number) => {
               if (!ref.current) return;
-              const dtFrames = Math.min(2.5, Math.max(0.25, (now - prevTime) / 16.6667));
+              const dtFrames = Math.min(2.2, Math.max(0.25, (now - prevTime) / 16.6667));
               prevTime = now;
-              const nextLeft = ref.current.scrollLeft - v * dtFrames;
-              ref.current.scrollLeft = nextLeft;
+              virtualScroll -= v * dtFrames;
+              const clampedNext = Math.max(0, Math.min(maxScrollRef.current, virtualScroll));
+              ref.current.scrollLeft = clampedNext;
               v *= Math.pow(friction, dtFrames);
-              const hitEdge = nextLeft <= 0 || nextLeft >= maxScrollRef.current;
-              if (!hitEdge && Math.abs(v) > 0.35) {
+              const hitEdge = clampedNext <= 0 || clampedNext >= maxScrollRef.current;
+              if (!hitEdge && Math.abs(v) > 0.45) {
                 st.rafId = requestAnimationFrame(step);
               } else {
                 st.rafId = 0;
@@ -269,6 +298,7 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
 
   return {
     ref,
+    setRef,
     trackThumbRef,
     isDragging,
     canScrollLeft,

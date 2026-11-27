@@ -47,6 +47,7 @@ export function SeasonChronologySection({
   const activeCardRef = useRef<HTMLDivElement | null>(null);
   const {
     ref: scrollRef,
+    setRef: setScrollRef,
     trackThumbRef,
     isDragging,
     canScrollLeft,
@@ -223,13 +224,13 @@ export function SeasonChronologySection({
         )}
 
         <div
-          ref={scrollRef}
+          ref={setScrollRef}
           {...dragHandlers}
           className={cn(
-            "flex gap-2.5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar pb-1.5 -mx-1 px-1 select-none",
+            "flex gap-2.5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar pb-1.5 -mx-1 px-1 select-none [transform:translateZ(0)]",
             hasOverflow
               ? isDragging
-                ? "cursor-grabbing shiori-rail-dragging"
+                ? "cursor-grabbing"
                 : "cursor-grab"
               : ""
           )}

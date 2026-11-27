@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   motion,
   AnimatePresence,
+  animate,
+  useMotionValue,
   useScroll,
   useTransform,
 } from "framer-motion";
@@ -48,7 +50,7 @@ export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [heroDragging, setHeroDragging] = useState(false);
-  const [dragOffsetX, setDragOffsetX] = useState(0);
+  const dragX = useMotionValue(0);
   const heroDragRef = useRef({
     down: false,
     startX: 0,
@@ -106,7 +108,7 @@ export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
       }
       if (st.didSwipe) {
         ev.preventDefault();
-        setDragOffsetX(Math.max(-140, Math.min(140, dx * 0.45)));
+        dragX.set(Math.max(-140, Math.min(140, dx * 0.45)));
       }
     };
 
@@ -118,7 +120,7 @@ export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
 
       const dx = ev.clientX - st.startX;
       setHeroDragging(false);
-      setDragOffsetX(0);
+      animate(dragX, 0, { type: "spring", stiffness: 320, damping: 28 });
 
       if (st.didSwipe) {
         st.suppressClickUntil = performance.now() + 180;
@@ -131,7 +133,7 @@ export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
     window.addEventListener("mouseup", onUp);
   };
 
-  // Smooth directional touch swipe on mobile (never hijacks vertical scroll)
+  // Smooth directional touch swipe on mobile (never hijacks vertical scroll; 0 React re-renders per frame)
   const handleHeroTouchStart = (e: React.TouchEvent<HTMLElement>) => {
     if (slides.length <= 1 || e.touches.length !== 1) return;
     if ((e.target as HTMLElement | null)?.closest("[data-hero-thumbs]")) return;
@@ -158,9 +160,11 @@ export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
     }
 
     if (st.lockedAxis === "x") {
-      st.didSwipe = true;
-      setHeroDragging(true);
-      setDragOffsetX(Math.max(-110, Math.min(110, dx * 0.48)));
+      if (!st.didSwipe) {
+        st.didSwipe = true;
+        setHeroDragging(true);
+      }
+      dragX.set(Math.max(-110, Math.min(110, dx * 0.48)));
     }
   };
 
@@ -173,7 +177,7 @@ export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
     const wasHorizontal = st.lockedAxis === "x" && st.didSwipe;
     st.lockedAxis = null;
     setHeroDragging(false);
-    setDragOffsetX(0);
+    animate(dragX, 0, { type: "spring", stiffness: 320, damping: 28 });
     setPaused(false);
 
     if (wasHorizontal) {
@@ -237,11 +241,9 @@ export function HeroShowcase({ items, featuredHero }: HeroShowcaseProps) {
         </AnimatePresence>
       </motion.div>
 
-      {/* Foreground Content with gentle scroll parallax + subtle drag follow */}
+      {/* Foreground Content with gentle scroll parallax + GPU motion-value drag follow */}
       <motion.div
-        style={{ y: contentY, opacity: contentOpacity }}
-        animate={{ x: dragOffsetX }}
-        transition={heroDragging ? { duration: 0 } : { type: "spring", stiffness: 280, damping: 28 }}
+        style={{ y: contentY, opacity: contentOpacity, x: dragX }}
         className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 w-full will-change-transform"
       >
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">

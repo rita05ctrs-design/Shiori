@@ -32,7 +32,7 @@ export function PersonalizedRecommendationsSection() {
   const [offset, setOffset] = useState(0);
 
   const {
-    ref: scrollRef,
+    setRef: scrollRef,
     trackThumbRef,
     isDragging,
     canScrollLeft,
@@ -214,8 +214,8 @@ export function PersonalizedRecommendationsSection() {
             ref={scrollRef}
             {...dragHandlers}
             className={cn(
-              "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-5 -my-4 -mx-1 px-1 select-none",
-              isDragging ? "cursor-grabbing shiori-rail-dragging" : "cursor-grab"
+              "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-5 -my-4 -mx-1 px-1 select-none [transform:translateZ(0)]",
+              isDragging ? "cursor-grabbing" : "cursor-grab"
             )}
           >
             {items.map((rec) => {
@@ -229,10 +229,10 @@ export function PersonalizedRecommendationsSection() {
                   className="shiori-rail-slot w-[148px] sm:w-[176px] lg:w-[188px] shrink-0 group flex flex-col"
                 >
                   {/* 2:3 Vertical Poster — 120fps Cinema Hover */}
-                  <div className="shiori-poster-shell relative z-0 aspect-[2/3] rounded-xl border border-white/[0.08] bg-[#121521] shadow-[0_10px_24px_rgba(0,0,0,0.45)]">
+                  <div className="shiori-poster-shell relative z-0 aspect-[2/3] rounded-xl border border-white/[0.08] bg-[#121521] shadow-[0_8px_18px_rgba(0,0,0,0.4)]">
                     <span
                       aria-hidden="true"
-                      className="shiori-poster-glow pointer-events-none absolute inset-0 rounded-xl z-0"
+                      className="shiori-poster-glow pointer-events-none absolute -inset-2 rounded-2xl z-0"
                     />
                     <Link
                       href={`/media/${m.id}`}
@@ -240,7 +240,7 @@ export function PersonalizedRecommendationsSection() {
                       className="relative z-[1] block w-full h-full rounded-[11px] overflow-hidden bg-[#121521] select-none"
                     >
                       <img
-                        src={m.coverImage.extraLarge || m.coverImage.large}
+                        src={m.coverImage.large || m.coverImage.extraLarge}
                         alt={title}
                         loading="lazy"
                         decoding="async"

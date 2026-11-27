@@ -35,11 +35,11 @@ export const MediaCard = React.memo(function MediaCard({
     /* Non-moving outer hit-area wrapper eliminates hover edge jitter while preserving native 120fps horizontal touch swiping */
     <div className={cn("group relative flex flex-col", className)}>
       {/* Zero-repaint 120fps Cinema Poster Container (glow & rim fade via opacity only — no animated box-shadow!) */}
-      <div className="shiori-poster-shell relative z-0 aspect-[2/3] w-full rounded-xl bg-[#121520] border border-white/[0.09] shadow-[0_10px_24px_rgba(0,0,0,0.45)]">
-        {/* Pre-rendered ambient glow halo (pure GPU opacity 0 -> 1 on desktop hover) */}
+      <div className="shiori-poster-shell relative z-0 aspect-[2/3] w-full rounded-xl bg-[#121520] border border-white/[0.09] shadow-[0_8px_18px_rgba(0,0,0,0.4)]">
+        {/* Lightweight radial gradient ambient glow (0 shadow-blur rasterization at rest!) */}
         <span
           aria-hidden="true"
-          className="shiori-poster-glow pointer-events-none absolute inset-0 rounded-xl z-0"
+          className="shiori-poster-glow pointer-events-none absolute -inset-2 rounded-2xl z-0"
         />
 
         {/* Clipped artwork & cinema overlays */}
@@ -50,7 +50,7 @@ export const MediaCard = React.memo(function MediaCard({
             className="block w-full h-full select-none"
           >
             <img
-              src={media.coverImage.extraLarge}
+              src={media.coverImage.large || media.coverImage.extraLarge}
               alt={title}
               loading="lazy"
               decoding="async"

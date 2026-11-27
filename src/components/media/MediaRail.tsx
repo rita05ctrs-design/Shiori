@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ArrowRight, MoveHorizontal } from "lucide-react";
 import { MediaCard } from "./MediaCard";
@@ -29,7 +29,7 @@ export function MediaRail({
 }: MediaRailProps) {
   const { t, tr } = useTranslation();
   const {
-    ref: scrollRef,
+    setRef: scrollRef,
     trackThumbRef,
     isDragging,
     canScrollLeft,
@@ -37,6 +37,19 @@ export function MediaRail({
     scrollByAmount,
     dragHandlers,
   } = useDragScroll<HTMLDivElement>();
+
+  const renderedItems = useMemo(
+    () =>
+      items.map((item, idx) => (
+        <div
+          key={item.id}
+          className="shiori-rail-slot w-[148px] sm:w-[176px] lg:w-[188px] shrink-0"
+        >
+          <MediaCard media={item} rank={showRank ? idx + 1 : undefined} />
+        </div>
+      )),
+    [items, showRank]
+  );
 
   if (!items.length) return null;
 
@@ -124,18 +137,11 @@ export function MediaRail({
           ref={scrollRef}
           {...dragHandlers}
           className={cn(
-            "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-5 -my-4 -mx-1 px-1 select-none",
-            isDragging ? "cursor-grabbing shiori-rail-dragging" : "cursor-grab"
+            "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-5 -my-4 -mx-1 px-1 select-none [transform:translateZ(0)]",
+            isDragging ? "cursor-grabbing" : "cursor-grab"
           )}
         >
-          {items.map((item, idx) => (
-            <div
-              key={item.id}
-              className="shiori-rail-slot w-[148px] sm:w-[176px] lg:w-[188px] shrink-0"
-            >
-              <MediaCard media={item} rank={showRank ? idx + 1 : undefined} />
-            </div>
-          ))}
+          {renderedItems}
         </div>
 
         {/* Sleek Hairline Glide Track (updated directly via ref on GPU — 0 React re-renders!) */}
