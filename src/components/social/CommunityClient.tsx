@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import {
   Users,
   Activity,
@@ -283,31 +284,41 @@ export function CommunityClient() {
               type="button"
               onClick={() => setTab("feed")}
               className={cn(
-                "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
-                tab === "feed"
-                  ? "bg-accent text-accent-fg shadow-accent"
-                  : "text-[#9A9EAE] hover:text-white"
+                "relative px-4 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                tab === "feed" ? "text-accent-fg" : "text-[#9A9EAE] hover:text-white"
               )}
             >
-              <Activity className="w-3.5 h-3.5 shrink-0" />
-              <span>{t("community.tabFeed")}</span>
+              {tab === "feed" && (
+                <motion.span
+                  layoutId="community-tab-pill"
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  className="absolute inset-0 rounded-full bg-accent shadow-accent"
+                />
+              )}
+              <Activity className="relative z-10 w-3.5 h-3.5 shrink-0" />
+              <span className="relative z-10">{t("community.tabFeed")}</span>
             </button>
             <button
               type="button"
               onClick={() => setTab("friends")}
               className={cn(
-                "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
-                tab === "friends"
-                  ? "bg-emerald-500 text-[#061810]"
-                  : "text-[#9A9EAE] hover:text-white"
+                "relative px-4 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                tab === "friends" ? "text-[#061810]" : "text-[#9A9EAE] hover:text-white"
               )}
             >
-              <UserPlus className="w-3.5 h-3.5 shrink-0" />
-              <span>
+              {tab === "friends" && (
+                <motion.span
+                  layoutId="community-tab-pill"
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  className="absolute inset-0 rounded-full bg-emerald-500 shadow-[0_6px_18px_rgba(16,185,129,0.35)]"
+                />
+              )}
+              <UserPlus className="relative z-10 w-3.5 h-3.5 shrink-0" />
+              <span className="relative z-10">
                 {t("community.tabFriends")} ({friends.length})
               </span>
               {incomingFriendRequests.length > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold leading-none">
+                <span className="relative z-10 ml-0.5 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold leading-none">
                   +{incomingFriendRequests.length}
                 </span>
               )}
@@ -316,14 +327,19 @@ export function CommunityClient() {
               type="button"
               onClick={() => setTab("members")}
               className={cn(
-                "px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
-                tab === "members"
-                  ? "bg-accent text-accent-fg shadow-accent"
-                  : "text-[#9A9EAE] hover:text-white"
+                "relative px-4 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                tab === "members" ? "text-accent-fg" : "text-[#9A9EAE] hover:text-white"
               )}
             >
-              <Users className="w-3.5 h-3.5 shrink-0" />
-              <span>
+              {tab === "members" && (
+                <motion.span
+                  layoutId="community-tab-pill"
+                  transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                  className="absolute inset-0 rounded-full bg-accent shadow-accent"
+                />
+              )}
+              <Users className="relative z-10 w-3.5 h-3.5 shrink-0" />
+              <span className="relative z-10">
                 {t("community.tabMembers")} ({totalMembersCount || profiles.length})
               </span>
             </button>
@@ -337,26 +353,36 @@ export function CommunityClient() {
                 type="button"
                 onClick={() => setFeedSource("shiori")}
                 className={cn(
-                  "px-3 py-1.5 rounded-full font-medium transition-colors cursor-pointer",
-                  feedSource === "shiori"
-                    ? "bg-white/[0.12] text-white"
-                    : "text-[#9A9EAE] hover:text-white"
+                  "relative px-3 py-1.5 rounded-full font-medium transition-colors cursor-pointer",
+                  feedSource === "shiori" ? "text-white" : "text-[#9A9EAE] hover:text-white"
                 )}
               >
-                Shiori
+                {feedSource === "shiori" && (
+                  <motion.span
+                    layoutId="community-source-pill"
+                    transition={{ type: "spring", stiffness: 440, damping: 32 }}
+                    className="absolute inset-0 rounded-full bg-white/[0.12]"
+                  />
+                )}
+                <span className="relative z-10">Shiori</span>
               </button>
               <button
                 type="button"
                 onClick={() => setFeedSource("anilist")}
                 className={cn(
-                  "px-3 py-1.5 rounded-full font-medium transition-colors cursor-pointer inline-flex items-center gap-1",
-                  feedSource === "anilist"
-                    ? "bg-[#02A9FF]/20 text-sky-200"
-                    : "text-[#9A9EAE] hover:text-white"
+                  "relative px-3 py-1.5 rounded-full font-medium transition-colors cursor-pointer inline-flex items-center gap-1",
+                  feedSource === "anilist" ? "text-sky-200" : "text-[#9A9EAE] hover:text-white"
                 )}
               >
-                <Globe className="w-3 h-3" />
-                <span>AniList</span>
+                {feedSource === "anilist" && (
+                  <motion.span
+                    layoutId="community-source-pill"
+                    transition={{ type: "spring", stiffness: 440, damping: 32 }}
+                    className="absolute inset-0 rounded-full bg-[#02A9FF]/20"
+                  />
+                )}
+                <Globe className="relative z-10 w-3 h-3" />
+                <span className="relative z-10">AniList</span>
               </button>
             </div>
 
@@ -955,7 +981,7 @@ export function CommunityClient() {
         </div>
       ) : (
         /* TAB 3: MEMBERS DIRECTORY */
-        <div className="space-y-4">
+        <div className="shiori-route-enter space-y-4">
           {loadingMembers ? (
             <div className="flex items-center justify-center py-12 text-xs text-[#8E93A6] gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
@@ -967,12 +993,15 @@ export function CommunityClient() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {visibleProfiles.map((m) => {
+              {visibleProfiles.map((m, idx) => {
                 const isMe = m.username.toLowerCase() === profile.username.toLowerCase();
                 return (
                   <div
                     key={m.id}
-                    className="rounded-2xl card-surface border border-white/[0.08] hover:border-white/[0.18] p-5 flex flex-col justify-between gap-4 transition-colors"
+                    style={{
+                      ["--shiori-delay" as string]: `${Math.min(idx, 10) * 35}ms`,
+                    }}
+                    className="shiori-card-enter shiori-card-lift rounded-2xl card-surface border border-white/[0.08] hover:border-white/[0.2] p-5 flex flex-col justify-between gap-4"
                   >
                     <div className="space-y-3">
                       <div className="flex items-center gap-3.5">

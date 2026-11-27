@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import { MotionConfig } from "framer-motion";
 import { useShiori } from "@/context/ShioriContext";
 import { NavigationProgress } from "./NavigationProgress";
@@ -14,6 +14,12 @@ export function MotionRoot({ children }: { children: React.ReactNode }) {
       : displayPrefs.motion === "full"
         ? "never"
         : "user";
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.motion = displayPrefs.motion;
+    }
+  }, [displayPrefs.motion]);
 
   return (
     <MotionConfig reducedMotion={reducedMotion}>

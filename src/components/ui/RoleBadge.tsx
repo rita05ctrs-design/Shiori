@@ -34,7 +34,7 @@ export function RoleBadge({ role, size = "sm", className }: RoleBadgeProps) {
       <span
         title={tr("Créateur de Shiori")}
         className={cn(
-          "inline-flex items-center shrink-0 rounded-full font-semibold tracking-wide whitespace-nowrap select-none",
+          "shiori-sheen-periodic inline-flex items-center shrink-0 rounded-full font-semibold tracking-wide whitespace-nowrap select-none",
           "bg-gradient-to-r from-[#F0B95B]/24 via-[#FDE68A]/18 to-[#F0B95B]/24",
           "border border-[#F0B95B]/65 text-[#FDE68A]",
           "shadow-[0_0_18px_-4px_rgba(240,185,91,0.55)]",

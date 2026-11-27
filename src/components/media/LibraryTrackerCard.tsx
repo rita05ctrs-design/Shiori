@@ -366,10 +366,10 @@ export function LibraryTrackerCard({ media, title }: LibraryTrackerCardProps) {
         <AnimatePresence>
           {menuOpen && (
             <motion.div
-              initial={{ opacity: 0, y: -8, scale: 0.96, filter: "blur(6px)" }}
-              animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -6, scale: 0.96, filter: "blur(4px)" }}
-              transition={{ type: "spring", stiffness: 380, damping: 28 }}
+              initial={{ opacity: 0, y: -6, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.97 }}
+              transition={{ type: "spring", stiffness: 420, damping: 30, mass: 0.8 }}
               className="absolute left-0 right-0 mt-2 z-40 rounded-2xl bg-[#11131E]/98 backdrop-blur-2xl border border-white/[0.13] shadow-[0_24px_64px_rgba(0,0,0,0.85)] p-1.5 space-y-1"
             >
               {STATUS_META.map((item, idx) => {

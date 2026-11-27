@@ -16,6 +16,7 @@ interface SpecialBadgeVisualStyle {
   tagFr: string;
   Icon: React.ComponentType<{ className?: string }>;
   heroCardClass: string;
+  auraClass: string;
   communityCardClass: string;
   pillClass: string;
   iconBoxClass: string;
@@ -32,6 +33,7 @@ const SPECIAL_BADGE_STYLES: Record<AdminGrantableBadgeId, SpecialBadgeVisualStyl
     Icon: Sparkles,
     heroCardClass:
       "bg-gradient-to-br from-[#35260C]/95 via-[#1C160B]/95 to-[#0F0E16]/95 border-[#F0B95B]/60 shadow-[0_14px_38px_-12px_rgba(240,185,91,0.52)]",
+    auraClass: "badge-gold-aura",
     communityCardClass:
       "bg-gradient-to-r from-[#F0B95B]/22 via-[#FDE68A]/12 to-[#1B150B]/90 border-[#F0B95B]/55 shadow-[0_8px_24px_-8px_rgba(240,185,91,0.45)]",
     pillClass:
@@ -48,6 +50,7 @@ const SPECIAL_BADGE_STYLES: Record<AdminGrantableBadgeId, SpecialBadgeVisualStyl
     Icon: Heart,
     heroCardClass:
       "bg-gradient-to-br from-[#331320]/95 via-[#1C1018]/95 to-[#0F0E16]/95 border-rose-400/55 shadow-[0_14px_38px_-12px_rgba(244,63,94,0.48)]",
+    auraClass: "badge-rose-aura",
     communityCardClass:
       "bg-gradient-to-r from-rose-500/22 via-pink-400/12 to-[#1C1018]/90 border-rose-400/55 shadow-[0_8px_24px_-8px_rgba(244,63,94,0.42)]",
     pillClass:
@@ -64,6 +67,7 @@ const SPECIAL_BADGE_STYLES: Record<AdminGrantableBadgeId, SpecialBadgeVisualStyl
     Icon: Crown,
     heroCardClass:
       "bg-gradient-to-br from-[#2B1442]/95 via-[#181129]/95 to-[#0F0E18]/95 border-fuchsia-400/60 shadow-[0_14px_40px_-10px_rgba(192,132,252,0.55)]",
+    auraClass: "badge-holo-aura",
     communityCardClass:
       "bg-gradient-to-r from-fuchsia-500/22 via-violet-400/14 to-[#19112A]/90 border-fuchsia-400/55 shadow-[0_8px_24px_-8px_rgba(192,132,252,0.48)]",
     pillClass:
@@ -125,7 +129,7 @@ export function SpecialBadgesSpotlight({
               key={id}
               title={`${tr(style.titleFr)} — ${tr(style.descriptionFr)}`}
               className={cn(
-                "inline-flex items-center shrink-0 rounded-full border font-bold tracking-wide whitespace-nowrap select-none transition-transform hover:scale-[1.03]",
+                "badge-shine-sweep inline-flex items-center shrink-0 rounded-full border font-bold tracking-wide whitespace-nowrap select-none transition-transform duration-200 ease-out hover:scale-[1.04] active:scale-[0.97]",
                 style.pillClass,
                 sizeClasses
               )}
@@ -150,19 +154,19 @@ export function SpecialBadgesSpotlight({
               key={id}
               title={tr(style.descriptionFr)}
               className={cn(
-                "relative overflow-hidden rounded-xl border px-3 py-2 flex items-center gap-2.5",
+                "shiori-sheen-periodic relative overflow-hidden rounded-xl border px-3 py-2 flex items-center gap-2.5 transition-transform duration-200 ease-out hover:scale-[1.015]",
                 style.communityCardClass
               )}
             >
               <div
                 className={cn(
-                  "w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center shrink-0 shadow-md",
+                  "relative z-10 w-8 h-8 rounded-lg bg-gradient-to-br flex items-center justify-center shrink-0 shadow-md",
                   style.iconBoxClass
                 )}
               >
                 <Icon className="w-4 h-4" />
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="relative z-10 min-w-0 flex-1">
                 <p className={cn("text-xs sm:text-[13px] font-extrabold tracking-wide leading-tight truncate", style.titleColorClass)}>
                   {tr(style.titleFr)}
                 </p>
@@ -200,30 +204,34 @@ export function SpecialBadgesSpotlight({
               : "grid-cols-1 md:grid-cols-3"
         )}
       >
-        {specialIds.map((id) => {
+        {specialIds.map((id, idx) => {
           const style = SPECIAL_BADGE_STYLES[id];
           const Icon = style.Icon;
           return (
             <div
               key={id}
+              style={{ ["--shiori-delay" as string]: `${idx * 75}ms` }}
               className={cn(
-                "relative overflow-hidden rounded-2xl border p-4 sm:p-5 flex items-center gap-4 transition-transform hover:-translate-y-0.5",
+                "shiori-card-enter shiori-card-lift shiori-sheen-periodic relative overflow-hidden rounded-2xl border p-4 sm:p-5 flex items-center gap-4",
                 style.heroCardClass
               )}
             >
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute -top-10 -right-10 w-36 h-36 rounded-full opacity-25 blur-2xl bg-gradient-to-br from-white/50 to-transparent"
+                className={cn(
+                  "pointer-events-none absolute -inset-4 opacity-55",
+                  style.auraClass
+                )}
               />
               <div
                 className={cn(
-                  "relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center shrink-0 shadow-lg ring-1 ring-white/25",
+                  "shiori-medallion-float relative z-10 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center shrink-0 shadow-lg ring-1 ring-white/25",
                   style.iconBoxClass
                 )}
               >
                 <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <div className="relative min-w-0 flex-1 space-y-1">
+              <div className="relative z-10 min-w-0 flex-1 space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2
                     className={cn(

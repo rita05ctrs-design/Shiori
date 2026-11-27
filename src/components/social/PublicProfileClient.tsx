@@ -587,12 +587,13 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
             icon: Star,
             color: "text-kinpaku",
           },
-        ].map((stat) => {
+        ].map((stat, idx) => {
           const Icon = stat.icon;
           return (
             <div
               key={stat.label}
-              className="rounded-2xl card-surface p-3 sm:p-4 border border-white/[0.07] min-w-0"
+              style={{ ["--shiori-delay" as string]: `${idx * 45}ms` }}
+              className="shiori-card-enter shiori-card-lift rounded-2xl card-surface p-3 sm:p-4 border border-white/[0.07] hover:border-white/[0.16] min-w-0"
             >
               <p className="text-[10px] sm:text-[10.5px] font-mono uppercase tracking-wider text-[#858A9E] flex items-center gap-1.5 truncate">
                 <Icon className={`w-3.5 h-3.5 shrink-0 ${stat.color}`} />

@@ -133,10 +133,10 @@ export function AuthModal() {
           />
 
           <motion.div
-            initial={{ opacity: 0, y: 22, scale: 0.94, filter: "blur(6px)" }}
-            animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: 12, scale: 0.96, filter: "blur(4px)" }}
-            transition={{ type: "spring", stiffness: 330, damping: 28 }}
+            initial={{ opacity: 0, y: 18, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.85 }}
             className="relative w-full max-w-[440px] max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain rounded-3xl bg-[#0F111B] border border-white/[0.12] shadow-[0_36px_110px_rgba(0,0,0,0.9),0_0_60px_rgb(var(--shiori-accent-rgb)/0.12)]"
           >
             {/* Subtle top crimson ambient glow */}

@@ -194,7 +194,7 @@ export function ActivityCard({ item, onUpdate }: ActivityCardProps) {
   return (
     <article
       className={cn(
-        "rounded-2xl card-surface border p-4 sm:p-5 space-y-3.5",
+        "shiori-card-enter rounded-2xl card-surface border hover:border-white/[0.15] transition-colors duration-200 p-4 sm:p-5 space-y-3.5",
         isBadgeEvent ? badgeRarityMeta.border : "border-white/[0.08]"
       )}
     >

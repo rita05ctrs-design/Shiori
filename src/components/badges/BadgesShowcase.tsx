@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import {
   ChevronDown,
   ChevronLeft,
@@ -136,78 +137,83 @@ export function BadgesShowcase({
             const isFirst = idx === 0;
             const isLast = idx === orderedPinnedBadges.length - 1;
             return (
-              <div
+              <motion.div
                 key={badge.id}
-                draggable={Boolean(onReorderPins && orderedPinnedBadges.length > 1)}
-                onDragStart={() => setDraggingPinId(badge.id)}
-                onDragOver={(e) => {
-                  if (draggingPinId && draggingPinId !== badge.id) e.preventDefault();
-                }}
-                onDrop={() => handleDropPin(badge.id)}
-                onDragEnd={() => setDraggingPinId(null)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 pl-2 pr-1.5 py-1.5 rounded-xl border transition-all",
-                  meta.bg,
-                  meta.border,
-                  draggingPinId === badge.id && "opacity-50 scale-95",
-                  onReorderPins && orderedPinnedBadges.length > 1 && "cursor-grab active:cursor-grabbing"
-                )}
+                layout="position"
+                transition={{ type: "spring", stiffness: 420, damping: 32 }}
               >
-                {onReorderPins && orderedPinnedBadges.length > 1 && (
-                  <GripVertical className="w-3 h-3 text-white/45 shrink-0" />
-                )}
-                <span className="px-1.5 py-0.5 rounded-md bg-black/45 border border-[#F0B95B]/45 font-mono text-[10px] font-extrabold text-[#FDE68A] shrink-0">
-                  #{idx + 1}
-                </span>
-                <span
+                <div
+                  draggable={Boolean(onReorderPins && orderedPinnedBadges.length > 1)}
+                  onDragStart={() => setDraggingPinId(badge.id)}
+                  onDragOver={(e) => {
+                    if (draggingPinId && draggingPinId !== badge.id) e.preventDefault();
+                  }}
+                  onDrop={() => handleDropPin(badge.id)}
+                  onDragEnd={() => setDraggingPinId(null)}
                   className={cn(
-                    "w-5 h-5 rounded-md bg-gradient-to-br flex items-center justify-center shrink-0",
-                    meta.iconBg
+                    "inline-flex items-center gap-1.5 pl-2 pr-1.5 py-1.5 rounded-xl border transition-[opacity,transform,border-color] duration-200",
+                    meta.bg,
+                    meta.border,
+                    draggingPinId === badge.id && "opacity-50 scale-95",
+                    onReorderPins && orderedPinnedBadges.length > 1 && "cursor-grab active:cursor-grabbing"
                   )}
                 >
-                  <BadgeIcon iconKey={badge.iconKey} className="w-3 h-3 text-[#08090E]" />
-                </span>
-                <span className="text-xs font-semibold text-white whitespace-nowrap pr-0.5">
-                  {badge.title}
-                </span>
-
-                {onMovePin && orderedPinnedBadges.length > 1 && (
-                  <div className="inline-flex items-center gap-0.5 pl-1 border-l border-white/15">
-                    <button
-                      type="button"
-                      disabled={isFirst}
-                      onClick={() => onMovePin(badge.id, "left")}
-                      aria-label={tr("Déplacer avant")}
-                      title={tr("Déplacer avant")}
-                      className="w-5 h-5 rounded-md bg-black/35 hover:bg-white/20 disabled:opacity-30 flex items-center justify-center text-white transition-colors cursor-pointer"
-                    >
-                      <ChevronLeft className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isLast}
-                      onClick={() => onMovePin(badge.id, "right")}
-                      aria-label={tr("Déplacer après")}
-                      title={tr("Déplacer après")}
-                      className="w-5 h-5 rounded-md bg-black/35 hover:bg-white/20 disabled:opacity-30 flex items-center justify-center text-white transition-colors cursor-pointer"
-                    >
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-
-                {onTogglePin && (
-                  <button
-                    type="button"
-                    onClick={() => onTogglePin(badge.id)}
-                    aria-label={tr("Retirer")}
-                    title={tr("Retirer")}
-                    className="w-5 h-5 rounded-md bg-black/25 hover:bg-rose-500/35 flex items-center justify-center text-white/70 hover:text-white transition-colors cursor-pointer"
+                  {onReorderPins && orderedPinnedBadges.length > 1 && (
+                    <GripVertical className="w-3 h-3 text-white/45 shrink-0" />
+                  )}
+                  <span className="px-1.5 py-0.5 rounded-md bg-black/45 border border-[#F0B95B]/45 font-mono text-[10px] font-extrabold text-[#FDE68A] shrink-0">
+                    #{idx + 1}
+                  </span>
+                  <span
+                    className={cn(
+                      "w-5 h-5 rounded-md bg-gradient-to-br flex items-center justify-center shrink-0",
+                      meta.iconBg
+                    )}
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+                    <BadgeIcon iconKey={badge.iconKey} className="w-3 h-3 text-[#08090E]" />
+                  </span>
+                  <span className="text-xs font-semibold text-white whitespace-nowrap pr-0.5">
+                    {badge.title}
+                  </span>
+
+                  {onMovePin && orderedPinnedBadges.length > 1 && (
+                    <div className="inline-flex items-center gap-0.5 pl-1 border-l border-white/15">
+                      <button
+                        type="button"
+                        disabled={isFirst}
+                        onClick={() => onMovePin(badge.id, "left")}
+                        aria-label={tr("Déplacer avant")}
+                        title={tr("Déplacer avant")}
+                        className="w-5 h-5 rounded-md bg-black/35 hover:bg-white/20 active:scale-90 disabled:opacity-30 flex items-center justify-center text-white transition-[background-color,transform] cursor-pointer"
+                      >
+                        <ChevronLeft className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isLast}
+                        onClick={() => onMovePin(badge.id, "right")}
+                        aria-label={tr("Déplacer après")}
+                        title={tr("Déplacer après")}
+                        className="w-5 h-5 rounded-md bg-black/35 hover:bg-white/20 active:scale-90 disabled:opacity-30 flex items-center justify-center text-white transition-[background-color,transform] cursor-pointer"
+                      >
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  {onTogglePin && (
+                    <button
+                      type="button"
+                      onClick={() => onTogglePin(badge.id)}
+                      aria-label={tr("Retirer")}
+                      title={tr("Retirer")}
+                      className="w-5 h-5 rounded-md bg-black/25 hover:bg-rose-500/35 active:scale-90 flex items-center justify-center text-white/70 hover:text-white transition-[background-color,color,transform] cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </motion.div>
             );
           })}
         </div>

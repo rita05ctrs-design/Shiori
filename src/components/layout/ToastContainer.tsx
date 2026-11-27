@@ -40,10 +40,10 @@ export function ToastContainer() {
             <motion.div
               key={t.id}
               layout
-              initial={{ opacity: 0, x: 48, y: 12, scale: 0.9, filter: "blur(6px)" }}
-              animate={{ opacity: 1, x: 0, y: 0, scale: 1, filter: "blur(0px)" }}
-              exit={{ opacity: 0, x: 36, scale: 0.92, filter: "blur(4px)" }}
-              transition={{ type: "spring", stiffness: 340, damping: 26 }}
+              initial={{ opacity: 0, x: 40, y: 10, scale: 0.94 }}
+              animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 32, scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 380, damping: 28, mass: 0.85 }}
               className={cn(
                 "pointer-events-auto relative overflow-hidden rounded-2xl backdrop-blur-2xl border shadow-[0_24px_60px_rgba(0,0,0,0.75)]",
                 t.celebrate
