@@ -3,6 +3,7 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   getAllLocalCommunityProfiles,
   isAuthenticatedActor,
+  isSeedBotAccount,
   resolveServerActor,
   upsertLocalCommunityProfile,
 } from "@/lib/server/social-store";
@@ -92,11 +93,12 @@ export async function GET(request: NextRequest) {
         .from("public_profiles")
         .select("*")
         .order("joined_at", { ascending: false })
-        .limit(60);
+        .limit(300);
 
       if (!error && Array.isArray(data)) {
         for (const row of data) {
           const mapped = redactPrivateProfile(mapSupabasePublicProfile(row), requesterId);
+          if (isSeedBotAccount(mapped)) continue;
           if (requesterId && mapped.id === requesterId && requester.role === "creator") {
             mapped.role = "creator";
           }
@@ -108,8 +110,9 @@ export async function GET(request: NextRequest) {
     // graceful fallback when view isn't migrated yet
   }
 
-  // 2) Merge local / community profiles
+  // 2) Merge real local profiles (strictly excluding seed/demo bots)
   for (const p of getAllLocalCommunityProfiles()) {
+    if (isSeedBotAccount(p)) continue;
     const k = p.username.toLowerCase();
     if (!byKey.has(k)) {
       byKey.set(k, redactPrivateProfile(p, requesterId));

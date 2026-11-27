@@ -590,13 +590,14 @@ export function PublicProfileClient({ username }: PublicProfileClientProps) {
       {/* Compatibility & Affinity Card (when visiting another member's public profile) */}
       {!isOwnProfile && <ProfileAffinityCard targetProfile={displayProfile} />}
 
-      {/* Gamification: Badges & Trophies Showcase */}
+      {/* Gamification: Badges & Trophies Showcase (starts compact on Profile so scrolling down is effortless) */}
       <BadgesShowcase
         badges={profileBadges}
         pinnedBadges={displayProfile.pinnedBadges ?? []}
         canPin={isOwnProfile}
         onTogglePin={isOwnProfile ? togglePinBadge : undefined}
         onPreviewUnlock={isOwnProfile ? previewBadgeUnlock : undefined}
+        defaultViewMode="mini"
       />
 
       {/* Favorite Voice Actors (Seiyuu) — Publicly Visible to All Visitors */}

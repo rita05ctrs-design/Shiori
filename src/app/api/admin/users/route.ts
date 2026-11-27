@@ -8,6 +8,7 @@ import {
 import { sanitizeSafeImageUrl } from "@/lib/server/rate-limit";
 import {
   getAllLocalCommunityProfiles,
+  isSeedBotAccount,
   updateLocalUserAdminGrants,
 } from "@/lib/server/social-store";
 import {
@@ -32,7 +33,7 @@ export interface AdminUserSummary {
   joinedAt: string;
   unlockedBadges: UnlockedBadgeRecord[];
   pinnedBadges: string[];
-  source: "supabase" | "local" | "community";
+  source: "supabase" | "local";
 }
 
 export async function GET(request: NextRequest) {
@@ -44,69 +45,152 @@ export async function GET(request: NextRequest) {
 
   const byId = new Map<string, AdminUserSummary>();
 
-  // 1) Fetch Supabase profiles
-  try {
-    const supabase = getSupabaseAdminClient() ?? (await getSupabaseServerClient());
-    if (supabase) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let rows: any[] | null = null;
-      const extendedRes = await supabase
-        .from("profiles")
-        .select(
-          "id, username, display_name, avatar_url, accent_color, role, unlocked_badges, pinned_badges, created_at"
-        )
-        .order("created_at", { ascending: false })
-        .limit(120);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ingestSupabaseRow = (row: any) => {
+    if (!row?.id) return;
+    const id = String(row.id);
+    const uname = String(row.username || `user_${id.slice(0, 6)}`);
+    const dname = String(row.display_name || row.username || "Membre Shiori");
+    if (isSeedBotAccount({ id, username: uname })) return;
 
-      if (!extendedRes.error && Array.isArray(extendedRes.data)) {
-        rows = extendedRes.data;
-      } else {
-        const fallbackRes = await supabase
-          .from("profiles")
-          .select(
-            "id, username, display_name, avatar_url, accent_color, unlocked_badges, pinned_badges, created_at"
-          )
-          .order("created_at", { ascending: false })
-          .limit(120);
-        if (!fallbackRes.error && Array.isArray(fallbackRes.data)) {
-          rows = fallbackRes.data;
-        }
-      }
-
-      if (Array.isArray(rows)) {
-        for (const row of rows) {
-          const id = String(row.id);
-          const uname = String(row.username || `user_${id.slice(0, 6)}`);
-          const dname = String(row.display_name || row.username || "Membre Shiori");
-          const role =
-            id === guard.actor.id
-              ? "creator"
-              : resolvePublicProfileRole({
-                  dbRole: row.role,
-                  username: uname,
-                  displayName: dname,
-                });
-          byId.set(id, {
-            id,
+    const existing = byId.get(id);
+    const role =
+      id === guard.actor.id
+        ? "creator"
+        : resolvePublicProfileRole({
+            dbRole: row.role ?? existing?.role,
             username: uname,
             displayName: dname,
-            avatarUrl: sanitizeSafeImageUrl(row.avatar_url),
-            accentColor: typeof row.accent_color === "string" ? row.accent_color : "#E5484D",
-            role,
-            joinedAt: String(row.created_at || new Date().toISOString()),
-            unlockedBadges: Array.isArray(row.unlocked_badges) ? row.unlocked_badges : [],
-            pinnedBadges: Array.isArray(row.pinned_badges) ? row.pinned_badges : [],
-            source: "supabase",
+          });
+    const badges = Array.isArray(row.unlocked_badges)
+      ? row.unlocked_badges
+      : existing?.unlockedBadges ?? [];
+    const pinned = Array.isArray(row.pinned_badges)
+      ? row.pinned_badges
+      : existing?.pinnedBadges ?? [];
+
+    byId.set(id, {
+      id,
+      username: uname,
+      displayName: dname,
+      avatarUrl: sanitizeSafeImageUrl(row.avatar_url) ?? existing?.avatarUrl ?? null,
+      accentColor:
+        typeof row.accent_color === "string"
+          ? row.accent_color
+          : existing?.accentColor ?? "#E5484D",
+      role,
+      joinedAt: String(
+        row.joined_at || row.created_at || existing?.joinedAt || new Date().toISOString()
+      ),
+      unlockedBadges: badges,
+      pinnedBadges: pinned,
+      source: "supabase",
+    });
+  };
+
+  // 1) Fetch ALL Supabase members via service-role admin client when available
+  //    (includes both `public.profiles` and any `auth.users` who haven't synced a profile yet)
+  try {
+    const adminClient = getSupabaseAdminClient();
+    if (adminClient) {
+      let rows: unknown[] | null = (
+        await adminClient
+          .from("profiles")
+          .select(
+            "id, username, display_name, avatar_url, accent_color, role, unlocked_badges, pinned_badges, created_at"
+          )
+          .order("created_at", { ascending: false })
+          .limit(500)
+      ).data;
+
+      if (!Array.isArray(rows)) {
+        rows = (
+          await adminClient
+            .from("profiles")
+            .select(
+              "id, username, display_name, avatar_url, accent_color, unlocked_badges, pinned_badges, created_at"
+            )
+            .order("created_at", { ascending: false })
+            .limit(500)
+        ).data;
+      }
+      if (Array.isArray(rows)) {
+        for (const row of rows) ingestSupabaseRow(row);
+      }
+
+      // Also list all Auth accounts so even users who haven't triggered profile sync appear
+      try {
+        const { data: authList } = await adminClient.auth.admin.listUsers({
+          page: 1,
+          perPage: 500,
+        });
+        for (const authUser of authList?.users ?? []) {
+          if (!authUser?.id || byId.has(authUser.id)) continue;
+          const meta = authUser.user_metadata ?? {};
+          const rawDisplay =
+            (typeof meta.display_name === "string" && meta.display_name.trim()) ||
+            (typeof meta.full_name === "string" && meta.full_name.trim()) ||
+            (typeof meta.name === "string" && meta.name.trim()) ||
+            authUser.email?.split("@")[0] ||
+            `Membre ${authUser.id.slice(0, 6)}`;
+          const rawUser =
+            (typeof meta.username === "string" && meta.username.trim()) ||
+            rawDisplay
+              .toLowerCase()
+              .replace(/[^a-z0-9_]+/g, "_")
+              .replace(/^_+|_+$/g, "") ||
+            `user_${authUser.id.slice(0, 6)}`;
+          ingestSupabaseRow({
+            id: authUser.id,
+            username: rawUser,
+            display_name: rawDisplay,
+            avatar_url: typeof meta.avatar_url === "string" ? meta.avatar_url : null,
+            accent_color: "#E5484D",
+            role: "user",
+            created_at: authUser.created_at,
           });
         }
+      } catch {
+        // non-fatal if auth admin API is unavailable
       }
     }
   } catch {
     // non-fatal
   }
 
-  // 2) Merge local / community profiles
+  // 2) ALWAYS also query `public.public_profiles` view (security_invoker = false) via server client!
+  //    This guarantees EVERY registered Supabase user is returned even when SUPABASE_SERVICE_ROLE_KEY
+  //    is not configured and `public.profiles` RLS restricts direct SELECT to auth.uid() = id.
+  try {
+    const supabase = await getSupabaseServerClient();
+    if (supabase) {
+      const { data: publicRows } = await supabase
+        .from("public_profiles")
+        .select("*")
+        .order("joined_at", { ascending: false })
+        .limit(500);
+
+      if (Array.isArray(publicRows)) {
+        for (const row of publicRows) ingestSupabaseRow(row);
+      }
+
+      // Also merge the creator's own direct `profiles` row in case `public_profiles` lacks a column
+      const { data: ownRow } = await supabase
+        .from("profiles")
+        .select(
+          "id, username, display_name, avatar_url, accent_color, role, unlocked_badges, pinned_badges, created_at"
+        )
+        .eq("id", guard.actor.id)
+        .maybeSingle();
+      if (ownRow) ingestSupabaseRow(ownRow);
+    }
+  } catch {
+    // non-fatal
+  }
+
+  // 3) Merge real local server accounts (strictly excluding Shiori seed/demo bots)
   for (const p of getAllLocalCommunityProfiles()) {
+    if (isSeedBotAccount(p)) continue;
     if (!byId.has(p.id)) {
       byId.set(p.id, {
         id: p.id,
@@ -125,7 +209,7 @@ export async function GET(request: NextRequest) {
         joinedAt: p.joinedAt,
         unlockedBadges: p.unlockedBadges ?? [],
         pinnedBadges: p.pinnedBadges ?? [],
-        source: p.source === "community" ? "community" : "local",
+        source: "local",
       });
     }
   }
@@ -137,6 +221,8 @@ export async function GET(request: NextRequest) {
       new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime()
   );
 
+  const totalCount = users.length;
+
   if (q) {
     users = users.filter(
       (u) =>
@@ -147,7 +233,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    users: users.slice(0, 100),
+    users: users.slice(0, 500),
+    totalCount,
     grantableBadges: ADMIN_GRANTABLE_BADGE_IDS.map((id) => {
       const def = BADGE_BY_ID.get(id);
       return {
@@ -189,11 +276,24 @@ export async function PATCH(request: NextRequest) {
       try {
         const supabase = getSupabaseAdminClient() ?? (await getSupabaseServerClient());
         if (supabase) {
-          const { data: row } = await supabase
-            .from("profiles")
-            .select("unlocked_badges, pinned_badges")
-            .eq("id", userId)
-            .maybeSingle();
+          let row = (
+            await supabase
+              .from("profiles")
+              .select("unlocked_badges, pinned_badges")
+              .eq("id", userId)
+              .maybeSingle()
+          ).data;
+
+          // Fallback to public_profiles when SELECT on profiles is RLS-scoped to auth.uid() = id
+          if (!row) {
+            row = (
+              await supabase
+                .from("public_profiles")
+                .select("unlocked_badges, pinned_badges")
+                .eq("id", userId)
+                .maybeSingle()
+            ).data;
+          }
 
           if (row) {
             const current: UnlockedBadgeRecord[] = Array.isArray(row.unlocked_badges)
@@ -208,19 +308,27 @@ export async function PATCH(request: NextRequest) {
               if (!map.has(badgeId)) {
                 map.set(badgeId, { badgeId, unlockedAt: nowIso });
               }
-              await supabase
-                .from("user_badges")
-                .upsert(
-                  { user_id: userId, badge_id: badgeId, unlocked_at: nowIso },
-                  { onConflict: "user_id,badge_id" }
-                );
+              try {
+                await supabase
+                  .from("user_badges")
+                  .upsert(
+                    { user_id: userId, badge_id: badgeId, unlocked_at: nowIso },
+                    { onConflict: "user_id,badge_id" }
+                  );
+              } catch {
+                // non-fatal if RLS on user_badges restricts non-service-role writes
+              }
             } else {
               map.delete(badgeId);
-              await supabase
-                .from("user_badges")
-                .delete()
-                .eq("user_id", userId)
-                .eq("badge_id", badgeId);
+              try {
+                await supabase
+                  .from("user_badges")
+                  .delete()
+                  .eq("user_id", userId)
+                  .eq("badge_id", badgeId);
+              } catch {
+                // non-fatal
+              }
             }
 
             const nextBadges = Array.from(map.values());

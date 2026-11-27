@@ -1,7 +1,17 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Lock, Pin, Sparkles, Target, Trophy } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  LayoutGrid,
+  Lock,
+  Minimize2,
+  Pin,
+  Sparkles,
+  Target,
+  Trophy,
+} from "lucide-react";
 import {
   BADGE_CATEGORY_LABELS,
   RARITY_META,
@@ -21,6 +31,8 @@ interface BadgesShowcaseProps {
   title?: string;
   subtitle?: string;
   compact?: boolean;
+  /** Initial layout mode: "mini" keeps the section compact with a 1-click toggle to expand full badges */
+  defaultViewMode?: "mini" | "full";
 }
 
 const CATEGORY_TABS: { id: "all" | BadgeCategory; label: string }[] = [
@@ -43,16 +55,37 @@ export function BadgesShowcase({
   title,
   subtitle,
   compact = false,
+  defaultViewMode = "full",
 }: BadgesShowcaseProps) {
   const { tr, locale } = useTranslation();
   const [category, setCategory] = useState<"all" | BadgeCategory>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [expandedCompact, setExpandedCompact] = useState(false);
+  const [viewMode, setViewMode] = useState<"mini" | "full">(defaultViewMode);
 
-  const unlockedCount = useMemo(
-    () => badges.filter((b) => b.unlocked).length,
-    [badges]
-  );
+  // If user navigated via explicit #badges anchor (e.g. "Voir mes badges ->"), expand automatically
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#badges") {
+      setViewMode("full");
+    }
+  }, []);
+
+  const unlockedBadgesSorted = useMemo(() => {
+    const pinnedSet = new Set(pinnedBadges);
+    return badges
+      .filter((b) => b.unlocked)
+      .sort((a, b) => {
+        const aPin = pinnedSet.has(a.id) ? 1 : 0;
+        const bPin = pinnedSet.has(b.id) ? 1 : 0;
+        if (bPin !== aPin) return bPin - aPin;
+        if (RARITY_RANK[b.rarity] !== RARITY_RANK[a.rarity]) {
+          return RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity];
+        }
+        return b.target - a.target;
+      });
+  }, [badges, pinnedBadges]);
+
+  const unlockedCount = unlockedBadgesSorted.length;
 
   const rarityCounts = useMemo(() => {
     const counts: Record<BadgeRarity, number> = {
@@ -98,6 +131,117 @@ export function BadgesShowcase({
     ? Math.round((unlockedCount / badges.length) * 100)
     : 0;
 
+  // Compact "En petit" mode — sleek miniature trophy strip so scrolling down the profile is effortless
+  if (viewMode === "mini") {
+    return (
+      <section
+        id="badges"
+        className="rounded-3xl card-surface border border-white/[0.08] scroll-mt-24 p-4 sm:p-5 space-y-3.5"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-kinpaku/15 border border-kinpaku/35 flex items-center justify-center text-kinpaku shrink-0">
+              <Trophy className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  {title ?? tr("Badges & Trophées")}
+                </h2>
+                <span className="px-2 py-0.5 rounded-full bg-white/[0.07] border border-white/[0.1] font-mono text-[11px] font-semibold text-[#D6D9E6]">
+                  {unlockedCount} / {badges.length} ({completionPct}%)
+                </span>
+              </div>
+              <p className="text-[11.5px] text-[#8D92A6] truncate">
+                {canPin
+                  ? tr("{n} / 3 épinglés", { n: pinnedBadges.length })
+                  : tr("Aperçu compact · Cliquez pour tout voir")}
+              </p>
+            </div>
+          </div>
+
+          {/* 2-Way Mode Toggle: En petit / Voir les badges */}
+          <div className="inline-flex items-center p-0.5 rounded-full bg-obsidian/85 border border-white/[0.09] self-start sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode("mini")}
+              className="px-3 py-1.5 rounded-full text-[11px] font-semibold bg-white/[0.13] text-white inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Minimize2 className="w-3 h-3 text-kinpaku" />
+              <span>{tr("En petit")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("full")}
+              className="px-3 py-1.5 rounded-full text-[11px] font-semibold text-[#9A9EAE] hover:text-white inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <LayoutGrid className="w-3 h-3" />
+              <span>{tr("Voir les badges")}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Slim Collection Progress Bar */}
+        <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden border border-white/[0.05]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#CD7F32] via-[#F0B95B] via-[#C084FC] to-[#22D3EE] transition-all duration-500"
+            style={{ width: `${completionPct}%` }}
+          />
+        </div>
+
+        {/* Miniature Unlocked Badges Strip */}
+        {unlockedBadgesSorted.length === 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs text-[#8A8FA4]">
+            <span>{tr("Aucun badge débloqué pour le moment.")}</span>
+            <button
+              type="button"
+              onClick={() => setViewMode("full")}
+              className="text-xs font-semibold text-kinpaku hover:text-[#FDE68A] transition-colors cursor-pointer"
+            >
+              {tr("Voir les défis →")}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            {unlockedBadgesSorted.map((badge) => {
+              const meta = RARITY_META[badge.rarity];
+              const isPinned = pinnedBadges.includes(badge.id);
+              return (
+                <button
+                  key={badge.id}
+                  type="button"
+                  onClick={() => setViewMode("full")}
+                  title={`${badge.title} — ${badge.description}`}
+                  className={cn(
+                    "group inline-flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-xl border transition-all hover:-translate-y-0.5 cursor-pointer",
+                    meta.bg,
+                    meta.border,
+                    isPinned && "ring-1 ring-white/40"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "w-6 h-6 rounded-lg bg-gradient-to-br flex items-center justify-center shrink-0 shadow-sm",
+                      meta.iconBg
+                    )}
+                  >
+                    <BadgeIcon iconKey={badge.iconKey} className="w-3.5 h-3.5 text-[#08090E]" />
+                  </span>
+                  <span className="text-[11.5px] font-semibold text-white whitespace-nowrap">
+                    {badge.title}
+                  </span>
+                  {isPinned && (
+                    <Pin className="w-2.5 h-2.5 text-kinpaku fill-current shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section
       id="badges"
@@ -126,32 +270,53 @@ export function BadgesShowcase({
           </p>
         </div>
 
-        {/* Rarity Breakdown & Pinned Counter */}
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-          {(["mythic", "legendary", "gold", "silver", "bronze"] as BadgeRarity[]).map(
-            (r) => {
-              const meta = RARITY_META[r];
-              return (
-                <span
-                  key={r}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10.5px] font-mono font-semibold",
-                    meta.pillClass,
-                    rarityCounts[r] === 0 && "opacity-40"
-                  )}
-                >
-                  <span>{tr(meta.label)}</span>
-                  <span>{rarityCounts[r]}</span>
-                </span>
-              );
-            }
-          )}
-          {canPin && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/[0.07] border border-white/[0.12] text-[10.5px] font-mono text-white">
-              <Pin className="w-3 h-3 text-accent" />
-              <span>{tr("{n} / 3 épinglés", { n: pinnedBadges.length })}</span>
-            </span>
-          )}
+        {/* Mode Toggle + Rarity Breakdown & Pinned Counter */}
+        <div className="flex flex-col items-start md:items-end gap-2.5 shrink-0">
+          <div className="inline-flex items-center p-0.5 rounded-full bg-obsidian/85 border border-white/[0.09]">
+            <button
+              type="button"
+              onClick={() => setViewMode("mini")}
+              className="px-3 py-1.5 rounded-full text-[11px] font-semibold text-[#9A9EAE] hover:text-white inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Minimize2 className="w-3 h-3" />
+              <span>{tr("En petit")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("full")}
+              className="px-3 py-1.5 rounded-full text-[11px] font-semibold bg-white/[0.13] text-white inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <LayoutGrid className="w-3 h-3 text-kinpaku" />
+              <span>{tr("Voir les badges")}</span>
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["mythic", "legendary", "gold", "silver", "bronze"] as BadgeRarity[]).map(
+              (r) => {
+                const meta = RARITY_META[r];
+                return (
+                  <span
+                    key={r}
+                    className={cn(
+                      "inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10.5px] font-mono font-semibold",
+                      meta.pillClass,
+                      rarityCounts[r] === 0 && "opacity-40"
+                    )}
+                  >
+                    <span>{tr(meta.label)}</span>
+                    <span>{rarityCounts[r]}</span>
+                  </span>
+                );
+              }
+            )}
+            {canPin && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/[0.07] border border-white/[0.12] text-[10.5px] font-mono text-white">
+                <Pin className="w-3 h-3 text-accent" />
+                <span>{tr("{n} / 3 épinglés", { n: pinnedBadges.length })}</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

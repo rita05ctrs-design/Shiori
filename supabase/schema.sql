@@ -149,7 +149,7 @@ alter table public.profiles enable row level security;
 drop policy if exists "Public profiles are viewable by everyone" on public.profiles;
 drop policy if exists "Users can view their own profile" on public.profiles;
 create policy "Users can view their own profile"
-  on public.profiles for select using (auth.uid() = id);
+  on public.profiles for select using (auth.uid() = id or public.is_shiori_creator());
 
 -- Vue publique sécurisée des profils (sans jamais exposer anilist_access_token ni email)
 -- security_invoker = false garantit que les visiteurs et membres connectés peuvent découvrir

@@ -1028,9 +1028,12 @@ export function AdminDashboardClient({
           <section className="rounded-2xl border border-white/[0.09] bg-[#0D0F16] p-5 sm:p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <h2 className="text-lg font-bold text-white flex flex-wrap items-center gap-2">
                   <Award className="w-5 h-5 text-[#F0B95B]" />
                   <span>{tr("Gestion des membres & badges spéciaux")}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.1] font-mono text-[11px] font-semibold text-[#CFD3E0]">
+                    {usersList.length}
+                  </span>
                 </h2>
                 <p className="text-xs text-[#8D92A4] mt-0.5">
                   {tr("Recherchez un membre inscrit pour lui attribuer ou retirer les distinctions Bêta-testeur, Supporter ou VIP.")}
