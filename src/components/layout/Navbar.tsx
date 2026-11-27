@@ -25,6 +25,7 @@ import {
   Heart,
   Languages,
   Crown,
+  Lightbulb,
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -151,7 +152,6 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [pendingMobileHref, setPendingMobileHref] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const earlyNavRef = useRef<{ href: string; at: number } | null>(null);
 
   useEffect(() => {
     setProfileMenuOpen(false);
@@ -580,6 +580,14 @@ export function Navbar() {
                         <span>{t("nav.settings")}</span>
                       </Link>
                       <Link
+                        href="/support#suggestions"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#D8DBE5] hover:bg-white/[0.07] hover:text-white transition-colors"
+                      >
+                        <Lightbulb className="w-4 h-4 text-kinpaku" />
+                        <span>{tr("Proposer une idée")}</span>
+                      </Link>
+                      <Link
                         href="/support"
                         onClick={() => setProfileMenuOpen(false)}
                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] text-[#FDE68A] hover:bg-[#F0B95B]/12 transition-colors"
@@ -713,32 +721,12 @@ export function Navbar() {
                   key={item.href}
                   href={item.href}
                   prefetch={true}
-                  onPointerDown={(e) => {
-                    if (
-                      matchedNow ||
-                      !e.isPrimary ||
-                      e.button !== 0 ||
-                      e.metaKey ||
-                      e.ctrlKey ||
-                      e.shiftKey ||
-                      e.altKey
-                    ) {
-                      return;
+                  onPointerDown={() => {
+                    if (!matchedNow) {
+                      router.prefetch(item.href);
                     }
-                    setPendingMobileHref(item.href);
-                    earlyNavRef.current = { href: item.href, at: Date.now() };
-                    router.push(item.href);
                   }}
-                  onClick={(e) => {
-                    const recent = earlyNavRef.current;
-                    if (
-                      recent &&
-                      recent.href === item.href &&
-                      Date.now() - recent.at < 600
-                    ) {
-                      e.preventDefault();
-                      return;
-                    }
+                  onClick={() => {
                     if (!matchedNow) {
                       setPendingMobileHref(item.href);
                     }

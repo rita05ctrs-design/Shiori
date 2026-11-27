@@ -65,7 +65,7 @@ export default async function AdminPage() {
     );
   }
 
-  const initialConfig = await getSiteConfig();
+  const initialConfig = await getSiteConfig({ bypassCache: true });
 
   return (
     <AdminDashboardClient

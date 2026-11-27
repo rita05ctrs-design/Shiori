@@ -2,6 +2,17 @@ import type { ContentLanguage, MediaRelation } from "../types/media.ts";
 
 export type SourceMediumKind = "MANGA" | "MANHWA" | "MANHUA" | "NOVEL" | "WEB_NOVEL";
 
+export interface LiveAdaptationAnchor {
+  /** Verified reference episode number */
+  anchorEpisode: number;
+  /** Verified chapter adapted by anchorEpisode */
+  anchorChapter: number;
+  /** Average chapters adapted per episode */
+  chaptersPerEpisode: number;
+  /** Approximate chapters per tankobon volume (optional) */
+  chaptersPerVolume?: number;
+}
+
 export interface MangaContinuationInfo {
   sourceKind: SourceMediumKind;
   endedAtChapter: number | null;
@@ -16,6 +27,14 @@ export interface MangaContinuationInfo {
   confidence: "verified" | "high" | "medium" | "low";
   note?: string | null;
   notesByLang?: Partial<Record<ContentLanguage, string>>;
+  /** Real-time airing synchronization metadata */
+  syncedEpisode?: number | null;
+  totalEpisodes?: number | null;
+  chaptersPerEpisode?: number | null;
+  nextAiringEpisode?: { episode: number; airingAt: number } | null;
+  liveSynced?: boolean;
+  updatedAt?: string;
+  liveAnchor?: LiveAdaptationAnchor | null;
 }
 
 interface CuratedContinuationEntry extends Omit<MangaContinuationInfo, "verified" | "confidence"> {
@@ -579,9 +598,15 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     adaptedArc: "Egghead Island",
     isFullyAdapted: false,
     isOngoingAdaptation: true,
+    liveAnchor: {
+      anchorEpisode: 1122,
+      anchorChapter: 1088,
+      chaptersPerEpisode: 0.92,
+      chaptersPerVolume: 10,
+    },
     notesByLang: {
-      fr: "Anime toujours en cours : vers l'épisode 1122, l'histoire correspond au chapitre 1088 (Egghead). Continuez au chapitre 1089 (Tome 108) !",
-      en: "Ongoing anime: around Episode 1122 corresponds to Chapter 1088 (Egghead). Pick up at Chapter 1089 (Volume 108)!",
+      fr: "Synchronisé en temps réel avec les derniers épisodes diffusés de One Piece.",
+      en: "Synced in real time with the latest aired One Piece episodes.",
     },
   },
   {
@@ -1387,6 +1412,224 @@ export function getCuratedMangaContinuation(
     confidence: "verified",
     note: localizedNote,
     notesByLang: hit.notesByLang,
+    liveAnchor: hit.liveAnchor ?? null,
+    chaptersPerEpisode: hit.liveAnchor?.chaptersPerEpisode ?? hit.chaptersPerEpisode ?? null,
+  };
+}
+
+/**
+ * Resolves the exact latest aired episode number in real time using AniList airing schedules
+ * and nextAiringEpisode timestamps (automatically ticking forward once airingAt passes nowMs).
+ */
+export function resolveLatestAiredEpisode(input: {
+  status?: string | null;
+  episodes?: number | null;
+  nextAiringEpisode?: { episode: number; airingAt: number } | null;
+  latestAiredEpisode?: number | null;
+  nowMs?: number;
+}): number | null {
+  const nowSec = Math.floor((input.nowMs ?? Date.now()) / 1000);
+  let fromNext: number | null = null;
+  if (
+    input.nextAiringEpisode &&
+    Number.isFinite(input.nextAiringEpisode.episode) &&
+    input.nextAiringEpisode.episode > 0
+  ) {
+    fromNext =
+      input.nextAiringEpisode.airingAt <= nowSec
+        ? input.nextAiringEpisode.episode
+        : Math.max(0, input.nextAiringEpisode.episode - 1);
+  }
+
+  const fromSlot =
+    typeof input.latestAiredEpisode === "number" &&
+    Number.isFinite(input.latestAiredEpisode) &&
+    input.latestAiredEpisode > 0
+      ? Math.floor(input.latestAiredEpisode)
+      : null;
+
+  if (fromSlot !== null || fromNext !== null) {
+    const best = Math.max(fromSlot ?? 0, fromNext ?? 0);
+    return best > 0 ? best : null;
+  }
+
+  if (
+    input.status === "FINISHED" &&
+    typeof input.episodes === "number" &&
+    Number.isFinite(input.episodes) &&
+    input.episodes > 0
+  ) {
+    return Math.floor(input.episodes);
+  }
+
+  return null;
+}
+
+function parseStartChapter(coveredRange: string | null | undefined): number {
+  if (!coveredRange) return 1;
+  const match = /Ch\.\s*(\d+)\s*[–-]/i.exec(coveredRange);
+  if (match) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n) && n >= 1) return n;
+  }
+  return 1;
+}
+
+/**
+ * Dynamically recalibrates chapter & volume continuation breakpoints in real time for:
+ * 1) Ongoing anchored series (e.g. One Piece) as new weekly episodes air
+ * 2) Airing seasonal anime whose latest aired episode advances past a previous sync point
+ * 3) A viewer's own tracked episode progress (spoiler-free mid-season continuation)
+ */
+export function applyLiveEpisodeAdjustment(
+  base: MangaContinuationInfo,
+  input: {
+    liveAiredEpisode?: number | null;
+    targetEpisode?: number | null;
+    totalEpisodes?: number | null;
+    sourceTotalChapters?: number | null;
+    sourceTotalVolumes?: number | null;
+    nextAiringEpisode?: { episode: number; airingAt: number } | null;
+  }
+): MangaContinuationInfo {
+  const effectiveEp =
+    typeof input.targetEpisode === "number" && input.targetEpisode > 0
+      ? Math.floor(input.targetEpisode)
+      : typeof input.liveAiredEpisode === "number" && input.liveAiredEpisode > 0
+        ? Math.floor(input.liveAiredEpisode)
+        : null;
+
+  const nextAiring = input.nextAiringEpisode ?? base.nextAiringEpisode ?? null;
+  const maxCh =
+    typeof input.sourceTotalChapters === "number" && input.sourceTotalChapters > 0
+      ? Math.floor(input.sourceTotalChapters)
+      : null;
+  const maxVol =
+    typeof input.sourceTotalVolumes === "number" && input.sourceTotalVolumes > 0
+      ? Math.floor(input.sourceTotalVolumes)
+      : null;
+
+  // Case 1: Ongoing curated anchor (e.g. One Piece) — compute live chapter from exact reference anchor
+  if (base.liveAnchor && effectiveEp !== null) {
+    const anchor = base.liveAnchor;
+    const rawEnded = Math.round(
+      anchor.anchorChapter + (effectiveEp - anchor.anchorEpisode) * anchor.chaptersPerEpisode
+    );
+    const endedAtChapter = Math.max(1, maxCh ? Math.min(maxCh, rawEnded) : rawEnded);
+    const continueAtChapter =
+      maxCh && endedAtChapter >= maxCh ? null : endedAtChapter + 1;
+
+    let endedAtVolume = base.endedAtVolume;
+    let continueAtVolume = base.continueAtVolume;
+    if (anchor.chaptersPerVolume && anchor.chaptersPerVolume > 0) {
+      const baseVol =
+        base.endedAtVolume ?? Math.max(1, Math.ceil(anchor.anchorChapter / anchor.chaptersPerVolume));
+      const shiftedEndVol = Math.max(
+        1,
+        Math.round(baseVol + (endedAtChapter - anchor.anchorChapter) / anchor.chaptersPerVolume)
+      );
+      endedAtVolume = maxVol ? Math.min(maxVol, shiftedEndVol) : shiftedEndVol;
+      if (continueAtChapter === null) {
+        continueAtVolume = null;
+      } else {
+        const shiftedContVol = Math.max(
+          endedAtVolume,
+          Math.round(
+            baseVol + (continueAtChapter - anchor.anchorChapter) / anchor.chaptersPerVolume
+          )
+        );
+        continueAtVolume = maxVol ? Math.min(maxVol, shiftedContVol) : shiftedContVol;
+      }
+    }
+
+    return {
+      ...base,
+      endedAtChapter,
+      continueAtChapter,
+      endedAtVolume,
+      continueAtVolume,
+      coveredRange: `Ch. 1 – ${endedAtChapter} (Ép. ${effectiveEp})`,
+      syncedEpisode: effectiveEp,
+      totalEpisodes: input.totalEpisodes ?? base.totalEpisodes ?? null,
+      chaptersPerEpisode: anchor.chaptersPerEpisode,
+      nextAiringEpisode: nextAiring,
+      liveSynced: true,
+      isFullyAdapted: false,
+    };
+  }
+
+  // Case 2: Proportional adjustment when targetEpisode differs from the base synced/total episode
+  const baseRefEp =
+    (typeof base.syncedEpisode === "number" && base.syncedEpisode > 0 ? base.syncedEpisode : null) ??
+    (typeof input.totalEpisodes === "number" && input.totalEpisodes > 0 ? Math.floor(input.totalEpisodes) : null) ??
+    (typeof base.totalEpisodes === "number" && base.totalEpisodes > 0 ? base.totalEpisodes : null) ??
+    (typeof input.liveAiredEpisode === "number" && input.liveAiredEpisode > 0
+      ? Math.floor(input.liveAiredEpisode)
+      : null);
+
+  if (
+    effectiveEp !== null &&
+    baseRefEp !== null &&
+    effectiveEp !== baseRefEp &&
+    base.endedAtChapter !== null
+  ) {
+    const startChapter = parseStartChapter(base.coveredRange);
+    const coveredCount = Math.max(1, base.endedAtChapter - startChapter + 1);
+    const inferredPace = Math.min(6, Math.max(0.5, coveredCount / baseRefEp));
+    const pace =
+      typeof base.chaptersPerEpisode === "number" &&
+      base.chaptersPerEpisode >= 0.4 &&
+      base.chaptersPerEpisode <= 8
+        ? base.chaptersPerEpisode
+        : inferredPace;
+
+    const rawEnded = Math.round(base.endedAtChapter + (effectiveEp - baseRefEp) * pace);
+    const lowerBound = effectiveEp < baseRefEp ? startChapter : 1;
+    const endedAtChapter = Math.max(
+      lowerBound,
+      maxCh ? Math.min(maxCh, rawEnded) : rawEnded
+    );
+    const continueAtChapter =
+      maxCh && endedAtChapter >= maxCh ? null : endedAtChapter + 1;
+
+    let endedAtVolume = base.endedAtVolume;
+    let continueAtVolume = base.continueAtVolume;
+    if (base.endedAtVolume !== null && base.endedAtChapter > 0) {
+      const approxChPerVol = Math.max(4, Math.min(12, base.endedAtChapter / Math.max(1, base.endedAtVolume)));
+      const shiftedVol = Math.max(
+        1,
+        Math.round(base.endedAtVolume + (endedAtChapter - base.endedAtChapter) / approxChPerVol)
+      );
+      endedAtVolume = maxVol ? Math.min(maxVol, shiftedVol) : shiftedVol;
+      continueAtVolume =
+        continueAtChapter === null
+          ? null
+          : maxVol
+            ? Math.min(maxVol, Math.max(endedAtVolume, Math.round(shiftedVol + 1 / approxChPerVol)))
+            : Math.max(endedAtVolume, Math.round(shiftedVol + 1 / approxChPerVol));
+    }
+
+    return {
+      ...base,
+      endedAtChapter,
+      continueAtChapter,
+      endedAtVolume,
+      continueAtVolume,
+      coveredRange: `Ch. ${startChapter} – ${endedAtChapter} (Ép. ${effectiveEp})`,
+      syncedEpisode: effectiveEp,
+      totalEpisodes: input.totalEpisodes ?? base.totalEpisodes ?? null,
+      chaptersPerEpisode: pace,
+      nextAiringEpisode: nextAiring,
+      liveSynced: true,
+      isFullyAdapted: false,
+    };
+  }
+
+  return {
+    ...base,
+    syncedEpisode: effectiveEp ?? base.syncedEpisode ?? null,
+    totalEpisodes: input.totalEpisodes ?? base.totalEpisodes ?? null,
+    nextAiringEpisode: nextAiring,
   };
 }
 

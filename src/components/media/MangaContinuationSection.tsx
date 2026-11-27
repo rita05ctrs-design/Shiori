@@ -8,8 +8,10 @@ import {
   BookOpen,
   Check,
   CheckCircle2,
+  Clock,
   Loader2,
   Plus,
+  Radio,
   Sparkles,
   Star,
 } from "lucide-react";
@@ -17,10 +19,12 @@ import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { mangaContinuationCache } from "@/lib/client-cache";
 import {
+  applyLiveEpisodeAdjustment,
   detectSourceMediumKind,
   findSourceMangaRelation,
   getCuratedMangaContinuation,
   getSourceKindLabel,
+  resolveLatestAiredEpisode,
   shouldShowMangaContinuation,
   type MangaContinuationInfo,
 } from "@/lib/manga-continuation";
@@ -41,7 +45,7 @@ function formatVolumeValue(num: number, volumeLabel: string, lang: ContentLangua
 
 export function MangaContinuationSection({ media }: MangaContinuationSectionProps) {
   const { getEntry, upsertEntry, toast } = useShiori();
-  const { t, tr, lang } = useTranslation();
+  const { t, tr, tCountdown, lang } = useTranslation();
 
   const localizeRange = (range: string) =>
     range.replace(/\(en cours\)/gi, `(${tr("en cours")})`);
@@ -57,16 +61,59 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
     [eligible, media.id, lang]
   );
 
-  const cacheKey = `${media.id}:${lang}`;
+  const isReleasing = media.status === "RELEASING" || Boolean(curated?.isOngoingAdaptation);
+  const [airingTick, setAiringTick] = useState(0);
+
+  const initialAiredEp = useMemo(
+    () =>
+      resolveLatestAiredEpisode({
+        status: media.status,
+        episodes: media.episodes,
+        nextAiringEpisode: media.nextAiringEpisode,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [media.status, media.episodes, media.nextAiringEpisode, airingTick]
+  );
+
+  // If an ongoing curated entry already has a live anchor, compute immediate optimistic live state
+  const optimisticCurated = useMemo(() => {
+    if (!curated) return null;
+    if (curated.liveAnchor && initialAiredEp) {
+      return applyLiveEpisodeAdjustment(curated, {
+        liveAiredEpisode: initialAiredEp,
+        totalEpisodes: media.episodes,
+        sourceTotalChapters: sourceRelation?.chapters ?? null,
+        sourceTotalVolumes: sourceRelation?.volumes ?? null,
+        nextAiringEpisode: media.nextAiringEpisode,
+      });
+    }
+    return curated;
+  }, [curated, initialAiredEp, media.episodes, media.nextAiringEpisode, sourceRelation]);
+
+  const cacheKey = `v2:${media.id}:${lang}:ep${isReleasing ? (initialAiredEp ?? "live") : "done"}`;
   const [resolvedInfo, setResolvedInfo] = useState<MangaContinuationInfo | null>(() => {
-    if (curated) return curated;
     if (!eligible) return null;
+    if (optimisticCurated) return optimisticCurated;
     const hit = mangaContinuationCache.get(cacheKey);
     return hit ? (hit as unknown as MangaContinuationInfo) : null;
   });
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<"latest" | "personal">("latest");
 
-  // Sync immediate curated / cache hits when media.id or language changes
+  // Auto-refresh in real time if a new episode airs while the page is open
+  const trackedNextAiringAt =
+    resolvedInfo?.nextAiringEpisode?.airingAt ?? media.nextAiringEpisode?.airingAt ?? null;
+  useEffect(() => {
+    if (!eligible || !isReleasing || !trackedNextAiringAt) return;
+    const timer = window.setInterval(() => {
+      if (trackedNextAiringAt * 1000 <= Date.now()) {
+        setAiringTick((v) => v + 1);
+      }
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [eligible, isReleasing, trackedNextAiringAt]);
+
+  // Sync curated / cached / live real-time episode breakpoint from API
   useEffect(() => {
     if (!eligible) {
       setResolvedInfo(null);
@@ -74,36 +121,47 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
       return;
     }
 
-    if (curated) {
+    // Finished curated entries resolve in 0ms without network calls
+    if (curated && !isReleasing && !curated.liveAnchor) {
       setResolvedInfo(curated);
       setLoading(false);
       return;
     }
 
     const hit = mangaContinuationCache.get(cacheKey);
-    if (hit) {
+    if (hit && airingTick === 0) {
       setResolvedInfo(hit as unknown as MangaContinuationInfo);
       setLoading(false);
       return;
     }
 
+    if (optimisticCurated) {
+      setResolvedInfo(optimisticCurated);
+    }
+
     let cancelled = false;
-    setLoading(true);
+    setLoading(!optimisticCurated);
 
     void (async () => {
       try {
         const res = await fetch("/api/manga-continuation", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          cache: "no-store",
           body: JSON.stringify({
             mediaId: media.id,
             title: getDisplayTitle(media),
             romajiTitle: media.title.romaji,
             sourceType: media.source,
+            sourceMediaId: sourceRelation?.id ?? null,
             sourceTitle: sourceRelation?.title ?? null,
             sourceCountry: sourceRelation?.countryOfOrigin ?? null,
             sourceFormat: sourceRelation?.format ?? null,
+            sourceChapters: sourceRelation?.chapters ?? null,
+            sourceVolumes: sourceRelation?.volumes ?? null,
             episodes: media.episodes,
+            airedEpisodes: initialAiredEp,
+            nextAiringEpisode: media.nextAiringEpisode,
             status: media.status,
             seasonYear: media.seasonYear ?? media.startYear,
             language: lang,
@@ -116,14 +174,17 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
           const info = json.data as MangaContinuationInfo;
           setResolvedInfo(info);
           if (info.confidence !== "low") {
+            const liveKey = `v2:${media.id}:${lang}:ep${
+              isReleasing ? (info.syncedEpisode ?? initialAiredEp ?? "live") : "done"
+            }`;
             mangaContinuationCache.set(
-              cacheKey,
+              liveKey,
               info as unknown as Record<string, unknown>
             );
           }
         }
       } catch {
-        // Non-fatal: still render source manga link card gracefully
+        // Non-fatal: still render optimistic curated / source manga link card gracefully
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -132,14 +193,71 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
     return () => {
       cancelled = true;
     };
-  }, [eligible, curated, cacheKey, media, sourceRelation, lang]);
+  }, [
+    eligible,
+    curated,
+    optimisticCurated,
+    isReleasing,
+    cacheKey,
+    airingTick,
+    initialAiredEp,
+    media,
+    sourceRelation,
+    lang,
+  ]);
+
+  const userAnimeEntry = getEntry(media.id);
+  const baseInfo = resolvedInfo ?? optimisticCurated;
+
+  const syncedBaseEpisode =
+    baseInfo?.syncedEpisode ??
+    (isReleasing ? initialAiredEp : media.episodes ?? initialAiredEp);
+
+  const userWatchedEp =
+    userAnimeEntry && userAnimeEntry.progress > 0 ? userAnimeEntry.progress : null;
+
+  const canPersonalSync = Boolean(
+    baseInfo &&
+      baseInfo.endedAtChapter !== null &&
+      syncedBaseEpisode !== null &&
+      syncedBaseEpisode > 0 &&
+      userWatchedEp !== null &&
+      userWatchedEp > 0 &&
+      userWatchedEp !== syncedBaseEpisode
+  );
+
+  const effectiveMode = canPersonalSync ? viewMode : "latest";
+
+  const activeInfo = useMemo(() => {
+    if (!baseInfo) return null;
+    if (effectiveMode === "personal" && userWatchedEp) {
+      return applyLiveEpisodeAdjustment(baseInfo, {
+        liveAiredEpisode: syncedBaseEpisode,
+        targetEpisode: userWatchedEp,
+        totalEpisodes: media.episodes,
+        sourceTotalChapters: sourceRelation?.chapters ?? null,
+        sourceTotalVolumes: sourceRelation?.volumes ?? null,
+        nextAiringEpisode: baseInfo.nextAiringEpisode ?? media.nextAiringEpisode,
+      });
+    }
+    return baseInfo;
+  }, [
+    baseInfo,
+    effectiveMode,
+    userWatchedEp,
+    syncedBaseEpisode,
+    media.episodes,
+    media.nextAiringEpisode,
+    sourceRelation,
+  ]);
 
   if (!eligible) return null;
 
-  const activeInfo = curated ?? resolvedInfo;
   const sourceKind =
     activeInfo?.sourceKind ?? detectSourceMediumKind(media.source, sourceRelation);
   const sourceKindLabel = getSourceKindLabel(sourceKind, lang);
+  const effectiveNextAiring =
+    activeInfo?.nextAiringEpisode ?? media.nextAiringEpisode ?? null;
 
   // If neither a verified/AI breakpoint nor a linked source relation exists and loading finished, hide cleanly
   const hasBreakpoint = Boolean(
@@ -221,7 +339,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
   return (
     <section
       aria-label={t("detail.mangaBridgeEyebrow")}
-      className="relative overflow-hidden rounded-2xl card-surface border border-white/[0.11] p-4 sm:p-6 space-y-4"
+      className="relative overflow-hidden rounded-2xl card-surface border border-white/[0.11] p-4 sm:p-6 space-y-4 min-w-0"
     >
       {/* Subtle warm kinpaku/violet editorial top hairline */}
       <div
@@ -232,7 +350,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
       {/* Header Row */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <span className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-kinpaku">
               <BookMarked className="w-3.5 h-3.5" />
               <span>{t("detail.mangaBridgeEyebrow")}</span>
@@ -251,7 +369,21 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
               {sourceKindLabel}
             </span>
 
-            {activeInfo?.verified ? (
+            {isReleasing && syncedBaseEpisode ? (
+              <span
+                data-live-manga-sync="true"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/16 border border-emerald-400/40 text-[10px] font-mono font-semibold text-emerald-300"
+              >
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+                <Radio className="w-2.5 h-2.5" />
+                <span>
+                  {tr("Temps réel")} · {tr("Ép. {n} sorti", { n: syncedBaseEpisode })}
+                </span>
+              </span>
+            ) : activeInfo?.verified ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/14 border border-emerald-400/35 text-[10px] font-mono font-semibold text-emerald-300">
                 <CheckCircle2 className="w-3 h-3" />
                 <span>{t("detail.verifiedBadge")}</span>
@@ -271,13 +403,58 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
           </h2>
         </div>
 
-        {activeInfo?.adaptedArc && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.045] border border-white/[0.08] text-[11px] text-[#C8CCE0]">
-            <span className="text-[#858A9E]">{t("detail.coveredArc")} :</span>
-            <span className="font-medium text-white">{activeInfo.adaptedArc}</span>
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {isReleasing && effectiveNextAiring && effectiveNextAiring.airingAt * 1000 > Date.now() && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-accent/14 border border-accent/35 text-[11px] font-mono text-accent-soft">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span>
+                {tr("Prochain ép. {n} · {countdown}", {
+                  n: effectiveNextAiring.episode,
+                  countdown: tCountdown(effectiveNextAiring.airingAt),
+                })}
+              </span>
+            </span>
+          )}
+          {activeInfo?.adaptedArc && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.045] border border-white/[0.08] text-[11px] text-[#C8CCE0]">
+              <span className="text-[#858A9E]">{t("detail.coveredArc")} :</span>
+              <span className="font-medium text-white">{activeInfo.adaptedArc}</span>
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Live Sync Mode Switcher when user tracks a different episode in their library */}
+      {canPersonalSync && userWatchedEp && syncedBaseEpisode && (
+        <div className="grid grid-cols-2 sm:inline-flex items-center gap-1 p-1 rounded-xl bg-obsidian/70 border border-white/[0.08] w-full sm:w-fit">
+          <button
+            type="button"
+            onClick={() => setViewMode("latest")}
+            className={cn(
+              "px-1.5 sm:px-3 py-1.5 rounded-lg text-[10px] min-[390px]:text-[10.5px] sm:text-[11.5px] font-semibold transition-all cursor-pointer touch-manipulation truncate text-center",
+              effectiveMode === "latest"
+                ? "bg-white/[0.12] text-white border border-white/[0.15]"
+                : "text-[#9A9EAE] hover:text-white border border-transparent"
+            )}
+          >
+            {isReleasing
+              ? tr("Dernier sorti (Ép. {n})", { n: syncedBaseEpisode })
+              : `${tr("Fin de saison")} (${t("common.epShort")} ${syncedBaseEpisode})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("personal")}
+            className={cn(
+              "px-1.5 sm:px-3 py-1.5 rounded-lg text-[10px] min-[390px]:text-[10.5px] sm:text-[11.5px] font-semibold transition-all cursor-pointer touch-manipulation truncate text-center",
+              effectiveMode === "personal"
+                ? "bg-kinpaku/20 text-kinpaku border border-kinpaku/45"
+                : "text-[#9A9EAE] hover:text-white border border-transparent"
+            )}
+          >
+            {tr("Ma progression (Ép. {n})", { n: userWatchedEp })}
+          </button>
+        </div>
+      )}
 
       {/* Main Content Body */}
       {loading && !activeInfo ? (
@@ -285,7 +462,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
           <Loader2 className="w-4 h-4 animate-spin text-kinpaku shrink-0" />
           <span>{t("common.loading")}</span>
         </div>
-      ) : activeInfo?.isFullyAdapted ? (
+      ) : activeInfo?.isFullyAdapted && effectiveMode === "latest" ? (
         <div className="rounded-xl bg-emerald-500/10 border border-emerald-400/30 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-start gap-3">
             <span className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shrink-0">
@@ -309,10 +486,11 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
       ) : hasBreakpoint && activeInfo ? (
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Box 1: Where the anime ends */}
+            {/* Box 1: Where the anime ends (or user's current episode) */}
             <div className="rounded-xl bg-white/[0.035] border border-white/[0.09] p-3.5 sm:p-4 flex flex-col justify-between gap-1">
               <span className="text-[11px] font-mono uppercase tracking-wider text-[#8E93A6]">
                 {t("detail.animeStopsAt")}
+                {activeInfo.syncedEpisode ? ` · ${t("common.epShort")} ${activeInfo.syncedEpisode}` : ""}
               </span>
               <div className="flex items-baseline flex-wrap gap-2 mt-0.5">
                 <span className="text-xl sm:text-2xl font-bold tracking-tight text-white font-mono">
@@ -387,11 +565,22 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
             </div>
           </div>
 
-          {activeInfo.note && (
-            <p className="text-xs sm:text-[13px] text-[#C6CAD8] leading-relaxed px-1">
-              {activeInfo.note}
-            </p>
-          )}
+          {(() => {
+            const noteText =
+              effectiveMode === "personal" && userWatchedEp
+                ? tr("Estimation calibrée sur votre épisode {n}.", { n: userWatchedEp })
+                : isReleasing && activeInfo.syncedEpisode
+                  ? activeInfo.note ||
+                    tr("Synchronisation temps réel sur l'épisode {n} diffusé.", {
+                      n: activeInfo.syncedEpisode,
+                    })
+                  : activeInfo.note;
+            return noteText ? (
+              <p className="text-xs sm:text-[13px] text-[#C6CAD8] leading-relaxed px-1">
+                {noteText}
+              </p>
+            ) : null;
+          })()}
         </div>
       ) : (
         <p className="text-xs sm:text-sm text-[#9A9EAE] leading-relaxed">
@@ -443,7 +632,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
               type="button"
               onClick={handleTrackSourceFromBreakpoint}
               className={cn(
-                "h-9 px-3.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer",
+                "h-9 px-3.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer touch-manipulation",
                 trackedSourceEntry &&
                   (!suggestedProgress || trackedSourceEntry.progress >= suggestedProgress)
                   ? "bg-emerald-500/15 border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/25"

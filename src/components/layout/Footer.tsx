@@ -127,6 +127,14 @@ export function Footer() {
               </li>
               <li>
                 <Link
+                  href="/support#suggestions"
+                  className="hover:text-white transition-colors"
+                >
+                  {tr("Proposer une idée")}
+                </Link>
+              </li>
+              <li>
+                <Link
                   href="/support"
                   className="text-[#F0B95B] hover:text-[#FDE68A] font-medium transition-colors"
                 >

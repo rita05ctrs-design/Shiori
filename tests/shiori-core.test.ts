@@ -48,13 +48,20 @@ import {
   sanitizeCtaHref,
   sanitizeSiteConfigInput,
 } from "../src/lib/site-config-utils.ts";
+import {
+  EMPTY_SUGGESTION_META,
+  mergeAndOverlaySuggestions,
+  sanitizeSuggestionInput,
+} from "../src/lib/suggestions-utils.ts";
 import { resolveDonationLink } from "../src/lib/donation.ts";
 import { CONTENT_LANGUAGES, normalizeContentLanguage } from "../src/lib/i18n.ts";
 import {
+  applyLiveEpisodeAdjustment,
   CURATED_CONTINUATION_COUNT,
   detectSourceMediumKind,
   findSourceMangaRelation,
   getCuratedMangaContinuation,
+  resolveLatestAiredEpisode,
   shouldShowMangaContinuation,
 } from "../src/lib/manga-continuation.ts";
 import {
@@ -1690,4 +1697,121 @@ test("admin-grants-utils: overlays granted special badges, honors revocations, a
     "beta_tester",
     "vip",
   ]);
+});
+
+test("manga-continuation: live airing episode sync dynamically advances ongoing anchors and calibrates personal progress", () => {
+  // 1. resolveLatestAiredEpisode rolls forward immediately once nextAiringEpisode.airingAt passes nowMs
+  const beforeAir = resolveLatestAiredEpisode({
+    status: "RELEASING",
+    episodes: 12,
+    nextAiringEpisode: { episode: 8, airingAt: 2000 },
+    nowMs: 1500 * 1000,
+  });
+  assert.equal(beforeAir, 7);
+
+  const afterAir = resolveLatestAiredEpisode({
+    status: "RELEASING",
+    episodes: 12,
+    nextAiringEpisode: { episode: 8, airingAt: 2000 },
+    nowMs: 2100 * 1000,
+  });
+  assert.equal(afterAir, 8);
+
+  // 2. Ongoing anchored series (One Piece #21) dynamically advances chapters when new episodes air
+  const onePiece = getCuratedMangaContinuation(21, "fr");
+  assert.ok(onePiece && onePiece.liveAnchor);
+  const syncedOp = applyLiveEpisodeAdjustment(onePiece, {
+    liveAiredEpisode: 1135,
+    sourceTotalChapters: 1160,
+    sourceTotalVolumes: 114,
+  });
+  assert.equal(syncedOp.liveSynced, true);
+  assert.equal(syncedOp.syncedEpisode, 1135);
+  assert.equal(syncedOp.endedAtChapter, 1100);
+  assert.equal(syncedOp.continueAtChapter, 1101);
+  assert.ok(
+    syncedOp.endedAtVolume !== null &&
+      syncedOp.continueAtVolume !== null &&
+      syncedOp.continueAtVolume - syncedOp.endedAtVolume <= 1,
+    "continue volume must remain consistent with ended volume"
+  );
+  assert.ok(syncedOp.coveredRange?.includes("1135"));
+
+  // 3. Multi-season sequel (Solo Leveling S2 #176496, Ch. 46-110 over 13 eps) calibrates mid-season personal progress accurately
+  const soloS2 = getCuratedMangaContinuation(176496, "fr");
+  assert.ok(soloS2);
+  const personalS2 = applyLiveEpisodeAdjustment(soloS2, {
+    targetEpisode: 7,
+    totalEpisodes: 13,
+    sourceTotalChapters: 200,
+  });
+  assert.equal(personalS2.liveSynced, true);
+  assert.equal(personalS2.syncedEpisode, 7);
+  assert.equal(personalS2.endedAtChapter, 80);
+  assert.equal(personalS2.continueAtChapter, 81);
+});
+
+test("suggestions-utils: validates inputs, blocks unsafe paths, merges sources & overlays Creator statuses", () => {
+  const tooShort = sanitizeSuggestionInput({ message: "court" });
+  assert.equal(tooShort.ok, false);
+
+  const valid = sanitizeSuggestionInput({
+    category: "improvement",
+    title: "   Mode   sombre  AMOLED ",
+    message: "Ajouter un thème noir pur pour les écrans OLED sur téléphone.",
+    device: "mobile",
+    pagePath: "//evil.example.com",
+  });
+  assert.equal(valid.ok, true);
+  if (valid.ok) {
+    assert.equal(valid.category, "improvement");
+    assert.equal(valid.title, "Mode sombre AMOLED");
+    assert.equal(valid.device, "mobile");
+    assert.equal(valid.pagePath, null, "protocol-relative pagePath must be rejected");
+  }
+
+  const s1 = {
+    id: "sug-1",
+    userId: "u1",
+    username: "ren",
+    displayName: "Ren",
+    avatarUrl: null,
+    category: "feature" as const,
+    title: "Export MAL",
+    message: "Pouvoir exporter la liste au format MyAnimeList XML.",
+    device: "desktop" as const,
+    status: "new" as const,
+    createdAt: "2026-02-01T10:00:00.000Z",
+    updatedAt: "2026-02-01T10:00:00.000Z",
+  };
+  const s2 = {
+    ...s1,
+    id: "sug-2",
+    title: "Bug scroll",
+    createdAt: "2026-02-02T10:00:00.000Z",
+    updatedAt: "2026-02-02T10:00:00.000Z",
+  };
+  const s3 = {
+    ...s1,
+    id: "sug-3",
+    title: "Spam",
+    createdAt: "2026-02-03T10:00:00.000Z",
+    updatedAt: "2026-02-03T10:00:00.000Z",
+  };
+
+  const merged = mergeAndOverlaySuggestions([[s1, s3], [s1, s2]], {
+    ...EMPTY_SUGGESTION_META,
+    statusById: {
+      "sug-1": { status: "planned", updatedAt: "2026-02-04T10:00:00.000Z" },
+    },
+    deletedIds: ["sug-3"],
+    updatedAt: "2026-02-04T10:00:00.000Z",
+  });
+
+  assert.deepEqual(
+    merged.map((x) => x.id),
+    ["sug-2", "sug-1"],
+    "deduplicated, deleted removed, sorted newest first"
+  );
+  assert.equal(merged.find((x) => x.id === "sug-1")?.status, "planned");
 });

@@ -112,7 +112,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
       : 12;
 
   return (
-    <div className="pb-16">
+    <div className="w-full min-w-0 overflow-x-clip pb-16">
       {/* Full-Bleed Scroll-Parallax Atmospheric Banner */}
       <ParallaxBanner
         speed={95}
@@ -130,7 +130,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
         <div className="absolute inset-0 bg-gradient-to-r from-obsidian/85 via-transparent to-obsidian/40" />
 
         {/* Smart Back button — preserves caller route & active filters */}
-        <div className="absolute top-20 inset-x-0 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 z-10">
+        <div className="absolute top-[calc(4.5rem+var(--shiori-banner-h,0px))] sm:top-[calc(5rem+var(--shiori-banner-h,0px))] inset-x-0 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 z-10">
           <button
             type="button"
             onClick={handleBack}
@@ -146,7 +146,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 -mt-28 sm:-mt-44 relative z-10 pb-10 md:pb-0">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
           {/* LEFT COLUMN: Poster + Tracker Controls + Metadata */}
-          <div className="lg:col-span-3 space-y-5">
+          <div className="lg:col-span-3 min-w-0 space-y-5">
             {/* Poster — 3D Magnetic Perspective Tilt + Cursor-Tracking Specular Spotlight */}
             <motion.div
               initial={{ opacity: 0, y: 16 }}
@@ -285,7 +285,7 @@ export function MediaDetailClient({ media }: MediaDetailClientProps) {
           </div>
 
           {/* RIGHT COLUMN: Editorial Header, Synopsis, Progress Grid, Characters, Relations, Recs */}
-          <div className="lg:col-span-9 space-y-10 pt-2 lg:pt-20">
+          <div className="lg:col-span-9 min-w-0 space-y-10 pt-2 lg:pt-20">
             {/* Title & Key KPIs */}
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-3">

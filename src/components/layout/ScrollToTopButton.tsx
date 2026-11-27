@@ -45,7 +45,7 @@ export function ScrollToTopButton() {
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           aria-label={t("home.scrollTop")}
           title={t("home.scrollTop")}
-          className="fixed left-4 sm:left-6 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] md:bottom-6 z-[45] w-10 h-10 rounded-full bg-surface-solid/90 hover:bg-accent backdrop-blur-md border border-white/[0.14] hover:border-accent text-[#D6D9E6] hover:text-accent-fg shadow-[0_12px_30px_rgba(0,0,0,0.65)] flex items-center justify-center transition-colors cursor-pointer active:scale-95"
+          className="fixed right-3.5 md:right-auto md:left-6 bottom-[calc(5.15rem+env(safe-area-inset-bottom))] md:bottom-6 z-[45] w-10 h-10 rounded-full bg-surface-solid/90 hover:bg-accent backdrop-blur-md border border-white/[0.14] hover:border-accent text-[#D6D9E6] hover:text-accent-fg shadow-[0_12px_30px_rgba(0,0,0,0.65)] flex items-center justify-center transition-colors cursor-pointer active:scale-95 touch-manipulation"
         >
           <ArrowUp className="w-4 h-4" />
         </motion.button>

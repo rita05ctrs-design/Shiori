@@ -341,6 +341,26 @@ export interface SiteConfig {
   updatedBy?: string | null;
 }
 
+export type SuggestionCategory = "feature" | "improvement" | "bug" | "other";
+export type SuggestionStatus = "new" | "planned" | "done" | "archived";
+
+export interface UserSuggestionRecord {
+  id: string;
+  userId: string | null;
+  username: string | null;
+  displayName: string;
+  avatarUrl: string | null;
+  accentColor?: string | null;
+  category: SuggestionCategory;
+  title: string;
+  message: string;
+  device: "mobile" | "desktop";
+  pagePath?: string | null;
+  status: SuggestionStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UserProfile {
   id: string;
   username: string;

@@ -16,6 +16,7 @@ import {
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
 import { BadgeIcon } from "@/components/badges/BadgeIcon";
+import { SuggestionBoxCard } from "@/components/support/SuggestionBoxCard";
 import { cn } from "@/lib/utils";
 import type { ResolvedDonationLink } from "@/lib/donation";
 
@@ -209,6 +210,9 @@ export function SupportClient({ donation }: SupportClientProps) {
             })}
           </div>
         </section>
+
+        {/* Community Suggestion Box -> Direct to Creator Space */}
+        <SuggestionBoxCard />
 
         {/* Exclusive Supporter Badge Callout */}
         <section className="relative overflow-hidden rounded-3xl border border-[#F0B95B]/40 bg-gradient-to-r from-[#1A140B] via-[#11131D] to-[#0D0F16] p-6 sm:p-8">

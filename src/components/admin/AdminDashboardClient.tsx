@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Flag,
   Heart,
+  Lightbulb,
   Loader2,
   Megaphone,
   MessageSquare,
@@ -24,9 +25,16 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { SITE_CONFIG_UPDATED_EVENT } from "@/components/layout/GlobalAnnouncementBanner";
+import { broadcastSiteConfigLive } from "@/components/layout/GlobalAnnouncementBanner";
+import { AdminSuggestionsTab } from "@/components/admin/AdminSuggestionsTab";
+import {
+  SUGGESTIONS_BROADCAST_NAME,
+  SUGGESTIONS_REALTIME_CHANNEL,
+  SUGGESTIONS_REALTIME_EVENT,
+} from "@/components/support/SuggestionBoxCard";
 import { cn, getDisplayTitle } from "@/lib/utils";
 import type {
   ActivityCommentItem,
@@ -35,8 +43,10 @@ import type {
   MediaItem,
   SiteAnnouncement,
   SiteConfig,
+  SuggestionStatus,
   UnlockedBadgeRecord,
   UserRole,
+  UserSuggestionRecord,
 } from "@/types/media";
 
 interface AdminUserRow {
@@ -68,7 +78,7 @@ interface AdminDashboardClientProps {
   };
 }
 
-type AdminTab = "spotlight" | "moderation" | "users";
+type AdminTab = "spotlight" | "moderation" | "users" | "suggestions";
 
 export function AdminDashboardClient({
   initialConfig,
@@ -135,6 +145,177 @@ export function AdminDashboardClient({
     },
   ]);
   const [mutatingUserKey, setMutatingUserKey] = useState<string | null>(null);
+
+  // --- Tab 4: User Suggestions Inbox State ---
+  const [suggestionsList, setSuggestionsList] = useState<UserSuggestionRecord[]>([]);
+  const [newSuggestionsCount, setNewSuggestionsCount] = useState<number>(0);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [mutatingSuggestionId, setMutatingSuggestionId] = useState<string | null>(null);
+
+  const loadSuggestions = useCallback(
+    async (silent = false) => {
+      if (!silent) setSuggestionsLoading(true);
+      try {
+        const res = await fetch("/api/admin/suggestions", { cache: "no-store" });
+        if (!res.ok) throw new Error(tr("Impossible de charger les suggestions"));
+        const data = await res.json();
+        const items = Array.isArray(data.suggestions)
+          ? (data.suggestions as UserSuggestionRecord[])
+          : [];
+        setSuggestionsList(items);
+        setNewSuggestionsCount(
+          typeof data.newCount === "number"
+            ? data.newCount
+            : items.filter((s) => s.status === "new").length
+        );
+      } catch (err) {
+        if (!silent) {
+          toast({
+            title: tr("Impossible de charger les suggestions"),
+            description: err instanceof Error ? err.message : tr("Échec du chargement."),
+            variant: "warning",
+          });
+        }
+      } finally {
+        if (!silent) setSuggestionsLoading(false);
+      }
+    },
+    [toast, tr]
+  );
+
+  const handleUpdateSuggestionStatus = async (
+    id: string,
+    status: SuggestionStatus
+  ) => {
+    setMutatingSuggestionId(id);
+    try {
+      const res = await fetch("/api/admin/suggestions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || tr("Impossible de modifier la suggestion."));
+      if (Array.isArray(data.suggestions)) {
+        setSuggestionsList(data.suggestions);
+        setNewSuggestionsCount(
+          typeof data.newCount === "number"
+            ? data.newCount
+            : data.suggestions.filter((s: UserSuggestionRecord) => s.status === "new").length
+        );
+      }
+      toast({
+        title: tr("Statut mis à jour"),
+        variant: "success",
+      });
+    } catch (err) {
+      toast({
+        title: tr("Impossible de modifier la suggestion."),
+        description: err instanceof Error ? err.message : tr("Échec de la mise à jour."),
+        variant: "warning",
+      });
+    } finally {
+      setMutatingSuggestionId(null);
+    }
+  };
+
+  const handleDeleteSuggestion = async (id: string) => {
+    setMutatingSuggestionId(id);
+    try {
+      const res = await fetch("/api/admin/suggestions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || tr("Suppression impossible."));
+      if (Array.isArray(data.suggestions)) {
+        setSuggestionsList(data.suggestions);
+        setNewSuggestionsCount(
+          typeof data.newCount === "number"
+            ? data.newCount
+            : data.suggestions.filter((s: UserSuggestionRecord) => s.status === "new").length
+        );
+      }
+      toast({
+        title: tr("Suggestion supprimée"),
+        variant: "success",
+      });
+    } catch (err) {
+      toast({
+        title: tr("Suppression impossible"),
+        description: err instanceof Error ? err.message : tr("Échec de la suppression."),
+        variant: "warning",
+      });
+    } finally {
+      setMutatingSuggestionId(null);
+    }
+  };
+
+  // Load initial unread suggestions badge + subscribe to real-time incoming suggestions
+  useEffect(() => {
+    void loadSuggestions(true);
+
+    const handleIncoming = (incoming?: UserSuggestionRecord) => {
+      if (incoming && incoming.id) {
+        setSuggestionsList((prev) => {
+          if (prev.some((x) => x.id === incoming.id)) return prev;
+          const next = [incoming, ...prev];
+          setNewSuggestionsCount(next.filter((s) => s.status === "new").length);
+          return next;
+        });
+        toast({
+          title: tr("Nouvelle suggestion reçue"),
+          description: incoming.title || incoming.message.slice(0, 80),
+          variant: "info",
+        });
+      } else {
+        void loadSuggestions(true);
+      }
+    };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel(SUGGESTIONS_BROADCAST_NAME);
+        bc.onmessage = (event: MessageEvent) => {
+          const payload = event.data as { suggestion?: UserSuggestionRecord } | undefined;
+          handleIncoming(payload?.suggestion);
+        };
+      }
+    } catch {
+      // ignore
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ? supabase
+          .channel(SUGGESTIONS_REALTIME_CHANNEL)
+          .on("broadcast", { event: SUGGESTIONS_REALTIME_EVENT }, (msg) => {
+            const payload = msg?.payload as { suggestion?: UserSuggestionRecord } | undefined;
+            handleIncoming(payload?.suggestion);
+          })
+          .subscribe()
+      : null;
+
+    const pollTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadSuggestions(true);
+      }
+    }, 20_000);
+
+    return () => {
+      window.clearInterval(pollTimer);
+      try {
+        bc?.close();
+      } catch {
+        // ignore
+      }
+      if (supabase && channel) {
+        void supabase.removeChannel(channel);
+      }
+    };
+  }, [loadSuggestions, toast, tr]);
 
   const loadModeration = useCallback(async () => {
     setModLoading(true);
@@ -224,14 +405,27 @@ export function AdminDashboardClient({
     return () => clearTimeout(timer);
   }, [userQuery, activeTab, loadUsers]);
 
-  const handleSaveSiteConfig = async () => {
+  const handleSaveSiteConfig = async (
+    overrideAnnouncement?: SiteAnnouncement,
+    mode: "full" | "publish_announcement" | "hide_announcement" = "full"
+  ) => {
+    const targetAnnouncement = overrideAnnouncement ?? announcement;
+    if (mode === "publish_announcement" && !targetAnnouncement.message.trim()) {
+      toast({
+        title: tr("Message requis"),
+        description: tr("Écrivez un message d'annonce avant de diffuser."),
+        variant: "warning",
+      });
+      return;
+    }
+
     setSavingConfig(true);
     try {
       const res = await fetch("/api/admin/site-config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          announcement,
+          announcement: targetAnnouncement,
           featuredHero: {
             enabled: heroEnabled && Boolean(heroMediaId),
             mediaId: heroMediaId,
@@ -249,15 +443,21 @@ export function AdminDashboardClient({
         setHeroMediaId(data.config.featuredHero.mediaId);
         setHeroMedia(data.config.featuredHero.media ?? null);
         setHeroTagline(data.config.featuredHero.customTagline ?? "");
-        window.dispatchEvent(
-          new CustomEvent<SiteConfig>(SITE_CONFIG_UPDATED_EVENT, {
-            detail: data.config,
-          })
-        );
+        broadcastSiteConfigLive(data.config as SiteConfig);
       }
       toast({
-        title: tr("Configuration enregistrée"),
-        description: tr("Le Hero « Sélection Shiori » et la bannière globale sont à jour."),
+        title:
+          mode === "publish_announcement"
+            ? tr("Annonce diffusée en temps réel")
+            : mode === "hide_announcement"
+              ? tr("Annonce retirée")
+              : tr("Configuration enregistrée"),
+        description:
+          mode === "publish_announcement"
+            ? tr("Visible immédiatement par tous les visiteurs connectés.")
+            : mode === "hide_announcement"
+              ? tr("La bannière a été masquée en temps réel.")
+              : tr("Le Hero « Sélection Shiori » et la bannière globale sont à jour."),
         variant: "success",
       });
     } catch (err) {
@@ -460,9 +660,15 @@ export function AdminDashboardClient({
           <div className="relative mt-6 flex flex-wrap gap-2">
             {(
               [
-                { id: "spotlight", label: tr("Hero & Annonce globale"), icon: Sparkles },
-                { id: "moderation", label: tr("Modération communauté"), icon: Shield },
-                { id: "users", label: tr("Utilisateurs & Badges"), icon: Users },
+                { id: "spotlight", label: tr("Hero & Annonce globale"), icon: Sparkles, badge: 0 },
+                { id: "moderation", label: tr("Modération communauté"), icon: Shield, badge: 0 },
+                { id: "users", label: tr("Utilisateurs & Badges"), icon: Users, badge: 0 },
+                {
+                  id: "suggestions",
+                  label: tr("Suggestions"),
+                  icon: Lightbulb,
+                  badge: newSuggestionsCount,
+                },
               ] as const
             ).map((tab) => {
               const Icon = tab.icon;
@@ -471,7 +677,12 @@ export function AdminDashboardClient({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    if (tab.id === "suggestions") {
+                      void loadSuggestions(true);
+                    }
+                  }}
                   className={cn(
                     "inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer border",
                     active
@@ -481,6 +692,11 @@ export function AdminDashboardClient({
                 >
                   <Icon className="w-4 h-4" />
                   <span>{tab.label}</span>
+                  {tab.badge > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-[#F0B95B] text-[#07080C] text-[10px] font-bold leading-none shadow-[0_0_12px_rgba(240,185,91,0.55)]">
+                      {tab.badge > 99 ? "99+" : tab.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -707,9 +923,17 @@ export function AdminDashboardClient({
                   rows={2}
                   maxLength={220}
                   value={announcement.message}
-                  onChange={(e) =>
-                    setAnnouncement((prev) => ({ ...prev, message: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    const nextMessage = e.target.value;
+                    setAnnouncement((prev) => ({
+                      ...prev,
+                      message: nextMessage,
+                      enabled:
+                        !prev.message.trim() && nextMessage.trim().length > 0
+                          ? true
+                          : prev.enabled,
+                    }));
+                  }}
                   placeholder={tr("Ex. Nouvelle mise à jour Shiori : guide de reprise Manga & espace Soutien !")}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#07080C] border border-white/[0.1] focus:border-[#F0B95B]/60 focus:outline-none text-base sm:text-sm text-white placeholder:text-[#666B7D] resize-none"
                 />
@@ -751,9 +975,17 @@ export function AdminDashboardClient({
               {/* Live Preview */}
               {announcement.message.trim() && (
                 <div className="rounded-xl border border-white/[0.1] p-3 bg-[#07080C] space-y-1.5">
-                  <p className="text-[10px] font-mono uppercase tracking-wider text-[#7C8194]">
-                    {tr("Aperçu en direct")}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-[#7C8194]">
+                      {tr("Aperçu en direct")}
+                    </p>
+                    {announcement.enabled && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>{tr("En direct sur le site")}</span>
+                      </span>
+                    )}
+                  </div>
                   <div
                     className={cn(
                       "rounded-lg px-3 py-2 border text-xs flex flex-wrap items-center gap-2",
@@ -773,6 +1005,45 @@ export function AdminDashboardClient({
                   </div>
                 </div>
               )}
+
+              {/* 1-Click Instant Real-Time Broadcast Actions */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={savingConfig || !announcement.message.trim()}
+                  onClick={() =>
+                    void handleSaveSiteConfig(
+                      { ...announcement, enabled: true },
+                      "publish_announcement"
+                    )
+                  }
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#E5484D] to-[#C9363B] hover:brightness-110 disabled:opacity-45 text-white font-semibold text-xs shadow-[0_8px_24px_-6px_rgba(229,72,77,0.5)] transition-all cursor-pointer"
+                >
+                  {savingConfig ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Megaphone className="w-3.5 h-3.5" />
+                  )}
+                  <span>{tr("Diffuser en direct")}</span>
+                </button>
+
+                {announcement.enabled && (
+                  <button
+                    type="button"
+                    disabled={savingConfig}
+                    onClick={() =>
+                      void handleSaveSiteConfig(
+                        { ...announcement, enabled: false },
+                        "hide_announcement"
+                      )
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.11] border border-white/[0.1] text-xs font-semibold text-[#CFD3E0] hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>{tr("Retirer l'annonce")}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Save Bar */}
@@ -780,7 +1051,7 @@ export function AdminDashboardClient({
               <button
                 type="button"
                 disabled={savingConfig}
-                onClick={handleSaveSiteConfig}
+                onClick={() => void handleSaveSiteConfig()}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#F0B95B] to-[#D99B38] hover:brightness-110 text-[#07080C] font-bold text-sm shadow-[0_12px_32px_-8px_rgba(240,185,91,0.55)] transition-all disabled:opacity-60 cursor-pointer"
               >
                 {savingConfig ? (
@@ -1233,6 +1504,18 @@ export function AdminDashboardClient({
               </div>
             )}
           </section>
+        )}
+
+        {/* TAB 4: USER SUGGESTIONS INBOX */}
+        {activeTab === "suggestions" && (
+          <AdminSuggestionsTab
+            suggestions={suggestionsList}
+            loading={suggestionsLoading}
+            mutatingId={mutatingSuggestionId}
+            onRefresh={() => void loadSuggestions()}
+            onUpdateStatus={(id, status) => void handleUpdateSuggestionStatus(id, status)}
+            onDelete={(id) => void handleDeleteSuggestion(id)}
+          />
         )}
       </div>
     </div>

@@ -16,7 +16,7 @@ export async function GET() {
   const guard = await requireCreatorActor();
   if (!guard.ok) return guard.response;
 
-  const config = await getSiteConfig();
+  const config = await getSiteConfig({ bypassCache: true });
   return NextResponse.json({ config });
 }
 
@@ -29,7 +29,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Payload JSON invalide." }, { status: 400 });
   }
 
-  const current = await getSiteConfig();
+  const current = await getSiteConfig({ bypassCache: true });
   let resolvedMedia: MediaItem | null | undefined = undefined;
 
   if (body.featuredHero && typeof body.featuredHero === "object") {
