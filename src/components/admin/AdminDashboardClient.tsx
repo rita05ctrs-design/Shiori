@@ -25,16 +25,15 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { broadcastSiteConfigLive } from "@/components/layout/GlobalAnnouncementBanner";
 import { AdminSuggestionsTab } from "@/components/admin/AdminSuggestionsTab";
 import {
-  SUGGESTIONS_BROADCAST_NAME,
-  SUGGESTIONS_REALTIME_CHANNEL,
-  SUGGESTIONS_REALTIME_EVENT,
-} from "@/components/support/SuggestionBoxCard";
+  applyServerSuggestions,
+  markSuggestionDeletedInBus,
+  useCreatorSuggestionsState,
+} from "@/lib/suggestions-live-bus";
 import { cn, getDisplayTitle } from "@/lib/utils";
 import type {
   ActivityCommentItem,
@@ -71,6 +70,8 @@ interface GrantableBadgeMeta {
 
 interface AdminDashboardClientProps {
   initialConfig: SiteConfig;
+  initialTab?: AdminTab;
+  initialSuggestions?: UserSuggestionRecord[];
   creator: {
     id: string;
     username: string;
@@ -82,11 +83,18 @@ type AdminTab = "spotlight" | "moderation" | "users" | "suggestions";
 
 export function AdminDashboardClient({
   initialConfig,
+  initialTab = "spotlight",
+  initialSuggestions = [],
   creator,
 }: AdminDashboardClientProps) {
   const { toast } = useShiori();
   const { t, tr, tRelativeTime } = useTranslation();
-  const [activeTab, setActiveTab] = useState<AdminTab>("spotlight");
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab);
+
+  // Keep active tab synced when navigating to /admin?tab=suggestions (e.g. from live toast)
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // --- Tab 1: Hero & Global Banner State ---
   const [announcement, setAnnouncement] = useState<SiteAnnouncement>(
@@ -146,11 +154,28 @@ export function AdminDashboardClient({
   ]);
   const [mutatingUserKey, setMutatingUserKey] = useState<string | null>(null);
 
-  // --- Tab 4: User Suggestions Inbox State ---
-  const [suggestionsList, setSuggestionsList] = useState<UserSuggestionRecord[]>([]);
-  const [newSuggestionsCount, setNewSuggestionsCount] = useState<number>(0);
+  // --- Tab 4: User Suggestions Inbox State (backed by global real-time bus) ---
+  const {
+    suggestions: liveSuggestions,
+    newCount: liveNewSuggestionsCount,
+    liveConnected: suggestionsLiveConnected,
+    initialized: suggestionsBusInitialized,
+  } = useCreatorSuggestionsState();
+  const suggestionsList = suggestionsBusInitialized
+    ? liveSuggestions
+    : initialSuggestions;
+  const newSuggestionsCount = suggestionsBusInitialized
+    ? liveNewSuggestionsCount
+    : initialSuggestions.filter((s) => s.status === "new").length;
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [mutatingSuggestionId, setMutatingSuggestionId] = useState<string | null>(null);
+
+  // Seed shared live bus with SSR initial suggestions on mount so first paint is instant
+  useEffect(() => {
+    if (initialSuggestions.length > 0 && !suggestionsBusInitialized) {
+      applyServerSuggestions(initialSuggestions);
+    }
+  }, [initialSuggestions, suggestionsBusInitialized]);
 
   const loadSuggestions = useCallback(
     async (silent = false) => {
@@ -162,12 +187,7 @@ export function AdminDashboardClient({
         const items = Array.isArray(data.suggestions)
           ? (data.suggestions as UserSuggestionRecord[])
           : [];
-        setSuggestionsList(items);
-        setNewSuggestionsCount(
-          typeof data.newCount === "number"
-            ? data.newCount
-            : items.filter((s) => s.status === "new").length
-        );
+        applyServerSuggestions(items);
       } catch (err) {
         if (!silent) {
           toast({
@@ -197,12 +217,7 @@ export function AdminDashboardClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || tr("Impossible de modifier la suggestion."));
       if (Array.isArray(data.suggestions)) {
-        setSuggestionsList(data.suggestions);
-        setNewSuggestionsCount(
-          typeof data.newCount === "number"
-            ? data.newCount
-            : data.suggestions.filter((s: UserSuggestionRecord) => s.status === "new").length
-        );
+        applyServerSuggestions(data.suggestions as UserSuggestionRecord[]);
       }
       toast({
         title: tr("Statut mis à jour"),
@@ -229,13 +244,9 @@ export function AdminDashboardClient({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || tr("Suppression impossible."));
+      markSuggestionDeletedInBus(id);
       if (Array.isArray(data.suggestions)) {
-        setSuggestionsList(data.suggestions);
-        setNewSuggestionsCount(
-          typeof data.newCount === "number"
-            ? data.newCount
-            : data.suggestions.filter((s: UserSuggestionRecord) => s.status === "new").length
-        );
+        applyServerSuggestions(data.suggestions as UserSuggestionRecord[]);
       }
       toast({
         title: tr("Suggestion supprimée"),
@@ -252,70 +263,12 @@ export function AdminDashboardClient({
     }
   };
 
-  // Load initial unread suggestions badge + subscribe to real-time incoming suggestions
+  // Refresh suggestions whenever the Creator switches to the Suggestions tab
   useEffect(() => {
-    void loadSuggestions(true);
-
-    const handleIncoming = (incoming?: UserSuggestionRecord) => {
-      if (incoming && incoming.id) {
-        setSuggestionsList((prev) => {
-          if (prev.some((x) => x.id === incoming.id)) return prev;
-          const next = [incoming, ...prev];
-          setNewSuggestionsCount(next.filter((s) => s.status === "new").length);
-          return next;
-        });
-        toast({
-          title: tr("Nouvelle suggestion reçue"),
-          description: incoming.title || incoming.message.slice(0, 80),
-          variant: "info",
-        });
-      } else {
-        void loadSuggestions(true);
-      }
-    };
-
-    let bc: BroadcastChannel | null = null;
-    try {
-      if (typeof BroadcastChannel !== "undefined") {
-        bc = new BroadcastChannel(SUGGESTIONS_BROADCAST_NAME);
-        bc.onmessage = (event: MessageEvent) => {
-          const payload = event.data as { suggestion?: UserSuggestionRecord } | undefined;
-          handleIncoming(payload?.suggestion);
-        };
-      }
-    } catch {
-      // ignore
+    if (activeTab === "suggestions") {
+      void loadSuggestions(true);
     }
-
-    const supabase = getSupabaseBrowserClient();
-    const channel = supabase
-      ? supabase
-          .channel(SUGGESTIONS_REALTIME_CHANNEL)
-          .on("broadcast", { event: SUGGESTIONS_REALTIME_EVENT }, (msg) => {
-            const payload = msg?.payload as { suggestion?: UserSuggestionRecord } | undefined;
-            handleIncoming(payload?.suggestion);
-          })
-          .subscribe()
-      : null;
-
-    const pollTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void loadSuggestions(true);
-      }
-    }, 20_000);
-
-    return () => {
-      window.clearInterval(pollTimer);
-      try {
-        bc?.close();
-      } catch {
-        // ignore
-      }
-      if (supabase && channel) {
-        void supabase.removeChannel(channel);
-      }
-    };
-  }, [loadSuggestions, toast, tr]);
+  }, [activeTab, loadSuggestions]);
 
   const loadModeration = useCallback(async () => {
     setModLoading(true);
@@ -1512,6 +1465,7 @@ export function AdminDashboardClient({
             suggestions={suggestionsList}
             loading={suggestionsLoading}
             mutatingId={mutatingSuggestionId}
+            liveConnected={suggestionsLiveConnected}
             onRefresh={() => void loadSuggestions()}
             onUpdateStatus={(id, status) => void handleUpdateSuggestionStatus(id, status)}
             onDelete={(id) => void handleDeleteSuggestion(id)}

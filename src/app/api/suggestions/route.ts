@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getClientIp, rateLimitResponse } from "@/lib/server/rate-limit";
+import { broadcastRealtimeEvent } from "@/lib/server/realtime-broadcast";
 import {
   isAuthenticatedActor,
   resolveServerActor,
@@ -9,6 +10,9 @@ import { sanitizeSuggestionInput } from "@/lib/suggestions-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const SUGGESTIONS_REALTIME_TOPIC = "shiori:creator-suggestions";
+const SUGGESTIONS_REALTIME_EVENT = "suggestion_created";
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request);
@@ -58,11 +62,19 @@ export async function POST(request: NextRequest) {
     pagePath: validated.pagePath,
   });
 
+  // Push instantly from server -> Supabase Realtime -> every connected Creator tab/device worldwide
+  const broadcasted = await broadcastRealtimeEvent(
+    SUGGESTIONS_REALTIME_TOPIC,
+    SUGGESTIONS_REALTIME_EVENT,
+    { suggestion: result.suggestion }
+  );
+
   return NextResponse.json(
     {
       ok: true,
       suggestion: result.suggestion,
       persistedToCloud: result.persistedToCloud,
+      broadcasted,
     },
     { status: 201 }
   );

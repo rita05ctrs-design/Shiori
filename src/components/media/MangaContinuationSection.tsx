@@ -90,7 +90,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
     return curated;
   }, [curated, initialAiredEp, media.episodes, media.nextAiringEpisode, sourceRelation]);
 
-  const cacheKey = `v2:${media.id}:${lang}:ep${isReleasing ? (initialAiredEp ?? "live") : "done"}`;
+  const cacheKey = `v3:${media.id}:${lang}:ep${isReleasing ? (initialAiredEp ?? "live") : "done"}`;
   const [resolvedInfo, setResolvedInfo] = useState<MangaContinuationInfo | null>(() => {
     if (!eligible) return null;
     if (optimisticCurated) return optimisticCurated;
@@ -152,11 +152,13 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
             mediaId: media.id,
             title: getDisplayTitle(media),
             romajiTitle: media.title.romaji,
+            format: media.format,
             sourceType: media.source,
             sourceMediaId: sourceRelation?.id ?? null,
             sourceTitle: sourceRelation?.title ?? null,
             sourceCountry: sourceRelation?.countryOfOrigin ?? null,
             sourceFormat: sourceRelation?.format ?? null,
+            sourceStatus: sourceRelation?.status ?? null,
             sourceChapters: sourceRelation?.chapters ?? null,
             sourceVolumes: sourceRelation?.volumes ?? null,
             episodes: media.episodes,
@@ -174,7 +176,7 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
           const info = json.data as MangaContinuationInfo;
           setResolvedInfo(info);
           if (info.confidence !== "low") {
-            const liveKey = `v2:${media.id}:${lang}:ep${
+            const liveKey = `v3:${media.id}:${lang}:ep${
               isReleasing ? (info.syncedEpisode ?? initialAiredEp ?? "live") : "done"
             }`;
             mangaContinuationCache.set(
@@ -386,7 +388,11 @@ export function MangaContinuationSection({ media }: MangaContinuationSectionProp
             ) : activeInfo?.verified ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/14 border border-emerald-400/35 text-[10px] font-mono font-semibold text-emerald-300">
                 <CheckCircle2 className="w-3 h-3" />
-                <span>{t("detail.verifiedBadge")}</span>
+                <span>
+                  {activeInfo.dataSource === "mangaupdates"
+                    ? `${t("detail.verifiedBadge")} · MangaUpdates`
+                    : t("detail.verifiedBadge")}
+                </span>
               </span>
             ) : activeInfo && hasBreakpoint ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.12] text-[10px] font-mono text-[#C8CCE0]">

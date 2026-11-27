@@ -13,13 +13,20 @@ import {
 } from "lucide-react";
 import { useShiori } from "@/context/ShioriContext";
 import { useTranslation } from "@/hooks/useTranslation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  notifyLocalSuggestionCreated,
+  SUGGESTIONS_BROADCAST_NAME,
+  SUGGESTIONS_REALTIME_CHANNEL,
+  SUGGESTIONS_REALTIME_EVENT,
+} from "@/lib/suggestions-live-bus";
 import { cn } from "@/lib/utils";
 import type { SuggestionCategory, UserSuggestionRecord } from "@/types/media";
 
-export const SUGGESTIONS_REALTIME_CHANNEL = "shiori:creator-suggestions";
-export const SUGGESTIONS_REALTIME_EVENT = "suggestion_created";
-export const SUGGESTIONS_BROADCAST_NAME = "shiori_suggestions_v1";
+export {
+  SUGGESTIONS_BROADCAST_NAME,
+  SUGGESTIONS_REALTIME_CHANNEL,
+  SUGGESTIONS_REALTIME_EVENT,
+};
 
 const CATEGORIES: {
   id: SuggestionCategory;
@@ -54,41 +61,7 @@ const CATEGORIES: {
 ];
 
 function broadcastNewSuggestion(suggestion: UserSuggestionRecord): void {
-  if (typeof window === "undefined") return;
-
-  try {
-    if (typeof BroadcastChannel !== "undefined") {
-      const bc = new BroadcastChannel(SUGGESTIONS_BROADCAST_NAME);
-      bc.postMessage({ type: SUGGESTIONS_REALTIME_EVENT, suggestion });
-      bc.close();
-    }
-  } catch {
-    // ignore
-  }
-
-  try {
-    const supabase = getSupabaseBrowserClient();
-    if (supabase) {
-      const channel = supabase.channel(SUGGESTIONS_REALTIME_CHANNEL);
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          void channel
-            .send({
-              type: "broadcast",
-              event: SUGGESTIONS_REALTIME_EVENT,
-              payload: { suggestion },
-            })
-            .finally(() => {
-              window.setTimeout(() => {
-                void supabase.removeChannel(channel);
-              }, 1200);
-            });
-        }
-      });
-    }
-  } catch {
-    // non-fatal
-  }
+  notifyLocalSuggestionCreated(suggestion);
 }
 
 export function SuggestionBoxCard() {

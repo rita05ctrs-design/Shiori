@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireCreatorActor } from "@/lib/server/admin-auth";
 import {
+  ingestSuggestionAsCreator,
   listAllSuggestions,
   mutateSuggestionAsCreator,
 } from "@/lib/server/suggestions-store";
@@ -19,6 +20,32 @@ export async function GET() {
     { suggestions, newCount },
     { headers: { "Cache-Control": "no-store" } }
   );
+}
+
+/**
+ * Creator-only cloud archival for suggestions received live via Realtime Broadcast
+ * (guarantees even anonymous guest suggestions persist across reloads without service_role).
+ */
+export async function POST(request: NextRequest) {
+  const guard = await requireCreatorActor();
+  if (!guard.ok) return guard.response;
+
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || !("suggestion" in body)) {
+    return NextResponse.json({ error: "Suggestion requise." }, { status: 400 });
+  }
+
+  const res = await ingestSuggestionAsCreator({
+    creatorUserId: guard.actor.id,
+    rawSuggestion: (body as Record<string, unknown>).suggestion,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    suggestions: res.suggestions,
+    newCount: res.newCount,
+    persistedToCloud: res.persistedToCloud,
+  });
 }
 
 export async function PATCH(request: NextRequest) {

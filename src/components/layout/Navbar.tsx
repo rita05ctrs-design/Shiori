@@ -36,8 +36,10 @@ import { ThemeQuickPopover } from "@/components/layout/ThemeQuickPopover";
 import { LanguageQuickPopover } from "@/components/layout/LanguageQuickPopover";
 import { QuickEpisodesPopover } from "@/components/episodes/QuickEpisodesPopover";
 import { GlobalAnnouncementBanner } from "@/components/layout/GlobalAnnouncementBanner";
+import { CreatorSuggestionsWatcher } from "@/components/admin/CreatorSuggestionsWatcher";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { useCreatorSuggestionsState } from "@/lib/suggestions-live-bus";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: {
@@ -237,9 +239,11 @@ export function Navbar() {
   }, []);
 
   const watchingCount = library.filter((e) => e.status === "WATCHING").length;
+  const { newCount: newSuggestionsCount } = useCreatorSuggestionsState();
 
   return (
     <>
+      {isCreator && <CreatorSuggestionsWatcher />}
       <header
         className={cn(
           "fixed top-0 inset-x-0 z-50 transition-all duration-300 pt-[env(safe-area-inset-top)]",
@@ -415,7 +419,7 @@ export function Navbar() {
                 aria-label={tr("Menu profil et paramètres")}
                 aria-expanded={profileMenuOpen}
                 className={cn(
-                  "flex items-center gap-2 h-8.5 sm:h-9 px-1 sm:px-1.5 xl:pr-2.5 rounded-full transition-[transform,background-color,border-color] duration-200 hover:-translate-y-0.5 active:scale-95 cursor-pointer border",
+                  "relative flex items-center gap-2 h-8.5 sm:h-9 px-1 sm:px-1.5 xl:pr-2.5 rounded-full transition-[transform,background-color,border-color] duration-200 hover:-translate-y-0.5 active:scale-95 cursor-pointer border",
                   isCreator
                     ? "bg-[#F0B95B]/10 hover:bg-[#F0B95B]/18 border-[#F0B95B]/45 hover:border-[#F0B95B]/70"
                     : "bg-white/[0.045] hover:bg-white/[0.09] border-white/[0.08] hover:border-white/[0.18]"
@@ -437,6 +441,14 @@ export function Navbar() {
                   size="xs"
                   className="hidden xl:inline-flex"
                 />
+                {isCreator && newSuggestionsCount > 0 && (
+                  <span
+                    title={tr("Nouvelles suggestions")}
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#F0B95B] text-[#07080C] text-[10px] font-bold leading-none flex items-center justify-center shadow-[0_0_12px_rgba(240,185,91,0.7)] ring-2 ring-[#07080C]"
+                  >
+                    {newSuggestionsCount > 99 ? "99+" : newSuggestionsCount}
+                  </span>
+                )}
               </button>
 
               <AnimatePresence>
@@ -489,12 +501,18 @@ export function Navbar() {
                     <div className="p-2 space-y-0.5">
                       {isCreator && (
                         <Link
-                          href="/admin"
+                          href={newSuggestionsCount > 0 ? "/admin?tab=suggestions" : "/admin"}
                           onClick={() => setProfileMenuOpen(false)}
                           className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-semibold text-[#FDE68A] bg-[#F0B95B]/14 hover:bg-[#F0B95B]/22 border border-[#F0B95B]/40 transition-colors mb-1"
                         >
                           <Crown className="w-4 h-4 text-[#F0B95B]" />
                           <span>{tr("Espace Créateur")}</span>
+                          {newSuggestionsCount > 0 && (
+                            <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#F0B95B] text-[#07080C] text-[10px] font-bold leading-none">
+                              <Lightbulb className="w-2.5 h-2.5" />
+                              <span>{newSuggestionsCount > 99 ? "99+" : newSuggestionsCount}</span>
+                            </span>
+                          )}
                         </Link>
                       )}
                       <Link

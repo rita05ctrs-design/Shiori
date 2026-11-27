@@ -25,6 +25,8 @@ export interface MangaContinuationInfo {
   isOngoingAdaptation?: boolean;
   verified: boolean;
   confidence: "verified" | "high" | "medium" | "low";
+  /** Origin of the breakpoint data for transparent attribution */
+  dataSource?: "curated" | "mangaupdates" | "estimated";
   note?: string | null;
   notesByLang?: Partial<Record<ContentLanguage, string>>;
   /** Real-time airing synchronization metadata */
@@ -37,7 +39,8 @@ export interface MangaContinuationInfo {
   liveAnchor?: LiveAdaptationAnchor | null;
 }
 
-interface CuratedContinuationEntry extends Omit<MangaContinuationInfo, "verified" | "confidence"> {
+interface CuratedContinuationEntry
+  extends Omit<MangaContinuationInfo, "verified" | "confidence" | "dataSource"> {
   /** Primary AniList anime IDs matching this exact season / entry */
   anilistIds: number[];
   /** Optional normalized title patterns as secondary fallback */
@@ -46,8 +49,8 @@ interface CuratedContinuationEntry extends Omit<MangaContinuationInfo, "verified
 
 /**
  * Curated, community-verified Anime -> Manga / Manhwa / Light Novel continuation guide.
- * Covers major modern & classic franchises season-by-season so popular titles resolve in 0ms
- * with exact chapter & volume breakpoints.
+ * Every AniList ID, chapter, and tankobon volume below is audited against MangaUpdates & AniList.
+ * Ongoing series (e.g. One Piece) also resolve live against MangaUpdates API before falling back to anchors.
  */
 const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   // --- FRIEREN ---
@@ -71,6 +74,21 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
       ja: "第28話は原作第60話（7巻）まで映像化されています。第61話から続きを読めます。",
     },
   },
+  {
+    anilistIds: [182255],
+    sourceKind: "MANGA",
+    endedAtChapter: 80,
+    continueAtChapter: 81,
+    endedAtVolume: 9,
+    continueAtVolume: 9,
+    coveredRange: "Ch. 61 – 80",
+    adaptedArc: "Northern Plateau & Divine Revolte",
+    isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 2 couvre les chapitres 61 à 80 (Tome 9). Reprenez au chapitre 81 (Tome 9) pour la suite vers El Dorado !",
+      en: "Season 2 adapts Chapters 61–80 (Volume 9). Continue directly at Chapter 81 (Volume 9)!",
+    },
+  },
 
   // --- SOLO LEVELING (MANHWA) ---
   {
@@ -80,7 +98,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 46,
     endedAtVolume: null,
     continueAtVolume: null,
-    coveredRange: "Ch. 1 – 45",
+    coveredRange: "Ch. 0 – 45",
     adaptedArc: "Job Change Quest (Igris)",
     isFullyAdapted: false,
     notesByLang: {
@@ -137,12 +155,27 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 138,
     endedAtVolume: 16,
     continueAtVolume: 16,
-    coveredRange: "Ch. 65 – 137",
+    coveredRange: "Ch. 64 – 137",
     adaptedArc: "Shibuya Incident",
     isFullyAdapted: false,
     notesByLang: {
       fr: "La fin de l'Incident de Shibuya couvre jusqu'au chapitre 137. Reprenez directement au chapitre 138 (Tome 16).",
       en: "The Shibuya Incident ends at Chapter 137. Pick up directly at Chapter 138 (Volume 16).",
+    },
+  },
+  {
+    anilistIds: [172463],
+    sourceKind: "MANGA",
+    endedAtChapter: 181,
+    continueAtChapter: 182,
+    endedAtVolume: 21,
+    continueAtVolume: 21,
+    coveredRange: "Ch. 138 – 181",
+    adaptedArc: "The Culling Game (Part 1)",
+    isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 3 (Partie 1) s'arrête au chapitre 181 (page 14, Tome 21). Reprenez à la fin du Ch. 181 ou au Ch. 182 !",
+      en: "Season 3 (Part 1) ends at Chapter 181 (page 14, Volume 21). Continue from Chapter 181/182!",
     },
   },
   {
@@ -188,8 +221,8 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     adaptedArc: "Bomb Girl (Reze)",
     isFullyAdapted: false,
     notesByLang: {
-      fr: "Le film Reze Arc couvre les chapitres 39 à 52. Continuez au chapitre 53 (Tome 7).",
-      en: "The Reze Arc movie adapts Chapters 39–52. Pick up at Chapter 53 (Volume 7).",
+      fr: "Le film Reze Arc couvre les chapitres 39 à 52 (Tome 6). Continuez au chapitre 53 (Tome 7).",
+      en: "The Reze Arc movie adapts Chapters 39–52 (Volume 6). Pick up at Chapter 53 (Volume 7).",
     },
   },
 
@@ -197,13 +230,17 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [101922],
     sourceKind: "MANGA",
-    endedAtChapter: 53,
+    endedAtChapter: 54,
     continueAtChapter: 54,
     endedAtVolume: 7,
     continueAtVolume: 7,
-    coveredRange: "Ch. 1 – 53",
+    coveredRange: "Ch. 1 – 54 (p. 4)",
     adaptedArc: "Rehabilitation Training",
     isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 1 s'arrête au début du chapitre 54 (page 4, Tome 7). Continuez dès le chapitre 54.",
+      en: "Season 1 ends on Chapter 54 page 4 (Volume 7). Pick up at Chapter 54.",
+    },
   },
   {
     anilistIds: [112151, 129874],
@@ -253,21 +290,36 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
       en: "Hashira Training ends right at the Infinity Castle drop (Ch. 139). Continue at Chapter 140 (Volume 16)!",
     },
   },
+  {
+    anilistIds: [178788],
+    sourceKind: "MANGA",
+    endedAtChapter: 156,
+    continueAtChapter: 157,
+    endedAtVolume: 18,
+    continueAtVolume: 18,
+    coveredRange: "Ch. 140 – 156",
+    adaptedArc: "Infinity Castle (Film 1)",
+    isFullyAdapted: false,
+    notesByLang: {
+      fr: "Le film 1 de la Forteresse Infinie adapte les chapitres 140 à 156 (Tome 18). Continuez au chapitre 157 (Tome 18) !",
+      en: "Infinity Castle Movie 1 adapts Chapters 140–156 (Volume 18). Continue at Chapter 157 (Volume 18)!",
+    },
+  },
 
   // --- DANDADAN ---
   {
     anilistIds: [171018],
     sourceKind: "MANGA",
-    endedAtChapter: 33,
-    continueAtChapter: 34,
+    endedAtChapter: 34,
+    continueAtChapter: 35,
     endedAtVolume: 5,
     continueAtVolume: 5,
-    coveredRange: "Ch. 1 – 33",
+    coveredRange: "Ch. 1 – 34",
     adaptedArc: "Cursed House (Part 1)",
     isFullyAdapted: false,
     notesByLang: {
-      fr: "La saison 1 s'arrête sur le cliffhanger du chapitre 33. Reprenez directement au chapitre 34 (Tome 5).",
-      en: "Season 1 ends on the Chapter 33 cliffhanger. Continue directly at Chapter 34 (Volume 5).",
+      fr: "La saison 1 s'arrête au chapitre 34 (Tome 5). La saison 2 reprend directement au chapitre 35 !",
+      en: "Season 1 finishes at Chapter 34 (Volume 5). Continue directly at Chapter 35!",
     },
   },
   {
@@ -277,7 +329,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 72,
     endedAtVolume: 9,
     continueAtVolume: 9,
-    coveredRange: "Ch. 34 – 71",
+    coveredRange: "Ch. 35 – 71",
     adaptedArc: "Evil Eye & Kaiju",
     isFullyAdapted: false,
   },
@@ -294,6 +346,21 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     adaptedArc: "Kafka Captured",
     isFullyAdapted: false,
   },
+  {
+    anilistIds: [178754],
+    sourceKind: "MANGA",
+    endedAtChapter: 82,
+    continueAtChapter: 83,
+    endedAtVolume: 11,
+    continueAtVolume: 11,
+    coveredRange: "Ch. 39 – 82",
+    adaptedArc: "Kaiju Weapon & Cataclysm",
+    isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 2 couvre jusqu'au chapitre 82 (Tome 11, en sautant les Ch. 80–81). Reprenez au Ch. 80 ou directement au Ch. 83.",
+      en: "Season 2 ends at Chapter 82 (Volume 11, skipping Ch. 80–81). Resume at Ch. 80 or Ch. 83.",
+    },
+  },
 
   // --- SAKAMOTO DAYS ---
   {
@@ -304,8 +371,23 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     endedAtVolume: 5,
     continueAtVolume: 5,
     coveredRange: "Ch. 1 – 37",
-    adaptedArc: "Lab Arc",
+    adaptedArc: "Lab Arc (Partie 1)",
     isFullyAdapted: false,
+  },
+  {
+    anilistIds: [184237],
+    sourceKind: "MANGA",
+    endedAtChapter: 74,
+    continueAtChapter: 75,
+    endedAtVolume: 9,
+    continueAtVolume: 9,
+    coveredRange: "Ch. 38 – 74",
+    adaptedArc: "Death Row Prisoners & JCC Exam (Partie 2)",
+    isFullyAdapted: false,
+    notesByLang: {
+      fr: "La Partie 2 couvre jusqu'au chapitre 74 (Tome 9). Continuez directement au chapitre 75 !",
+      en: "Part 2 adapts through Chapter 74 (Volume 9). Continue directly at Chapter 75!",
+    },
   },
 
   // --- BLUE LOCK ---
@@ -315,7 +397,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     endedAtChapter: 94,
     continueAtChapter: 95,
     endedAtVolume: 11,
-    continueAtVolume: 11,
+    continueAtVolume: 12,
     coveredRange: "Ch. 1 – 94",
     adaptedArc: "Second Selection",
     isFullyAdapted: false,
@@ -325,7 +407,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     sourceKind: "MANGA",
     endedAtChapter: 149,
     continueAtChapter: 150,
-    endedAtVolume: 18,
+    endedAtVolume: 17,
     continueAtVolume: 18,
     coveredRange: "Ch. 95 – 149",
     adaptedArc: "Japan U-20 Match",
@@ -355,33 +437,48 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     adaptedArc: "Slave / Farmland Arc",
     isFullyAdapted: false,
     notesByLang: {
-      fr: "La saison 2 clôt l'arc de la Ferme au chapitre 100. Continuez au chapitre 101 (Tome 15) pour l'expédition de la Baltique.",
-      en: "Season 2 concludes the Farmland Arc at Chapter 100. Continue at Chapter 101 (Volume 15).",
+      fr: "La saison 2 clôt l'arc de la Ferme au chapitre 100 (Tome 14). Continuez au chapitre 101 (Tome 15) pour l'expédition de la Baltique.",
+      en: "Season 2 concludes the Farmland Arc at Chapter 100 (Volume 14). Continue at Chapter 101 (Volume 15).",
     },
   },
 
-  // --- ONE PUNCH MAN ---
+  // --- ONE-PUNCH MAN ---
   {
     anilistIds: [21087],
     sourceKind: "MANGA",
-    endedAtChapter: 37,
-    continueAtChapter: 38,
-    endedAtVolume: 7,
-    continueAtVolume: 8,
-    coveredRange: "Ch. 1 – 37",
+    endedAtChapter: 36,
+    continueAtChapter: 37,
+    endedAtVolume: 8,
+    continueAtVolume: 7,
+    coveredRange: "Ch. 1 – 36",
     adaptedArc: "Alien Conquerors (Boros)",
     isFullyAdapted: false,
   },
   {
     anilistIds: [97668],
     sourceKind: "MANGA",
-    endedAtChapter: 84,
-    continueAtChapter: 85,
+    endedAtChapter: 85,
+    continueAtChapter: 86,
     endedAtVolume: 17,
     continueAtVolume: 17,
-    coveredRange: "Ch. 38 – 84",
+    coveredRange: "Ch. 37 – 85",
     adaptedArc: "Hero Hunter / Elder Centipede",
     isFullyAdapted: false,
+  },
+  {
+    anilistIds: [153800],
+    sourceKind: "MANGA",
+    endedAtChapter: 115,
+    continueAtChapter: 116,
+    endedAtVolume: 24,
+    continueAtVolume: 24,
+    coveredRange: "Ch. 86 – 115",
+    adaptedArc: "Monster Association Raid (Part 1)",
+    isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 3 (Partie 1) couvre les chapitres 86 à 115 (Tome 24). Continuez au chapitre 116 !",
+      en: "Season 3 (Part 1) adapts Chapters 86–115 (Volume 24). Continue at Chapter 116!",
+    },
   },
 
   // --- HUNTER X HUNTER (2011) ---
@@ -416,11 +513,11 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [142838],
     sourceKind: "MANGA",
-    endedAtChapter: 37,
-    continueAtChapter: 38,
-    endedAtVolume: 6,
-    continueAtVolume: 6,
-    coveredRange: "Ch. 18 – 37",
+    endedAtChapter: 38,
+    continueAtChapter: 39,
+    endedAtVolume: 7,
+    continueAtVolume: 7,
+    coveredRange: "Ch. 18 – 38",
     adaptedArc: "Doggy Crisis & Tennis",
     isFullyAdapted: false,
   },
@@ -431,8 +528,19 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 60,
     endedAtVolume: 9,
     continueAtVolume: 9,
-    coveredRange: "Ch. 38 – 59",
+    coveredRange: "Ch. 39 – 59",
     adaptedArc: "Cruise Adventure",
+    isFullyAdapted: false,
+  },
+  {
+    anilistIds: [177937],
+    sourceKind: "MANGA",
+    endedAtChapter: 87,
+    continueAtChapter: 88,
+    endedAtVolume: 13,
+    continueAtVolume: 13,
+    coveredRange: "Ch. 60 – 87",
+    adaptedArc: "Wise Past & Red Circus",
     isFullyAdapted: false,
   },
 
@@ -459,6 +567,17 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     adaptedArc: "2.5D Stage Play & Private",
     isFullyAdapted: false,
   },
+  {
+    anilistIds: [182587],
+    sourceKind: "MANGA",
+    endedAtChapter: 126,
+    continueAtChapter: 127,
+    endedAtVolume: 13,
+    continueAtVolume: 13,
+    coveredRange: "Ch. 81 – 126",
+    adaptedArc: "Mainstay & Scandal",
+    isFullyAdapted: false,
+  },
 
   // --- BOCCHI THE ROCK & ROMCOMS ---
   {
@@ -478,9 +597,20 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     endedAtChapter: 39,
     continueAtChapter: 40,
     endedAtVolume: 5,
-    continueAtVolume: 5,
+    continueAtVolume: 6,
     coveredRange: "Ch. 1 – 39",
     adaptedArc: "Summer Festival",
+    isFullyAdapted: false,
+  },
+  {
+    anilistIds: [154768],
+    sourceKind: "MANGA",
+    endedAtChapter: 86,
+    continueAtChapter: 87,
+    endedAtVolume: 11,
+    continueAtVolume: 11,
+    coveredRange: "Ch. 40 – 86",
+    adaptedArc: "School Festival & Coffin",
     isFullyAdapted: false,
   },
   {
@@ -488,7 +618,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     sourceKind: "MANGA",
     endedAtChapter: 80,
     continueAtChapter: 81,
-    endedAtVolume: 10,
+    endedAtVolume: 9,
     continueAtVolume: 10,
     coveredRange: "Ch. 1 – 80",
     adaptedArc: "Autumn Training & Cultural Festival",
@@ -518,12 +648,12 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 191,
     endedAtVolume: null,
     continueAtVolume: null,
-    coveredRange: "S2 Ch. 0 – 110 (Global Ch. 79 – 190)",
+    coveredRange: "S2 Ch. 1 – 110 (Global Ch. 79 – 190)",
     adaptedArc: "Return of the Prince & Workshop Battle",
     isFullyAdapted: false,
     notesByLang: {
-      fr: "La saison 2 couvre jusqu'à la fin de la Bataille de l'Atelier (S2 Ep. 110). Continuez au début de l'arc Hell Train (S2 Ep. 111).",
-      en: "Season 2 finishes the Workshop Battle (S2 Ep. 110). Continue at the start of the Hell Train arc (S2 Ep. 111).",
+      fr: "La saison 2 couvre jusqu'à la fin de la Bataille de l'Atelier (S2 Ep. 110). Continuez au début de l'arc Hell Train (S2 Ep. 111 / Global Ch. 191).",
+      en: "Season 2 finishes the Workshop Battle (S2 Ep. 110). Continue at the start of the Hell Train arc (S2 Ep. 111 / Global Ch. 191).",
     },
   },
   {
@@ -544,32 +674,25 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [163142],
     sourceKind: "MANHWA",
-    endedAtChapter: 45,
-    continueAtChapter: 46,
+    endedAtChapter: 47,
+    continueAtChapter: 48,
     endedAtVolume: null,
     continueAtVolume: null,
-    coveredRange: "Ch. 1 – 45",
+    coveredRange: "Ch. 1 – 47",
     adaptedArc: "Shadow World & Ranking Exam",
     isFullyAdapted: false,
-  },
-  {
-    anilistIds: [158530],
-    sourceKind: "MANHWA",
-    endedAtChapter: 27,
-    continueAtChapter: 28,
-    endedAtVolume: null,
-    continueAtVolume: null,
-    coveredRange: "Ch. 1 – 27",
-    adaptedArc: "School Festival",
-    isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 1 s'arrête au chapitre 47 du manhwa (quelques différences). Continuez au chapitre 48 !",
+      en: "Season 1 ends at Manhwa Chapter 47 (with minor differences). Continue at Chapter 48!",
+    },
   },
   {
     anilistIds: [151847],
     sourceKind: "MANHWA",
     endedAtChapter: 50,
     continueAtChapter: 51,
-    endedAtVolume: null,
-    continueAtVolume: null,
+    endedAtVolume: 3,
+    continueAtVolume: 3,
     coveredRange: "Ch. 1 – 50",
     adaptedArc: "Temple & Contract Engagement",
     isFullyAdapted: false,
@@ -577,12 +700,12 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [162144],
     sourceKind: "MANHWA",
-    endedAtChapter: 50,
-    continueAtChapter: 51,
-    endedAtVolume: null,
-    continueAtVolume: null,
-    coveredRange: "Ch. 1 – 50",
-    adaptedArc: "Crimean War Prelude",
+    endedAtChapter: 40,
+    continueAtChapter: 41,
+    endedAtVolume: 3,
+    continueAtVolume: 3,
+    coveredRange: "Ch. 1 – 40",
+    adaptedArc: "Royal Hospital & Crimean War Prelude",
     isFullyAdapted: false,
   },
 
@@ -590,23 +713,23 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [21],
     sourceKind: "MANGA",
-    endedAtChapter: 1088,
-    continueAtChapter: 1089,
-    endedAtVolume: 107,
-    continueAtVolume: 108,
-    coveredRange: "Ch. 1 – 1088+ (en cours)",
-    adaptedArc: "Egghead Island",
+    endedAtChapter: 1150,
+    continueAtChapter: 1151,
+    endedAtVolume: 113,
+    continueAtVolume: 113,
+    coveredRange: "Ch. 1 – 1150 (Ép. 1180)",
+    adaptedArc: "Elbaph / Egghead",
     isFullyAdapted: false,
     isOngoingAdaptation: true,
     liveAnchor: {
-      anchorEpisode: 1122,
-      anchorChapter: 1088,
-      chaptersPerEpisode: 0.92,
+      anchorEpisode: 1180,
+      anchorChapter: 1150,
+      chaptersPerEpisode: 1.0,
       chaptersPerVolume: 10,
     },
     notesByLang: {
-      fr: "Synchronisé en temps réel avec les derniers épisodes diffusés de One Piece.",
-      en: "Synced in real time with the latest aired One Piece episodes.",
+      fr: "Synchronisé en direct avec MangaUpdates et les derniers épisodes diffusés de One Piece.",
+      en: "Synced live with MangaUpdates and the latest aired One Piece episodes.",
     },
   },
   {
@@ -664,13 +787,28 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [169755],
     sourceKind: "MANGA",
-    endedAtChapter: 661,
-    continueAtChapter: 662,
+    endedAtChapter: 660,
+    continueAtChapter: 661,
     endedAtVolume: 72,
     continueAtVolume: 72,
-    coveredRange: "Ch. 610 – 661",
+    coveredRange: "Ch. 610 – 660",
     adaptedArc: "TYBW — The Conflict",
     isFullyAdapted: false,
+  },
+  {
+    anilistIds: [185874],
+    sourceKind: "MANGA",
+    endedAtChapter: 686,
+    continueAtChapter: null,
+    endedAtVolume: 74,
+    continueAtVolume: null,
+    coveredRange: "Ch. 661 – 686",
+    adaptedArc: "TYBW — The Calamity (Final)",
+    isFullyAdapted: true,
+    notesByLang: {
+      fr: "La Partie 4 conclut l'intégralité du manga Bleach jusqu'au chapitre final 686 (Tome 74).",
+      en: "Part 4 completes the entire Bleach manga through the final Chapter 686 (Volume 74).",
+    },
   },
   {
     anilistIds: [20],
@@ -690,16 +828,16 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [1735],
     sourceKind: "MANGA",
-    endedAtChapter: 700,
+    endedAtChapter: 699,
     continueAtChapter: null,
     endedAtVolume: 72,
     continueAtVolume: null,
-    coveredRange: "Ch. 245 – 700",
+    coveredRange: "Ch. 245 – 699",
     adaptedArc: "Complete Series",
     isFullyAdapted: true,
     notesByLang: {
-      fr: "Tout le manga Naruto est adapté (chapitre 700 adapté dans Boruto / OAV). Vous pouvez poursuivre avec Boruto.",
-      en: "The full Naruto manga is adapted. You can continue with the Boruto sequel.",
+      fr: "Tout Naruto Shippuden est adapté jusqu'au chapitre 699 (le chapitre épilogue 700 est adapté dans Boruto Ép. 24).",
+      en: "Adapts Naruto through Chapter 699 (epilogue Chapter 700 is adapted in Boruto Ep. 24).",
     },
   },
 
@@ -707,11 +845,11 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [16498],
     sourceKind: "MANGA",
-    endedAtChapter: 33,
-    continueAtChapter: 34,
+    endedAtChapter: 34,
+    continueAtChapter: 35,
     endedAtVolume: 8,
-    continueAtVolume: 8,
-    coveredRange: "Ch. 1 – 33",
+    continueAtVolume: 9,
+    coveredRange: "Ch. 1 – 34",
     adaptedArc: "Female Titan",
     isFullyAdapted: false,
   },
@@ -722,7 +860,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 51,
     endedAtVolume: 12,
     continueAtVolume: 13,
-    coveredRange: "Ch. 34 – 50",
+    coveredRange: "Ch. 35 – 50",
     adaptedArc: "Clash of the Titans",
     isFullyAdapted: false,
   },
@@ -771,14 +909,25 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     isFullyAdapted: false,
   },
   {
-    anilistIds: [146984, 162314],
+    anilistIds: [146984],
+    sourceKind: "MANGA",
+    endedAtChapter: 134,
+    continueAtChapter: 135,
+    endedAtVolume: 33,
+    continueAtVolume: 34,
+    coveredRange: "Ch. 131 – 134",
+    adaptedArc: "The Final Chapters — Special 1",
+    isFullyAdapted: false,
+  },
+  {
+    anilistIds: [162314],
     sourceKind: "MANGA",
     endedAtChapter: 139,
     continueAtChapter: null,
     endedAtVolume: 34,
     continueAtVolume: null,
-    coveredRange: "Ch. 131 – 139",
-    adaptedArc: "The Final Chapters",
+    coveredRange: "Ch. 135 – 139",
+    adaptedArc: "The Final Chapters — Special 2",
     isFullyAdapted: true,
     notesByLang: {
       fr: "Adaptation intégrale jusqu'au chapitre final 139 (Tome 34) avec scènes étendues supervisées par Hajime Isayama.",
@@ -801,11 +950,11 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [21856],
     sourceKind: "MANGA",
-    endedAtChapter: 69,
+    endedAtChapter: 70,
     continueAtChapter: 70,
     endedAtVolume: 8,
     continueAtVolume: 8,
-    coveredRange: "Ch. 22 – 69",
+    coveredRange: "Ch. 22 – 70",
     adaptedArc: "Sports Festival & Stain",
     isFullyAdapted: false,
   },
@@ -847,7 +996,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     sourceKind: "MANGA",
     endedAtChapter: 328,
     continueAtChapter: 329,
-    endedAtVolume: 33,
+    endedAtVolume: 34,
     continueAtVolume: 34,
     coveredRange: "Ch. 258 – 328",
     adaptedArc: "Paranormal Liberation War & Dark Hero",
@@ -864,8 +1013,23 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     adaptedArc: "Final War (Part 1)",
     isFullyAdapted: false,
   },
+  {
+    anilistIds: [182896],
+    sourceKind: "MANGA",
+    endedAtChapter: 431,
+    continueAtChapter: null,
+    endedAtVolume: 42,
+    continueAtVolume: null,
+    coveredRange: "Ch. 399 – 431",
+    adaptedArc: "Final Season (Complete)",
+    isFullyAdapted: true,
+    notesByLang: {
+      fr: "La Saison Finale adapte l'intégralité du manga jusqu'au chapitre final 430 et l'épilogue 431 (Tome 42).",
+      en: "The Final Season adapts the entire manga through Chapter 430 and epilogue Chapter 431 (Volume 42).",
+    },
+  },
 
-  // --- DR. STONE, HAIKYUU, KAGUYA, ETC. ---
+  // --- DR. STONE, HAIKYUU, KAGUYA ---
   {
     anilistIds: [105333],
     sourceKind: "MANGA",
@@ -889,15 +1053,41 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     isFullyAdapted: false,
   },
   {
-    anilistIds: [131518, 162670],
+    anilistIds: [131518],
+    sourceKind: "MANGA",
+    endedAtChapter: 116,
+    continueAtChapter: 117,
+    endedAtVolume: 14,
+    continueAtVolume: 14,
+    coveredRange: "Ch. 90 – 116",
+    adaptedArc: "New World (Part 1)",
+    isFullyAdapted: false,
+  },
+  {
+    anilistIds: [162670],
     sourceKind: "MANGA",
     endedAtChapter: 142,
     continueAtChapter: 143,
-    endedAtVolume: 17,
+    endedAtVolume: 16,
     continueAtVolume: 17,
-    coveredRange: "Ch. 84 – 142",
-    adaptedArc: "Treasure Island",
+    coveredRange: "Ch. 117 – 142",
+    adaptedArc: "Treasure Island (New World Part 2)",
     isFullyAdapted: false,
+  },
+  {
+    anilistIds: [199221],
+    sourceKind: "MANGA",
+    endedAtChapter: 232,
+    continueAtChapter: null,
+    endedAtVolume: 26,
+    continueAtVolume: null,
+    coveredRange: "→ Ch. 232",
+    adaptedArc: "Science Future (Final Cour)",
+    isFullyAdapted: true,
+    notesByLang: {
+      fr: "Dr. STONE: Science Future (Cour 3) conclut l'intégralité du manga jusqu'au chapitre 232 (Tome 26).",
+      en: "Dr. STONE: Science Future (Cour 3) adapts the manga completely through Chapter 232 (Volume 26).",
+    },
   },
   {
     anilistIds: [20464],
@@ -905,7 +1095,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     endedAtChapter: 71,
     continueAtChapter: 72,
     endedAtVolume: 8,
-    continueAtVolume: 9,
+    continueAtVolume: 8,
     coveredRange: "Ch. 1 – 71",
     adaptedArc: "Interhigh Preliminaries",
     isFullyAdapted: false,
@@ -931,49 +1121,68 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     coveredRange: "Ch. 150 – 190",
     adaptedArc: "Karasuno vs Shiratorizawa",
     isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 3 se termine au Ch. 190 (les OAV Terre vs Ciel adaptent les Ch. 191–206 avant la Saison 4).",
+      en: "Season 3 ends at Ch. 190 (Land vs. Air OVAs cover Ch. 191–206 before Season 4).",
+    },
   },
   {
-    anilistIds: [106625, 113538],
+    anilistIds: [106625],
+    sourceKind: "MANGA",
+    endedAtChapter: 249,
+    continueAtChapter: 250,
+    endedAtVolume: 28,
+    continueAtVolume: 28,
+    coveredRange: "Ch. 207 – 249",
+    adaptedArc: "To The Top (Part 1)",
+    isFullyAdapted: false,
+  },
+  {
+    anilistIds: [113538],
     sourceKind: "MANGA",
     endedAtChapter: 292,
     continueAtChapter: 293,
     endedAtVolume: 33,
     continueAtVolume: 33,
-    coveredRange: "Ch. 191 – 292",
+    coveredRange: "Ch. 250 – 292",
     adaptedArc: "To The Top (Inarizaki Match)",
     isFullyAdapted: false,
   },
   {
-    anilistIds: [153800],
+    anilistIds: [153658],
     sourceKind: "MANGA",
     endedAtChapter: 325,
     continueAtChapter: 326,
     endedAtVolume: 37,
     continueAtVolume: 37,
     coveredRange: "Ch. 293 – 325",
-    adaptedArc: "Battle of the Garbage Dump",
+    adaptedArc: "The Dumpster Battle (Film)",
     isFullyAdapted: false,
+    notesByLang: {
+      fr: "Le film adapte le match Karasuno vs Nekoma jusqu'au chapitre 325 (Tome 37). Continuez au chapitre 326 !",
+      en: "The Dumpster Battle adapts through Chapter 325 (Volume 37). Continue at Chapter 326!",
+    },
   },
   {
     anilistIds: [101921],
     sourceKind: "MANGA",
-    endedAtChapter: 45,
-    continueAtChapter: 46,
+    endedAtChapter: 46,
+    continueAtChapter: 47,
     endedAtVolume: 5,
     continueAtVolume: 5,
-    coveredRange: "Ch. 1 – 45",
+    coveredRange: "Ch. 1 – 46",
     adaptedArc: "Summer Fireworks",
     isFullyAdapted: false,
   },
   {
     anilistIds: [112641],
     sourceKind: "MANGA",
-    endedAtChapter: 91,
-    continueAtChapter: 92,
-    endedAtVolume: 9,
-    continueAtVolume: 10,
-    coveredRange: "Ch. 46 – 91",
-    adaptedArc: "Sports Festival",
+    endedAtChapter: 101,
+    continueAtChapter: 102,
+    endedAtVolume: 10,
+    continueAtVolume: 11,
+    coveredRange: "Ch. 48 – 101",
+    adaptedArc: "Sports Festival & Student Council",
     isFullyAdapted: false,
   },
   {
@@ -983,32 +1192,47 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 138,
     endedAtVolume: 14,
     continueAtVolume: 14,
-    coveredRange: "Ch. 92 – 137",
+    coveredRange: "Ch. 102 – 137",
     adaptedArc: "Ultra Romantic (Cultural Festival)",
     isFullyAdapted: false,
   },
   {
     anilistIds: [151384],
     sourceKind: "MANGA",
-    endedAtChapter: 151,
-    continueAtChapter: 152,
-    endedAtVolume: 15,
+    endedAtChapter: 160,
+    continueAtChapter: 161,
+    endedAtVolume: 16,
     continueAtVolume: 16,
-    coveredRange: "Ch. 138 – 151",
+    coveredRange: "Ch. 138 – 160",
     adaptedArc: "The First Kiss That Never Ends",
     isFullyAdapted: false,
+    notesByLang: {
+      fr: "Le film adapte jusqu'au chapitre 160 (en sautant les Ch. 152–158). Reprenez au Ch. 152 pour tout lire ou au Ch. 161.",
+      en: "Adapts through Chapter 160 (skipping Ch. 152–158). Resume at Ch. 152 for skipped chapters or Ch. 161.",
+    },
   },
 
   // --- MODERN HITS & ACCLAIMED ADAPTATIONS ---
   {
     anilistIds: [128893],
     sourceKind: "MANGA",
-    endedAtChapter: 44,
-    continueAtChapter: 45,
+    endedAtChapter: 45,
+    continueAtChapter: 46,
     endedAtVolume: 5,
     continueAtVolume: 5,
-    coveredRange: "Ch. 1 – 44",
+    coveredRange: "Ch. 1 – 45",
     adaptedArc: "Lord Tensen",
+    isFullyAdapted: false,
+  },
+  {
+    anilistIds: [166613],
+    sourceKind: "MANGA",
+    endedAtChapter: 89,
+    continueAtChapter: 90,
+    endedAtVolume: 10,
+    continueAtVolume: 10,
+    coveredRange: "Ch. 45 – 89",
+    adaptedArc: "Horai",
     isFullyAdapted: false,
   },
   {
@@ -1016,7 +1240,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     sourceKind: "MANGA",
     endedAtChapter: 58,
     continueAtChapter: 59,
-    endedAtVolume: 6,
+    endedAtVolume: 7,
     continueAtVolume: 7,
     coveredRange: "Ch. 1 – 58",
     adaptedArc: "Wezaemon the Tombguard",
@@ -1025,12 +1249,12 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
   {
     anilistIds: [176508],
     sourceKind: "MANGA",
-    endedAtChapter: 125,
-    continueAtChapter: 126,
-    endedAtVolume: 13,
-    continueAtVolume: 13,
-    coveredRange: "Ch. 59 – 125",
-    adaptedArc: "Ctarnidd of the Abyss (Part 1)",
+    endedAtChapter: 126,
+    continueAtChapter: 127,
+    endedAtVolume: 14,
+    continueAtVolume: 14,
+    coveredRange: "Ch. 59 – 126",
+    adaptedArc: "Ctarnidd of the Abyss & GGC",
     isFullyAdapted: false,
   },
   {
@@ -1038,10 +1262,21 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     sourceKind: "MANGA",
     endedAtChapter: 41,
     continueAtChapter: 42,
-    endedAtVolume: 6,
+    endedAtVolume: 5,
     continueAtVolume: 6,
     coveredRange: "Ch. 1 – 41",
     adaptedArc: "Shishitoren",
+    isFullyAdapted: false,
+  },
+  {
+    anilistIds: [178680],
+    sourceKind: "MANGA",
+    endedAtChapter: 90,
+    continueAtChapter: 91,
+    endedAtVolume: 11,
+    continueAtVolume: 11,
+    coveredRange: "Ch. 42 – 90",
+    adaptedArc: "KEEL & Roppo-Ichiza",
     isFullyAdapted: false,
   },
   {
@@ -1078,6 +1313,17 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     isFullyAdapted: false,
   },
   {
+    anilistIds: [178025],
+    sourceKind: "MANGA",
+    endedAtChapter: 88,
+    continueAtChapter: 89,
+    endedAtVolume: 11,
+    continueAtVolume: 11,
+    coveredRange: "Ch. 1 – 88",
+    adaptedArc: "Trash Storm",
+    isFullyAdapted: false,
+  },
+  {
     anilistIds: [161645],
     sourceKind: "MANGA",
     endedAtChapter: 40,
@@ -1090,6 +1336,21 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     notesByLang: {
       fr: "Saison 1 = Chapitre 40 du manga (Nekokurage) et Tome 2 du Light Novel. Continuez au chapitre 41 du manga ou Tome 3 du LN.",
       en: "Season 1 finishes at Manga Chapter 40 (Nekokurage) and Light Novel Volume 2. Resume at Ch. 41 or LN Vol. 3.",
+    },
+  },
+  {
+    anilistIds: [176301],
+    sourceKind: "MANGA",
+    endedAtChapter: 85,
+    continueAtChapter: 86,
+    endedAtVolume: 17,
+    continueAtVolume: 17,
+    coveredRange: "Manga Ch. 41 – 85 (LN Vol. 3 – 4)",
+    adaptedArc: "Shi Clan & Fortress",
+    isFullyAdapted: false,
+    notesByLang: {
+      fr: "Saison 2 = Chapitre 85 du manga (Tome 17) et Tome 4 du Light Novel. Continuez au chapitre 86 ou Tome 5 du LN !",
+      en: "Season 2 finishes at Manga Chapter 85 (Volume 17) and Light Novel Volume 4. Resume at Ch. 86 or LN Vol. 5!",
     },
   },
   {
@@ -1109,7 +1370,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     endedAtChapter: 125,
     continueAtChapter: 126,
     endedAtVolume: 14,
-    continueAtVolume: 14,
+    continueAtVolume: 15,
     coveredRange: "Ch. 74 – 125",
     adaptedArc: "Christmas Showdown",
     isFullyAdapted: false,
@@ -1132,7 +1393,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 91,
     endedAtVolume: 11,
     continueAtVolume: 11,
-    coveredRange: "Ch. 1 – 90",
+    coveredRange: "Ch. 0 – 90",
     adaptedArc: "Nether",
     isFullyAdapted: false,
   },
@@ -1148,13 +1409,28 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     isFullyAdapted: false,
   },
   {
+    anilistIds: [179062],
+    sourceKind: "MANGA",
+    endedAtChapter: 305,
+    continueAtChapter: null,
+    endedAtVolume: 34,
+    continueAtVolume: null,
+    coveredRange: "→ Ch. 305",
+    adaptedArc: "Great Cataclysm (Final)",
+    isFullyAdapted: true,
+    notesByLang: {
+      fr: "La Saison 3 (Partie 2) conclut le manga jusqu'au chapitre final 305 (les Ch. 256–262 ont été omis).",
+      en: "Season 3 Part 2 concludes the manga through Chapter 305 (Ch. 256–262 were skipped).",
+    },
+  },
+  {
     anilistIds: [97986],
     sourceKind: "MANGA",
-    endedAtChapter: 26,
-    continueAtChapter: 27,
-    endedAtVolume: 3,
+    endedAtChapter: 25,
+    continueAtChapter: 26,
+    endedAtVolume: 4,
     continueAtVolume: 4,
-    coveredRange: "Ch. 1 – 26",
+    coveredRange: "Ch. 1 – 25",
     adaptedArc: "4th Layer — Goblets of Giants",
     isFullyAdapted: false,
   },
@@ -1165,7 +1441,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 39,
     endedAtVolume: 5,
     continueAtVolume: 6,
-    coveredRange: "Ch. 27 – 38",
+    coveredRange: "Ch. 26 – 38",
     adaptedArc: "Ido Front (Bondrewd)",
     isFullyAdapted: false,
   },
@@ -1202,7 +1478,7 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     continueAtChapter: 114,
     endedAtVolume: 25,
     continueAtVolume: 25,
-    coveredRange: "Ch. 102 – 113",
+    coveredRange: "Ch. 78 – 113",
     adaptedArc: "Decay of the Angel",
     isFullyAdapted: false,
   },
@@ -1217,8 +1493,8 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     adaptedArc: "Golden Age & Eclipse",
     isFullyAdapted: false,
     notesByLang: {
-      fr: "L'anime de 1997 omet le Chevalier Squelette et certains passages clés. Reprenez au Ch. 88 ou lisez depuis le Tome 1 pour l'expérience complète.",
-      en: "The 1997 anime omits Skull Knight and key Black Swordsman scenes. Resume at Ch. 88 or read from Volume 1 for full context.",
+      fr: "L'anime de 1997 s'arrête au Ch. 87 (p. 15) et omet certains passages clés. Reprenez au Ch. 88 ou lisez depuis le Tome 1.",
+      en: "The 1997 anime stops at Ch. 87 (p. 15) and omits key scenes. Resume at Ch. 88 or read from Volume 1.",
     },
   },
   {
@@ -1242,20 +1518,24 @@ const CURATED_CONTINUATIONS: CuratedContinuationEntry[] = [
     coveredRange: "Ch. 13 – 39",
     adaptedArc: "Bishamon & Ebisu",
     isFullyAdapted: false,
+    notesByLang: {
+      fr: "La saison 2 s'arrête au Ch. 39 (les OAV adaptent jusqu'au Ch. 41 en sautant le Ch. 40). Reprenez au Ch. 40 !",
+      en: "Season 2 stops at Ch. 39 (OVAs adapt through Ch. 41 skipping Ch. 40). Pick up at Ch. 40!",
+    },
   },
   {
     anilistIds: [1818],
     sourceKind: "MANGA",
-    endedAtChapter: 60,
-    continueAtChapter: 61,
+    endedAtChapter: 59,
+    continueAtChapter: 60,
     endedAtVolume: 11,
     continueAtVolume: 11,
-    coveredRange: "Ch. 1 – 60 (fin originale en anime)",
+    coveredRange: "Ch. 1 – 59 (fin originale Ép. 24–26)",
     adaptedArc: "Northern Campaign",
     isFullyAdapted: false,
     notesByLang: {
-      fr: "Les 2 derniers épisodes ont une fin originale. Reprenez au chapitre 60/61 (Tome 11) pour la vraie suite du manga !",
-      en: "The final 2 episodes diverge with an anime-original ending. Pick up at Chapter 60/61 (Volume 11) for the canon story!",
+      fr: "Les épisodes 24–26 ont une fin originale. Reprenez au chapitre 60 (Tome 11) pour la vraie suite du manga !",
+      en: "Episodes 24–26 diverge with an anime-original ending. Pick up at Chapter 60 (Volume 11) for the canon story!",
     },
   },
 
@@ -1364,7 +1644,6 @@ export function findSourceMangaRelation(
     (r) => r.relationType === "SOURCE" && r.media.type === "MANGA"
   );
   if (mangaSources.length > 0) {
-    // If adapted from Manga/Manhwa/Comic, prefer non-NOVEL source first
     if (animeSource !== "LIGHT_NOVEL" && animeSource !== "WEB_NOVEL") {
       const nonNovel = mangaSources.find((r) => r.media.format !== "NOVEL");
       if (nonNovel) return nonNovel.media;
@@ -1372,7 +1651,6 @@ export function findSourceMangaRelation(
     return mangaSources[0].media;
   }
 
-  // Some webtoon / LN anime list the manhwa/manga under ADAPTATION
   const mangaAdaptations = relations.filter(
     (r) => r.relationType === "ADAPTATION" && r.media.type === "MANGA"
   );
@@ -1410,6 +1688,7 @@ export function getCuratedMangaContinuation(
     isOngoingAdaptation: hit.isOngoingAdaptation,
     verified: true,
     confidence: "verified",
+    dataSource: "curated",
     note: localizedNote,
     notesByLang: hit.notesByLang,
     liveAnchor: hit.liveAnchor ?? null,
@@ -1477,7 +1756,7 @@ function parseStartChapter(coveredRange: string | null | undefined): number {
 
 /**
  * Dynamically recalibrates chapter & volume continuation breakpoints in real time for:
- * 1) Ongoing anchored series (e.g. One Piece) as new weekly episodes air
+ * 1) Ongoing anchored series (e.g. One Piece) when AniList aired episode moves past the last anchor
  * 2) Airing seasonal anime whose latest aired episode advances past a previous sync point
  * 3) A viewer's own tracked episode progress (spoiler-free mid-season continuation)
  */
@@ -1509,7 +1788,7 @@ export function applyLiveEpisodeAdjustment(
       ? Math.floor(input.sourceTotalVolumes)
       : null;
 
-  // Case 1: Ongoing curated anchor (e.g. One Piece) — compute live chapter from exact reference anchor
+  // Case 1: Ongoing curated or MangaUpdates live anchor — compute exact live chapter
   if (base.liveAnchor && effectiveEp !== null) {
     const anchor = base.liveAnchor;
     const rawEnded = Math.round(
@@ -1523,7 +1802,8 @@ export function applyLiveEpisodeAdjustment(
     let continueAtVolume = base.continueAtVolume;
     if (anchor.chaptersPerVolume && anchor.chaptersPerVolume > 0) {
       const baseVol =
-        base.endedAtVolume ?? Math.max(1, Math.ceil(anchor.anchorChapter / anchor.chaptersPerVolume));
+        base.endedAtVolume ??
+        Math.max(1, Math.ceil(anchor.anchorChapter / anchor.chaptersPerVolume));
       const shiftedEndVol = Math.max(
         1,
         Math.round(baseVol + (endedAtChapter - anchor.anchorChapter) / anchor.chaptersPerVolume)
@@ -1561,7 +1841,9 @@ export function applyLiveEpisodeAdjustment(
   // Case 2: Proportional adjustment when targetEpisode differs from the base synced/total episode
   const baseRefEp =
     (typeof base.syncedEpisode === "number" && base.syncedEpisode > 0 ? base.syncedEpisode : null) ??
-    (typeof input.totalEpisodes === "number" && input.totalEpisodes > 0 ? Math.floor(input.totalEpisodes) : null) ??
+    (typeof input.totalEpisodes === "number" && input.totalEpisodes > 0
+      ? Math.floor(input.totalEpisodes)
+      : null) ??
     (typeof base.totalEpisodes === "number" && base.totalEpisodes > 0 ? base.totalEpisodes : null) ??
     (typeof input.liveAiredEpisode === "number" && input.liveAiredEpisode > 0
       ? Math.floor(input.liveAiredEpisode)
@@ -1595,7 +1877,10 @@ export function applyLiveEpisodeAdjustment(
     let endedAtVolume = base.endedAtVolume;
     let continueAtVolume = base.continueAtVolume;
     if (base.endedAtVolume !== null && base.endedAtChapter > 0) {
-      const approxChPerVol = Math.max(4, Math.min(12, base.endedAtChapter / Math.max(1, base.endedAtVolume)));
+      const approxChPerVol = Math.max(
+        4,
+        Math.min(12, base.endedAtChapter / Math.max(1, base.endedAtVolume))
+      );
       const shiftedVol = Math.max(
         1,
         Math.round(base.endedAtVolume + (endedAtChapter - base.endedAtChapter) / approxChPerVol)

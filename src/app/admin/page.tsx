@@ -7,6 +7,7 @@ import {
   resolveServerActor,
 } from "@/lib/server/social-store";
 import { getSiteConfig } from "@/lib/server/site-config";
+import { listAllSuggestions } from "@/lib/server/suggestions-store";
 import { AdminDashboardClient } from "@/components/admin/AdminDashboardClient";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,20 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AdminPage() {
+type AdminTabParam = "spotlight" | "moderation" | "users" | "suggestions";
+
+function resolveAdminTab(raw?: string): AdminTabParam {
+  if (raw === "moderation" || raw === "users" || raw === "suggestions") {
+    return raw;
+  }
+  return "spotlight";
+}
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
   const actor = await resolveServerActor();
   const authenticated = isAuthenticatedActor(actor);
 
@@ -65,11 +79,17 @@ export default async function AdminPage() {
     );
   }
 
-  const initialConfig = await getSiteConfig({ bypassCache: true });
+  const [resolvedParams, initialConfig, initialSuggestionsPayload] = await Promise.all([
+    searchParams ? searchParams.catch(() => ({ tab: undefined })) : Promise.resolve({ tab: undefined }),
+    getSiteConfig({ bypassCache: true }),
+    listAllSuggestions(),
+  ]);
 
   return (
     <AdminDashboardClient
       initialConfig={initialConfig}
+      initialTab={resolveAdminTab(resolvedParams?.tab)}
+      initialSuggestions={initialSuggestionsPayload.suggestions}
       creator={{
         id: actor.id,
         username: actor.username,

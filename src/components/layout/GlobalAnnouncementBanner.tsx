@@ -17,10 +17,9 @@ export const SUPABASE_ANNOUNCEMENT_EVENT = "site_config_updated";
 const POLL_INTERVAL_MS = 8_000;
 
 /**
- * Broadcasts a freshly updated SiteConfig across:
- * 1) Same browser tab (CustomEvent)
- * 2) Other tabs on the same device (BroadcastChannel)
- * 3) All connected visitors worldwide in real time (Supabase Realtime Broadcast)
+ * Broadcasts a freshly updated SiteConfig immediately across same-tab & same-browser tabs.
+ * Cross-device worldwide Realtime broadcast is pushed directly by the server (`PUT /api/admin/site-config`)
+ * via Supabase Realtime REST so active client WebSocket subscriptions are never torn down.
  */
 export function broadcastSiteConfigLive(config: SiteConfig): void {
   if (typeof window === "undefined") return;
@@ -37,30 +36,6 @@ export function broadcastSiteConfigLive(config: SiteConfig): void {
     }
   } catch {
     // ignore unsupported BroadcastChannel
-  }
-
-  try {
-    const supabase = getSupabaseBrowserClient();
-    if (supabase) {
-      const channel = supabase.channel(SUPABASE_ANNOUNCEMENT_CHANNEL);
-      channel.subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          void channel
-            .send({
-              type: "broadcast",
-              event: SUPABASE_ANNOUNCEMENT_EVENT,
-              payload: { config },
-            })
-            .finally(() => {
-              window.setTimeout(() => {
-                void supabase.removeChannel(channel);
-              }, 1200);
-            });
-        }
-      });
-    }
-  } catch {
-    // non-fatal
   }
 }
 

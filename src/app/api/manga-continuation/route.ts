@@ -9,11 +9,12 @@ import {
   type MangaContinuationInfo,
   type SourceMediumKind,
 } from "@/lib/manga-continuation";
+import { lookupLiveMangaUpdatesContinuation } from "@/lib/server/mangaupdates";
 import type { ContentLanguage } from "@/types/media";
 
 const ANILIST_ENDPOINT = "https://graphql.anilist.co";
-const FINISHED_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours for finished anime
-const RELEASING_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour (auto-busted immediately when episode changes!)
+const FINISHED_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours for finished anime
+const RELEASING_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes for airing shows (auto-busted when episode changes)
 const LIVE_AIRING_TTL_MS = 5 * 60 * 1000; // 5 min AniList live episode check
 const MAX_SERVER_CACHE = 450;
 
@@ -42,16 +43,19 @@ function sanitizeApiKey(raw: string | undefined): string {
 
 interface CachedLookup {
   data: MangaContinuationInfo;
+  source: string;
   expiresAt: number;
 }
 
 interface LiveAiringSnapshot {
   status: string | null;
+  format: string | null;
   episodes: number | null;
   latestAiredEpisode: number | null;
   nextAiringEpisode: { episode: number; airingAt: number } | null;
   sourceChapters: number | null;
   sourceVolumes: number | null;
+  sourceStatus: string | null;
   expiresAt: number;
 }
 
@@ -68,23 +72,29 @@ const LANGUAGE_NAMES: Record<ContentLanguage, string> = {
   ja: "Japanese",
 };
 
-function getCached(key: string): MangaContinuationInfo | null {
+function getCached(key: string): CachedLookup | null {
   const hit = serverContinuationCache.get(key);
   if (!hit) return null;
   if (hit.expiresAt <= Date.now()) {
     serverContinuationCache.delete(key);
     return null;
   }
-  return hit.data;
+  return hit;
 }
 
-function setCached(key: string, data: MangaContinuationInfo, ttlMs: number): void {
+function setCached(
+  key: string,
+  data: MangaContinuationInfo,
+  source: string,
+  ttlMs: number
+): void {
   if (serverContinuationCache.size >= MAX_SERVER_CACHE) {
     const oldestKey = serverContinuationCache.keys().next().value;
     if (oldestKey) serverContinuationCache.delete(oldestKey);
   }
   serverContinuationCache.set(key, {
     data,
+    source,
     expiresAt: Date.now() + ttlMs,
   });
 }
@@ -102,8 +112,7 @@ function toPacingOrNull(val: unknown): number | null {
 
 /**
  * Fetches live AniList airing state (exact latest aired episode, next airing timestamp,
- * and source manga chapter/volume count) with a short 5-minute cache so releasing anime
- * always stay synced in real time as new episodes drop.
+ * and source manga official chapter/volume count & status) with a short 5-minute cache.
  */
 async function fetchLiveAniListAiringMeta(
   mediaId: number,
@@ -120,6 +129,7 @@ async function fetchLiveAniListAiringMeta(
       query ($id: Int, $now: Int, $hasSource: Boolean!, $sourceId: Int) {
         anime: Media(id: $id, type: ANIME) {
           status
+          format
           episodes
           nextAiringEpisode { episode airingAt }
         }
@@ -130,6 +140,7 @@ async function fetchLiveAniListAiringMeta(
           }
         }
         sourceMedia: Media(id: $sourceId, type: MANGA) @include(if: $hasSource) {
+          status
           chapters
           volumes
         }
@@ -181,6 +192,7 @@ async function fetchLiveAniListAiringMeta(
 
     const snap: LiveAiringSnapshot = {
       status: anime.status ?? null,
+      format: anime.format ?? null,
       episodes: typeof anime.episodes === "number" ? anime.episodes : null,
       latestAiredEpisode,
       nextAiringEpisode: nextEp,
@@ -191,6 +203,10 @@ async function fetchLiveAniListAiringMeta(
       sourceVolumes:
         typeof json?.data?.sourceMedia?.volumes === "number"
           ? json.data.sourceMedia.volumes
+          : null,
+      sourceStatus:
+        typeof json?.data?.sourceMedia?.status === "string"
+          ? json.data.sourceMedia.status
           : null,
       expiresAt: Date.now() + LIVE_AIRING_TTL_MS,
     };
@@ -212,6 +228,7 @@ export async function POST(req: Request) {
     const mediaId = Number(body?.mediaId);
     const title = String(body?.title ?? "").trim().slice(0, 180);
     const romajiTitle = String(body?.romajiTitle ?? "").trim().slice(0, 180);
+    const formatHint = body?.format ? String(body.format).trim() : null;
     const sourceType = body?.sourceType ? String(body.sourceType).trim() : null;
     const sourceMediaId =
       typeof body?.sourceMediaId === "number" && body.sourceMediaId > 0
@@ -220,6 +237,7 @@ export async function POST(req: Request) {
     const sourceTitle = body?.sourceTitle ? String(body.sourceTitle).trim().slice(0, 180) : null;
     const sourceCountry = body?.sourceCountry ? String(body.sourceCountry).trim() : null;
     const sourceFormat = body?.sourceFormat ? String(body.sourceFormat).trim() : null;
+    const sourceStatusHint = body?.sourceStatus ? String(body.sourceStatus).trim() : null;
     const sourceChaptersHint = toPositiveIntOrNull(body?.sourceChapters);
     const sourceVolumesHint = toPositiveIntOrNull(body?.sourceVolumes);
     const episodesHint = typeof body?.episodes === "number" ? body.episodes : null;
@@ -241,20 +259,33 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid anime metadata" }, { status: 400 });
     }
 
-    // Tier 1: Curated verified database lookup
     const curated = getCuratedMangaContinuation(mediaId, lang);
 
-    // For currently airing or ongoing curated shows, fetch live AniList airing episode
+    const detectedKind: SourceMediumKind =
+      curated?.sourceKind ??
+      detectSourceMediumKind(sourceType, {
+        id: 0,
+        type: "MANGA",
+        title: sourceTitle ?? title,
+        coverImage: "",
+        format: sourceFormat,
+        averageScore: null,
+        countryOfOrigin: sourceCountry,
+      });
+
+    // Fetch live AniList airing metadata for releasing/ongoing anime or when source totals are unknown
     const shouldCheckLiveAiring =
       statusHint === "RELEASING" ||
       Boolean(curated?.isOngoingAdaptation) ||
-      Boolean(nextAiringHint);
+      Boolean(nextAiringHint) ||
+      (!curated && sourceMediaId !== null && sourceChaptersHint === null);
 
     const liveSnap = shouldCheckLiveAiring
       ? await fetchLiveAniListAiringMeta(mediaId, sourceMediaId)
       : null;
 
     const effectiveStatus = liveSnap?.status ?? statusHint;
+    const effectiveFormat = liveSnap?.format ?? formatHint;
     const effectiveTotalEpisodes = liveSnap?.episodes ?? episodesHint;
     const effectiveNextAiring = liveSnap?.nextAiringEpisode ?? nextAiringHint;
     const liveAiredEpisode =
@@ -267,48 +298,9 @@ export async function POST(req: Request) {
       });
     const effectiveSourceChapters = liveSnap?.sourceChapters ?? sourceChaptersHint;
     const effectiveSourceVolumes = liveSnap?.sourceVolumes ?? sourceVolumesHint;
+    const effectiveSourceStatus = liveSnap?.sourceStatus ?? sourceStatusHint;
     const isReleasing =
       effectiveStatus === "RELEASING" || Boolean(curated?.isOngoingAdaptation);
-
-    if (curated) {
-      const adjusted =
-        curated.liveAnchor || isReleasing
-          ? applyLiveEpisodeAdjustment(curated, {
-              liveAiredEpisode,
-              totalEpisodes: effectiveTotalEpisodes,
-              sourceTotalChapters: effectiveSourceChapters,
-              sourceTotalVolumes: effectiveSourceVolumes,
-              nextAiringEpisode: effectiveNextAiring,
-            })
-          : {
-              ...curated,
-              totalEpisodes: effectiveTotalEpisodes,
-              syncedEpisode: effectiveTotalEpisodes,
-            };
-
-      return NextResponse.json(
-        {
-          data: {
-            ...adjusted,
-            updatedAt: new Date().toISOString(),
-          },
-          source: curated.liveAnchor && liveAiredEpisode ? "verified-live" : "verified",
-          liveAiredEpisode,
-          nextAiringEpisode: effectiveNextAiring,
-        },
-        { headers: { "Cache-Control": "no-store" } }
-      );
-    }
-
-    const detectedKind: SourceMediumKind = detectSourceMediumKind(sourceType, {
-      id: 0,
-      type: "MANGA",
-      title: sourceTitle ?? title,
-      coverImage: "",
-      format: sourceFormat,
-      averageScore: null,
-      countryOfOrigin: sourceCountry,
-    });
 
     // Unreleased anime has no chapter ending yet
     if (effectiveStatus === "NOT_YET_RELEASED") {
@@ -330,18 +322,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ data: unreleased, source: "unreleased" });
     }
 
-    // Episode-aware cache key so a newly aired episode ALWAYS busts the previous episode's cache!
-    const epTag = isReleasing ? `ep${liveAiredEpisode ?? "live"}` : "done";
-    const cacheKey = `${mediaId}:${lang}:${epTag}`;
-    const cached = getCached(cacheKey);
-    if (cached) {
+    // Finished curated entries (100% audited against MangaUpdates & AniList) resolve in 0ms
+    if (curated && !isReleasing && !curated.liveAnchor) {
       return NextResponse.json(
         {
           data: {
-            ...cached,
-            nextAiringEpisode: effectiveNextAiring ?? cached.nextAiringEpisode ?? null,
+            ...curated,
+            dataSource: "curated",
+            totalEpisodes: effectiveTotalEpisodes,
+            syncedEpisode: effectiveTotalEpisodes,
+            updatedAt: new Date().toISOString(),
           },
-          source: "cache",
+          source: "verified",
           liveAiredEpisode,
           nextAiringEpisode: effectiveNextAiring,
         },
@@ -349,6 +341,119 @@ export async function POST(req: Request) {
       );
     }
 
+    // Episode-aware cache key so a newly aired episode ALWAYS busts the previous episode's cache
+    const epTag = isReleasing ? `ep${liveAiredEpisode ?? "live"}` : "done";
+    const cacheKey = `v3:${mediaId}:${lang}:${epTag}`;
+    const cached = getCached(cacheKey);
+    if (cached) {
+      return NextResponse.json(
+        {
+          data: {
+            ...cached.data,
+            nextAiringEpisode: effectiveNextAiring ?? cached.data.nextAiringEpisode ?? null,
+          },
+          source: cached.source,
+          liveAiredEpisode,
+          nextAiringEpisode: effectiveNextAiring,
+        },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // Tier 1 (LIVE REAL-TIME COMMUNITY DATABASE): Query MangaUpdates API v1 first!
+    // Covers ongoing shows (e.g. One Piece "Vol 113, Chap 1150 (As of EP 1180)") AND
+    // thousands of non-curated Manga, Manhwa, Manhua, and Light Novel adaptations with REAL data.
+    const muLive = await lookupLiveMangaUpdatesContinuation({
+      sourceTitle,
+      fallbackKind: detectedKind,
+      lang,
+      isReleasing,
+      target: {
+        title,
+        romajiTitle,
+        format: effectiveFormat,
+        seasonYear,
+        status: effectiveStatus,
+        totalEpisodes: effectiveTotalEpisodes,
+        liveAiredEpisode,
+        nextAiringEpisode: effectiveNextAiring,
+        sourceTotalChapters: effectiveSourceChapters,
+        sourceStatus: effectiveSourceStatus,
+      },
+    });
+
+    if (muLive && (muLive.endedAtChapter !== null || muLive.endedAtVolume !== null)) {
+      let finalMu: MangaContinuationInfo = {
+        ...muLive,
+        dataSource: "mangaupdates",
+        adaptedArc: muLive.adaptedArc ?? curated?.adaptedArc ?? null,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // If AniList reports an even newer aired episode than MangaUpdates' "(As of EP N)",
+      // advance smoothly from MangaUpdates' fresh live anchor (never from a stale hardcoded anchor!).
+      if (
+        isReleasing &&
+        finalMu.liveAnchor &&
+        liveAiredEpisode !== null &&
+        liveAiredEpisode > finalMu.liveAnchor.anchorEpisode
+      ) {
+        finalMu = applyLiveEpisodeAdjustment(finalMu, {
+          liveAiredEpisode,
+          totalEpisodes: effectiveTotalEpisodes,
+          sourceTotalChapters: effectiveSourceChapters,
+          sourceTotalVolumes: effectiveSourceVolumes,
+          nextAiringEpisode: effectiveNextAiring,
+        });
+      }
+
+      setCached(
+        cacheKey,
+        finalMu,
+        isReleasing ? "mangaupdates-live" : "mangaupdates",
+        isReleasing ? RELEASING_CACHE_TTL_MS : FINISHED_CACHE_TTL_MS
+      );
+
+      return NextResponse.json(
+        {
+          data: finalMu,
+          source: isReleasing ? "mangaupdates-live" : "mangaupdates",
+          liveAiredEpisode,
+          nextAiringEpisode: effectiveNextAiring,
+        },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // Tier 2 (Ongoing Curated Anchor Fallback if MangaUpdates was unreachable)
+    if (curated) {
+      const adjusted: MangaContinuationInfo = {
+        ...applyLiveEpisodeAdjustment(curated, {
+          liveAiredEpisode,
+          totalEpisodes: effectiveTotalEpisodes,
+          sourceTotalChapters: effectiveSourceChapters,
+          sourceTotalVolumes: effectiveSourceVolumes,
+          nextAiringEpisode: effectiveNextAiring,
+        }),
+        dataSource: "curated",
+        updatedAt: new Date().toISOString(),
+      };
+
+      setCached(cacheKey, adjusted, "verified-live", RELEASING_CACHE_TTL_MS);
+
+      return NextResponse.json(
+        {
+          data: adjusted,
+          source: "verified-live",
+          liveAiredEpisode,
+          nextAiringEpisode: effectiveNextAiring,
+        },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    // Tier 3 (Strict Anti-Hallucination Gemini Fallback — ONLY when MangaUpdates had no data)
+    // Only accepts `confidence === "high"`; medium/low guesses are discarded so we never display fake chapters.
     const apiKey = sanitizeApiKey(process.env.GEMINI_API_KEY);
     if (!apiKey) {
       return NextResponse.json({ data: null, source: "unavailable" });
@@ -361,9 +466,10 @@ export async function POST(req: Request) {
         : `- Total Episodes: ${effectiveTotalEpisodes ?? "unknown"}`;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const prompt = `You are a precise real-time anime-to-manga/manhwa/light-novel adaptation guide (like MangaUpdates / Where Does the Anime End).
-Given this exact anime season/entry:
+    const prompt = `You are a strict anime-to-manga/manhwa/light-novel adaptation fact-checker (like MangaUpdates).
+Given this exact anime entry:
 - Title: "${title}"${romajiTitle && romajiTitle !== title ? ` (Romaji: "${romajiTitle}")` : ""}
+- Format: ${effectiveFormat ?? "TV"}
 - Year: ${seasonYear ?? "unknown"}
 - Airing Status: ${effectiveStatus ?? "unknown"}
 ${liveEpisodeContext}
@@ -384,13 +490,12 @@ Return ONLY valid JSON matching this exact schema:
   "note": string | null
 }
 
-Strict rules:
-1. ${isReleasing && liveAiredEpisode ? `CRITICAL: This anime is STILL AIRING and ONLY ${liveAiredEpisode} episodes have aired so far! Give the exact chapter/volume adapted UP TO Episode ${liveAiredEpisode} (NOT the end of the future un-aired season!). Set "isOngoingAdaptation": true.` : `Give the exact chapter/volume where THIS SPECIFIC anime season stops and the chapter/volume where readers should continue in the ${detectedKind}.`}
-2. Estimate "chaptersPerEpisode" as a decimal (e.g. 2.5 or 3.0) representing the adaptation pacing of this series if known, else null.
-3. If the anime adapts the entire source completely to the final chapter, set "isFullyAdapted": true and "continueAtChapter": null.
-4. If this is a Light Novel adaptation where chapters aren't numbered continuously, use "endedAtVolume" and "continueAtVolume" (and "coveredRange" like "Vol. 1 – 3") and set chapter numbers to null unless a manga adaptation has clear chapters.
-5. NEVER fabricate numbers if you are unsure. If you don't reliably know where this anime is at, set "confidence": "low" and set numbers to null.
-6. Write "note" as ONE short helpful sentence (max 150 chars) in ${LANGUAGE_NAMES[lang]} mentioning the episode/chapter breakpoint or restart tip, or null if nothing special.`;
+CRITICAL ANTI-HALLUCINATION RULES:
+1. NEVER guess or invent chapter numbers! Only set "confidence": "high" if you are 100% certain of the exact verified ending chapter/volume for THIS SPECIFIC season/movie.
+2. If you are even slightly unsure, or if the anime is still airing and you don't know the exact chapter for Episode ${liveAiredEpisode ?? "?"}, you MUST set "confidence": "low" and set endedAtChapter/continueAtChapter/endedAtVolume/continueAtVolume to null.
+3. If the anime adapts the entire source to its final chapter, set "isFullyAdapted": true and "continueAtChapter": null.
+4. For Light Novels without continuous chapter numbers, use endedAtVolume / continueAtVolume and set chapter numbers to null.
+5. Write "note" as ONE short helpful sentence (max 150 chars) in ${LANGUAGE_NAMES[lang]} or null.`;
 
     let rawText = "";
     let lastModelErr: unknown = null;
@@ -399,7 +504,7 @@ Strict rules:
         const model = genAI.getGenerativeModel({
           model: modelName,
           generationConfig: {
-            temperature: 0.1,
+            temperature: 0.05,
             maxOutputTokens: 512,
             responseMimeType: "application/json",
           },
@@ -435,12 +540,13 @@ Strict rules:
     }
 
     const confidenceRaw = String(parsed.confidence ?? "low").toLowerCase();
-    const confidence: MangaContinuationInfo["confidence"] =
-      confidenceRaw === "high"
-        ? "high"
-        : confidenceRaw === "medium"
-          ? "medium"
-          : "low";
+    // Strict anti-hallucination gate: only display AI numbers if confidence === "high"
+    if (confidenceRaw !== "high") {
+      return NextResponse.json(
+        { data: null, source: "low-confidence-suppressed", liveAiredEpisode },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
 
     let endedAtChapter = toPositiveIntOrNull(parsed.endedAtChapter);
     if (endedAtChapter !== null && effectiveSourceChapters !== null) {
@@ -458,13 +564,13 @@ Strict rules:
 
     const data: MangaContinuationInfo = {
       sourceKind: detectedKind,
-      endedAtChapter: confidence === "low" ? null : endedAtChapter,
-      continueAtChapter: confidence === "low" ? null : continueAtChapter,
-      endedAtVolume: confidence === "low" ? null : endedAtVolume,
-      continueAtVolume: confidence === "low" ? null : continueAtVolume,
+      endedAtChapter,
+      continueAtChapter,
+      endedAtVolume,
+      continueAtVolume,
       chaptersPerEpisode,
       coveredRange:
-        confidence !== "low" && typeof parsed.coveredRange === "string" && parsed.coveredRange.trim()
+        typeof parsed.coveredRange === "string" && parsed.coveredRange.trim()
           ? parsed.coveredRange.trim().slice(0, 60)
           : null,
       adaptedArc:
@@ -474,7 +580,8 @@ Strict rules:
       isFullyAdapted: Boolean(parsed.isFullyAdapted),
       isOngoingAdaptation: Boolean(parsed.isOngoingAdaptation) || isReleasing,
       verified: false,
-      confidence,
+      confidence: "high",
+      dataSource: "estimated",
       note:
         typeof parsed.note === "string" && parsed.note.trim()
           ? parsed.note.trim().slice(0, 220)
@@ -486,13 +593,12 @@ Strict rules:
       updatedAt: new Date().toISOString(),
     };
 
-    if (confidence !== "low") {
-      setCached(
-        cacheKey,
-        data,
-        isReleasing ? RELEASING_CACHE_TTL_MS : FINISHED_CACHE_TTL_MS
-      );
-    }
+    setCached(
+      cacheKey,
+      data,
+      isReleasing ? "gemini-live" : "gemini",
+      isReleasing ? RELEASING_CACHE_TTL_MS : FINISHED_CACHE_TTL_MS
+    );
 
     return NextResponse.json(
       {

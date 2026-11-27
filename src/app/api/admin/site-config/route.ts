@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchMediaDetail } from "@/lib/anilist";
 import { requireCreatorActor } from "@/lib/server/admin-auth";
+import { broadcastRealtimeEvent } from "@/lib/server/realtime-broadcast";
 import {
   getSiteConfig,
   sanitizeSiteConfigInput,
@@ -11,6 +12,9 @@ import type { MediaItem } from "@/types/media";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const SITE_CONFIG_REALTIME_TOPIC = "shiori:site-config-live";
+const SITE_CONFIG_REALTIME_EVENT = "site_config_updated";
 
 export async function GET() {
   const guard = await requireCreatorActor();
@@ -91,6 +95,13 @@ export async function PUT(request: NextRequest) {
 
   const saved = await saveSiteConfig(sanitized, guard.actor.id);
 
+  // Push instantly from server -> Supabase Realtime -> every connected visitor worldwide
+  const broadcasted = await broadcastRealtimeEvent(
+    SITE_CONFIG_REALTIME_TOPIC,
+    SITE_CONFIG_REALTIME_EVENT,
+    { config: saved.config }
+  );
+
   try {
     revalidatePath("/");
   } catch {
@@ -101,5 +112,6 @@ export async function PUT(request: NextRequest) {
     ok: true,
     config: saved.config,
     persistedToSupabase: saved.persistedToSupabase,
+    broadcasted,
   });
 }

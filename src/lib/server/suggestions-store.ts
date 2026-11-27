@@ -26,10 +26,12 @@ const SUGGESTIONS_SITE_KEY = "user_suggestions_v1";
 const SUGGESTIONS_META_SITE_KEY = "user_suggestions_meta_v1";
 export const USER_SUGGESTIONS_STATS_KEY = "_shioriSuggestions";
 export const CREATOR_SUGGESTION_META_STATS_KEY = "_shioriSuggestionMeta";
+export const CREATOR_INBOX_SUGGESTIONS_STATS_KEY = "_shioriInboxSuggestions";
 
 const CREATOR_HANDLE_SET = new Set<string>(["6t79", "enzolepg63"]);
 const MAX_STORED_SUGGESTIONS = 300;
 const MAX_PER_USER_SUGGESTIONS = 25;
+const MAX_CREATOR_INBOX_MIRROR = 120;
 
 const PROJECT_DATA_DIR = process.env.SHIORI_DATA_DIR
   ? path.resolve(process.env.SHIORI_DATA_DIR)
@@ -116,12 +118,32 @@ function isUuid(val: string | null | undefined): val is string {
   );
 }
 
+function mapPgSuggestionRow(row: Record<string, unknown>): UserSuggestionRecord | null {
+  return sanitizeStoredSuggestion({
+    id: row.id,
+    userId: row.user_id,
+    username: row.username,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    accentColor: row.accent_color,
+    category: row.category,
+    title: row.title,
+    message: row.message,
+    device: row.device,
+    pagePath: row.page_path,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
 /**
  * Reads all user suggestions merged across:
  * 1) Local disk/memory cache
- * 2) Supabase `public.site_settings` (`user_suggestions_v1` + `user_suggestions_meta_v1`)
- * 3) Every user's `public.public_profiles.stats_summary._shioriSuggestions`
- *    & Creator's `_shioriSuggestionMeta` (works reliably even without service_role key!)
+ * 2) Optional native PostgreSQL `public.user_suggestions` table
+ * 3) Supabase `public.site_settings` (`user_suggestions_v1` + `user_suggestions_meta_v1`)
+ * 4) Every user's `public.public_profiles.stats_summary._shioriSuggestions`
+ *    & Creator's `_shioriInboxSuggestions` / `_shioriSuggestionMeta`
  */
 export async function listAllSuggestions(): Promise<{
   suggestions: UserSuggestionRecord[];
@@ -139,6 +161,24 @@ export async function listAllSuggestions(): Promise<{
       getSupabasePublicServerClient();
 
     if (client) {
+      // Source 0: Optional native `public.user_suggestions` table (gracefully skipped if absent)
+      try {
+        const { data: tableRows, error: tableErr } = await client
+          .from("user_suggestions")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(MAX_STORED_SUGGESTIONS);
+
+        if (!tableErr && Array.isArray(tableRows)) {
+          const mapped = tableRows
+            .map((r) => mapPgSuggestionRow(r as Record<string, unknown>))
+            .filter((x): x is UserSuggestionRecord => x !== null);
+          if (mapped.length > 0) itemSources.push(mapped);
+        }
+      } catch {
+        // table not yet created — fall through cleanly
+      }
+
       // Source A: `public.site_settings`
       try {
         const { data: settingsRows } = await client
@@ -166,7 +206,7 @@ export async function listAllSuggestions(): Promise<{
       try {
         const { data: pubRows } = await client
           .from("public_profiles")
-          .select("username, display_name, role, stats_summary")
+          .select("username, display_name, stats_summary")
           .limit(500);
 
         if (Array.isArray(pubRows)) {
@@ -185,13 +225,19 @@ export async function listAllSuggestions(): Promise<{
             const unameNorm = normalizeIdentityHandle(String(row.username || ""));
             const dnameNorm = normalizeIdentityHandle(String(row.display_name || ""));
             const isCreatorRow =
-              row.role === "creator" ||
-              CREATOR_HANDLE_SET.has(unameNorm) ||
-              CREATOR_HANDLE_SET.has(dnameNorm);
-            if (isCreatorRow && summaryObj[CREATOR_SUGGESTION_META_STATS_KEY]) {
-              metaSources.push(
-                sanitizeSuggestionMeta(summaryObj[CREATOR_SUGGESTION_META_STATS_KEY])
-              );
+              CREATOR_HANDLE_SET.has(unameNorm) || CREATOR_HANDLE_SET.has(dnameNorm);
+            if (isCreatorRow) {
+              if (Array.isArray(summaryObj[CREATOR_INBOX_SUGGESTIONS_STATS_KEY])) {
+                const inboxItems = (summaryObj[CREATOR_INBOX_SUGGESTIONS_STATS_KEY] as unknown[])
+                  .map(sanitizeStoredSuggestion)
+                  .filter((x): x is UserSuggestionRecord => x !== null);
+                if (inboxItems.length > 0) itemSources.push(inboxItems);
+              }
+              if (summaryObj[CREATOR_SUGGESTION_META_STATS_KEY]) {
+                metaSources.push(
+                  sanitizeSuggestionMeta(summaryObj[CREATOR_SUGGESTION_META_STATS_KEY])
+                );
+              }
             }
           }
         }
@@ -210,9 +256,9 @@ export async function listAllSuggestions(): Promise<{
 }
 
 /**
- * Persists a newly submitted suggestion across local disk, Supabase `site_settings`
- * (when service_role / creator access is available), and the submitting user's own
- * `profiles.stats_summary._shioriSuggestions` (always RLS-allowed for authenticated members).
+ * Persists a newly submitted suggestion across local disk, optional `public.user_suggestions`,
+ * Supabase `site_settings` (when service_role / creator access is available), and the
+ * submitting user's own `profiles.stats_summary._shioriSuggestions`.
  */
 export async function createUserSuggestion(input: {
   userId: string | null;
@@ -256,8 +302,35 @@ export async function createUserSuggestion(input: {
   try {
     const adminClient = getSupabaseAdminClient();
     const userClient = await getSupabaseServerClient();
+    const publicClient = getSupabasePublicServerClient();
 
-    // 2) If service_role is available, append to `public.site_settings` (`user_suggestions_v1`)
+    // 2) Try optional native `public.user_suggestions` table (allows both anon & authenticated inserts)
+    const tableClient = adminClient ?? userClient ?? publicClient;
+    if (tableClient) {
+      try {
+        const { error: insertErr } = await tableClient.from("user_suggestions").insert({
+          id: suggestion.id,
+          user_id: isUuid(suggestion.userId) ? suggestion.userId : null,
+          username: suggestion.username,
+          display_name: suggestion.displayName,
+          avatar_url: suggestion.avatarUrl,
+          accent_color: suggestion.accentColor ?? null,
+          category: suggestion.category,
+          title: suggestion.title,
+          message: suggestion.message,
+          device: suggestion.device,
+          page_path: suggestion.pagePath,
+          status: suggestion.status,
+          created_at: suggestion.createdAt,
+          updated_at: suggestion.updatedAt,
+        });
+        if (!insertErr) persistedToCloud = true;
+      } catch {
+        // table not created yet — continue to fallbacks
+      }
+    }
+
+    // 3) If service_role is available, append to `public.site_settings` (`user_suggestions_v1`)
     if (adminClient) {
       try {
         const { data: existingRow } = await adminClient
@@ -288,7 +361,7 @@ export async function createUserSuggestion(input: {
       }
     }
 
-    // 3) Always mirror into the submitting authenticated user's own `profiles.stats_summary._shioriSuggestions`
+    // 4) Always mirror into the submitting authenticated user's own `profiles.stats_summary._shioriSuggestions`
     const profileClient = adminClient ?? userClient;
     if (profileClient && isUuid(input.userId)) {
       try {
@@ -337,8 +410,103 @@ export async function createUserSuggestion(input: {
 }
 
 /**
+ * Creator-only cloud archival: persists an incoming Realtime suggestion (including from an
+ * anonymous guest on another device) into `site_settings` and the Creator's own profile
+ * using the Creator's authenticated session (`is_shiori_creator() === true`).
+ */
+export async function ingestSuggestionAsCreator(input: {
+  creatorUserId: string;
+  rawSuggestion: unknown;
+}): Promise<{
+  suggestions: UserSuggestionRecord[];
+  newCount: number;
+  persistedToCloud: boolean;
+}> {
+  const clean = sanitizeStoredSuggestion(input.rawSuggestion);
+  const { suggestions: currentItems, meta: currentMeta } = await listAllSuggestions();
+  if (!clean) {
+    return {
+      suggestions: currentItems,
+      newCount: currentItems.filter((s) => s.status === "new").length,
+      persistedToCloud: false,
+    };
+  }
+
+  const nextItems = mergeAndOverlaySuggestions([[clean], currentItems], currentMeta);
+  const nowIso = new Date().toISOString();
+  writeLocalStore({ items: nextItems, meta: currentMeta });
+
+  let persistedToCloud = false;
+  try {
+    const client = getSupabaseAdminClient() ?? (await getSupabaseServerClient());
+    if (client) {
+      // 1) Persist compacted list in `public.site_settings` (RLS allows Creator!)
+      try {
+        const { error: listErr } = await client.from("site_settings").upsert(
+          {
+            key: SUGGESTIONS_SITE_KEY,
+            value: nextItems.slice(0, MAX_STORED_SUGGESTIONS),
+            updated_by: isUuid(input.creatorUserId) ? input.creatorUserId : null,
+            updated_at: nowIso,
+          },
+          { onConflict: "key" }
+        );
+        if (!listErr) persistedToCloud = true;
+      } catch {
+        // continue to profile mirror
+      }
+
+      // 2) Mirror into Creator's `profiles.stats_summary._shioriInboxSuggestions`
+      if (isUuid(input.creatorUserId)) {
+        try {
+          const { data: creatorRow } = await client
+            .from("profiles")
+            .select("stats_summary")
+            .eq("id", input.creatorUserId)
+            .maybeSingle();
+
+          const currentSummary =
+            creatorRow?.stats_summary && typeof creatorRow.stats_summary === "object"
+              ? (creatorRow.stats_summary as Record<string, unknown>)
+              : {};
+
+          const { data: updated, error } = await client
+            .from("profiles")
+            .update({
+              stats_summary: {
+                ...currentSummary,
+                [CREATOR_INBOX_SUGGESTIONS_STATS_KEY]: nextItems.slice(
+                  0,
+                  MAX_CREATOR_INBOX_MIRROR
+                ),
+              },
+            })
+            .eq("id", input.creatorUserId)
+            .select("id");
+
+          if (!error && Array.isArray(updated) && updated.length > 0) {
+            persistedToCloud = true;
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+    }
+  } catch {
+    // local store already updated
+  }
+
+  return {
+    suggestions: nextItems,
+    newCount: nextItems.filter((s) => s.status === "new").length,
+    persistedToCloud,
+  };
+}
+
+/**
  * Creator-only mutation: updates a suggestion's status (`new | planned | done | archived`)
- * or deletes it, persisting durably across local disk, `site_settings`, and Creator's own profile.
+ * or deletes it, persisting durably across local disk, `user_suggestions`, `site_settings`,
+ * and Creator's own profile.
  */
 export async function mutateSuggestionAsCreator(input: {
   creatorUserId: string;
@@ -378,6 +546,25 @@ export async function mutateSuggestionAsCreator(input: {
   try {
     const client = getSupabaseAdminClient() ?? (await getSupabaseServerClient());
     if (client) {
+      // 0) Update optional `public.user_suggestions` table if present
+      try {
+        if (input.action === "delete") {
+          const { error: delErr } = await client
+            .from("user_suggestions")
+            .delete()
+            .eq("id", input.suggestionId);
+          if (!delErr) persistedToCloud = true;
+        } else if (input.status) {
+          const { error: updErr } = await client
+            .from("user_suggestions")
+            .update({ status: input.status, updated_at: nowIso })
+            .eq("id", input.suggestionId);
+          if (!updErr) persistedToCloud = true;
+        }
+      } catch {
+        // table may not exist yet
+      }
+
       // 1) Try `public.site_settings` (meta + compacted list)
       try {
         const { error: metaErr } = await client.from("site_settings").upsert(
@@ -403,7 +590,7 @@ export async function mutateSuggestionAsCreator(input: {
         // handled by mirror below
       }
 
-      // 2) Always mirror Creator moderation metadata into Creator's own profile
+      // 2) Always mirror Creator moderation metadata & compacted inbox into Creator's own profile
       if (isUuid(input.creatorUserId)) {
         try {
           const { data: creatorRow } = await client
@@ -423,6 +610,10 @@ export async function mutateSuggestionAsCreator(input: {
               stats_summary: {
                 ...currentSummary,
                 [CREATOR_SUGGESTION_META_STATS_KEY]: nextMeta,
+                [CREATOR_INBOX_SUGGESTIONS_STATS_KEY]: nextItems.slice(
+                  0,
+                  MAX_CREATOR_INBOX_MIRROR
+                ),
               },
             })
             .eq("id", input.creatorUserId)

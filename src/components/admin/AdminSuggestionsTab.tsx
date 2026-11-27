@@ -31,6 +31,7 @@ interface AdminSuggestionsTabProps {
   suggestions: UserSuggestionRecord[];
   loading: boolean;
   mutatingId: string | null;
+  liveConnected?: boolean;
   onRefresh: () => void;
   onUpdateStatus: (id: string, status: SuggestionStatus) => void;
   onDelete: (id: string) => void;
@@ -92,6 +93,7 @@ export function AdminSuggestionsTab({
   suggestions,
   loading,
   mutatingId,
+  liveConnected = false,
   onRefresh,
   onUpdateStatus,
   onDelete,
@@ -128,10 +130,28 @@ export function AdminSuggestionsTab({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <p className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-[#F0B95B]">
-            <Lightbulb className="w-3.5 h-3.5" />
-            <span>{tr("Boîte à idées reçues")}</span>
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.18em] text-[#F0B95B]">
+              <Lightbulb className="w-3.5 h-3.5" />
+              <span>{tr("Boîte à idées reçues")}</span>
+            </p>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+                liveConnected
+                  ? "bg-emerald-500/14 border-emerald-400/40 text-emerald-300"
+                  : "bg-white/[0.05] border-white/[0.12] text-[#A2A6B8]"
+              )}
+            >
+              <span
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  liveConnected ? "bg-emerald-400 animate-pulse" : "bg-[#8D92A4]"
+                )}
+              />
+              <span>{liveConnected ? tr("Temps réel actif") : tr("Synchronisation auto")}</span>
+            </span>
+          </div>
           <h2 className="text-lg font-bold text-white mt-0.5">
             {tr("Suggestions des utilisateurs")} ({suggestions.length})
           </h2>

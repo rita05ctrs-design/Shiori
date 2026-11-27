@@ -239,21 +239,20 @@ export async function POST(request: NextRequest) {
       try {
         const supabase = await getSupabaseServerClient();
         if (supabase) {
-          let preservedAdminGrants: unknown;
+          const preservedInternalKeys: Record<string, unknown> = {};
           try {
             const { data: existingRow } = await supabase
               .from("profiles")
               .select("stats_summary")
               .eq("id", actor.id)
               .maybeSingle();
-            if (
-              existingRow?.stats_summary &&
-              typeof existingRow.stats_summary === "object" &&
-              ADMIN_GRANTS_STATS_KEY in (existingRow.stats_summary as Record<string, unknown>)
-            ) {
-              preservedAdminGrants = (existingRow.stats_summary as Record<string, unknown>)[
-                ADMIN_GRANTS_STATS_KEY
-              ];
+            if (existingRow?.stats_summary && typeof existingRow.stats_summary === "object") {
+              const existingSummary = existingRow.stats_summary as Record<string, unknown>;
+              for (const [k, v] of Object.entries(existingSummary)) {
+                if (k === ADMIN_GRANTS_STATS_KEY || k.startsWith("_shiori")) {
+                  preservedInternalKeys[k] = v;
+                }
+              }
             }
           } catch {
             // non-fatal
@@ -277,9 +276,7 @@ export async function POST(request: NextRequest) {
               ...publicProfile.stats,
               libraryPreview: isActivityPublic ? (publicProfile.libraryPreview ?? []) : [],
               sharedCollections: isActivityPublic ? (publicProfile.sharedCollections ?? []) : [],
-              ...(preservedAdminGrants !== undefined
-                ? { [ADMIN_GRANTS_STATS_KEY]: preservedAdminGrants }
-                : {}),
+              ...preservedInternalKeys,
             },
             unlocked_badges: publicProfile.unlockedBadges ?? [],
             pinned_badges: publicProfile.pinnedBadges ?? [],

@@ -65,6 +65,10 @@ import {
   shouldShowMangaContinuation,
 } from "../src/lib/manga-continuation.ts";
 import {
+  parseMangaUpdatesField,
+  resolveFromMangaUpdatesSeries,
+} from "../src/lib/mangaupdates-parser.ts";
+import {
   translateGenreName,
   translateLibraryStatus,
   translateSeasonName,
@@ -1721,21 +1725,31 @@ test("manga-continuation: live airing episode sync dynamically advances ongoing 
   const onePiece = getCuratedMangaContinuation(21, "fr");
   assert.ok(onePiece && onePiece.liveAnchor);
   const syncedOp = applyLiveEpisodeAdjustment(onePiece, {
-    liveAiredEpisode: 1135,
-    sourceTotalChapters: 1160,
-    sourceTotalVolumes: 114,
+    liveAiredEpisode: 1182,
+    sourceTotalChapters: 1199,
+    sourceTotalVolumes: 115,
   });
   assert.equal(syncedOp.liveSynced, true);
-  assert.equal(syncedOp.syncedEpisode, 1135);
-  assert.equal(syncedOp.endedAtChapter, 1100);
-  assert.equal(syncedOp.continueAtChapter, 1101);
+  assert.equal(syncedOp.syncedEpisode, 1182);
+  assert.equal(syncedOp.endedAtChapter, 1152);
+  assert.equal(syncedOp.continueAtChapter, 1153);
   assert.ok(
     syncedOp.endedAtVolume !== null &&
       syncedOp.continueAtVolume !== null &&
       syncedOp.continueAtVolume - syncedOp.endedAtVolume <= 1,
     "continue volume must remain consistent with ended volume"
   );
-  assert.ok(syncedOp.coveredRange?.includes("1135"));
+  assert.ok(syncedOp.coveredRange?.includes("1182"));
+
+  // Regression guards for audited AniList IDs & chapters
+  assert.equal(getCuratedMangaContinuation(153800, "fr")?.endedAtChapter, 115, "153800 is One-Punch Man S3");
+  assert.equal(getCuratedMangaContinuation(153658, "fr")?.endedAtChapter, 325, "153658 is Haikyu Dumpster Battle");
+  assert.equal(getCuratedMangaContinuation(158530, "fr"), null, "158530 (The Gene of AI) must not be mislabeled as Manhwa");
+  assert.equal(getCuratedMangaContinuation(171018, "fr")?.endedAtChapter, 34, "Dandadan S1 ends at Ch. 34");
+  assert.equal(getCuratedMangaContinuation(182255, "fr")?.endedAtChapter, 80, "Frieren S2 ends at Ch. 80");
+  assert.equal(getCuratedMangaContinuation(172463, "fr")?.endedAtChapter, 181, "JJK S3P1 ends at Ch. 181");
+  assert.equal(getCuratedMangaContinuation(178788, "fr")?.endedAtChapter, 156, "Demon Slayer Infinity Castle Movie 1 ends at Ch. 156");
+  assert.equal(getCuratedMangaContinuation(162144, "fr")?.endedAtChapter, 40, "Doctor Elise manhwa ends at Ch. 40");
 
   // 3. Multi-season sequel (Solo Leveling S2 #176496, Ch. 46-110 over 13 eps) calibrates mid-season personal progress accurately
   const soloS2 = getCuratedMangaContinuation(176496, "fr");
@@ -1749,6 +1763,123 @@ test("manga-continuation: live airing episode sync dynamically advances ongoing 
   assert.equal(personalS2.syncedEpisode, 7);
   assert.equal(personalS2.endedAtChapter, 80);
   assert.equal(personalS2.continueAtChapter, 81);
+});
+
+test("mangaupdates-parser: resolves real MangaUpdates anime start/end strings across Manga, Manhwa, Movies & ongoing EP sync", () => {
+  // 1. Live ongoing One Piece "(As of EP 1180)"
+  const opSegs = parseMangaUpdatesField("Vol 113, Chap 1150 (As of EP 1180)");
+  assert.equal(opSegs.length, 1);
+  assert.equal(opSegs[0].volume, 113);
+  assert.equal(opSegs[0].chapter, 1150);
+  assert.equal(opSegs[0].asOfEpisode, 1180);
+
+  const opResolved = resolveFromMangaUpdatesSeries(
+    {
+      title: "One Piece",
+      type: "Manga",
+      latestChapter: 1199,
+      completed: false,
+      animeStart: "Vol 1, Chap 1 (Chap 1 adapted in EP 4)",
+      animeEnd: "Vol 113, Chap 1150 (As of EP 1180)",
+    },
+    { title: "ONE PIECE", status: "RELEASING", liveAiredEpisode: 1180 },
+    "MANGA",
+    "fr"
+  );
+  assert.ok(opResolved);
+  assert.equal(opResolved.endedAtChapter, 1150);
+  assert.equal(opResolved.continueAtChapter, 1151);
+  assert.equal(opResolved.endedAtVolume, 113);
+  assert.equal(opResolved.syncedEpisode, 1180);
+  assert.equal(opResolved.liveAnchor?.anchorEpisode, 1180);
+
+  // 2. Multi-season Frieren S2
+  const frierenS2 = resolveFromMangaUpdatesSeries(
+    {
+      title: "Sousou no Frieren",
+      type: "Manga",
+      latestChapter: 147,
+      completed: false,
+      animeStart: "Vol 1, Chap 1 (S1) / Vol 7, Chap 61 (S2)",
+      animeEnd: "Vol 7, Chap 60 (S1) / Vol 9, Chap 80 (S2)",
+    },
+    { title: "Frieren: Beyond Journey's End Season 2", status: "FINISHED", totalEpisodes: 10 },
+    "MANGA",
+    "fr"
+  );
+  assert.ok(frierenS2);
+  assert.equal(frierenS2.endedAtChapter, 80);
+  assert.equal(frierenS2.continueAtChapter, 81);
+  assert.equal(frierenS2.endedAtVolume, 9);
+  assert.equal(frierenS2.coveredRange, "Ch. 61 – 80");
+
+  // 3. Manhwa Solo Leveling S2
+  const slS2 = resolveFromMangaUpdatesSeries(
+    {
+      title: "Solo Leveling",
+      type: "Manhwa",
+      latestChapter: 201,
+      completed: true,
+      animeStart: "Chap 0 (S1) / Chap 46 (S2)",
+      animeEnd: "Chap 45 (S1) / Chap 110 (S2)",
+    },
+    {
+      title: "Solo Leveling Season 2 -Arise from the Shadow-",
+      status: "FINISHED",
+      totalEpisodes: 13,
+      sourceTotalChapters: 200,
+      sourceStatus: "FINISHED",
+    },
+    "MANHWA",
+    "fr"
+  );
+  assert.ok(slS2);
+  assert.equal(slS2.sourceKind, "MANHWA");
+  assert.equal(slS2.endedAtChapter, 110);
+  assert.equal(slS2.continueAtChapter, 111);
+  assert.equal(slS2.isFullyAdapted, false);
+
+  // 4. Demon Slayer Infinity Castle Movie 1
+  const dsMovie = resolveFromMangaUpdatesSeries(
+    {
+      title: "Kimetsu no Yaiba",
+      type: "Manga",
+      latestChapter: 205,
+      completed: true,
+      animeStart:
+        "Vol 1, Chap 1 (S1) / Vol 7, Chap 54 Page 5 (S2) / Vol 16, Chap 140 (Infinity Castle Movie 1)",
+      animeEnd:
+        "Vol 7, Chap 54 Page 4 (S1) / Vol 11, Chap 97 (S2) / Vol 18, Chap 156 (Infinity Castle Movie 1)",
+    },
+    {
+      title: "Demon Slayer: Kimetsu no Yaiba Infinity Castle",
+      format: "MOVIE",
+      status: "FINISHED",
+      sourceTotalChapters: 205,
+      sourceStatus: "FINISHED",
+    },
+    "MANGA",
+    "fr"
+  );
+  assert.ok(dsMovie);
+  assert.equal(dsMovie.endedAtChapter, 156);
+  assert.equal(dsMovie.continueAtChapter, 157);
+  assert.equal(dsMovie.endedAtVolume, 18);
+
+  // 5. Never misattribute S1/S2 ending to an unindexed Season 4!
+  const unindexedS4 = resolveFromMangaUpdatesSeries(
+    {
+      title: "Some Series",
+      type: "Manga",
+      completed: false,
+      animeStart: "Vol 1, Chap 1 (S1) / Vol 5, Chap 40 (S2)",
+      animeEnd: "Vol 5, Chap 39 (S1) / Vol 10, Chap 80 (S2)",
+    },
+    { title: "Some Series Season 4", status: "RELEASING", liveAiredEpisode: 3 },
+    "MANGA",
+    "fr"
+  );
+  assert.equal(unindexedS4, null, "must return null instead of spoofing S1/S2 ending onto S4");
 });
 
 test("suggestions-utils: validates inputs, blocks unsafe paths, merges sources & overlays Creator statuses", () => {
