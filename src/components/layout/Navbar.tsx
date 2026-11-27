@@ -216,7 +216,7 @@ export function Navbar() {
         className={cn(
           "fixed top-0 inset-x-0 z-50 transition-all duration-300 pt-[env(safe-area-inset-top)]",
           scrolled
-            ? "bg-obsidian/88 backdrop-blur-2xl border-b border-white/[0.09] shadow-[0_12px_36px_rgba(0,0,0,0.52),inset_0_-1px_0_rgba(255,255,255,0.04)]"
+            ? "bg-obsidian/92 backdrop-blur-md border-b border-white/[0.09] shadow-[0_10px_28px_rgba(0,0,0,0.48),inset_0_-1px_0_rgba(255,255,255,0.04)]"
             : "bg-gradient-to-b from-obsidian/94 via-obsidian/55 to-transparent border-b border-transparent"
         )}
       >
@@ -328,8 +328,10 @@ export function Navbar() {
 
           {/* Right Utility Controls */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* PC Quick Access: Épisodes de la semaine / À voir (+1 Vu direct sans modale) */}
-            <QuickEpisodesPopover />
+            {/* PC Quick Access: Épisodes de la semaine / À voir (mobile has Semaine right in the bottom dock) */}
+            <div className="hidden sm:block">
+              <QuickEpisodesPopover />
+            </div>
 
             {/* Global Search & Quick-Add Trigger */}
             <button
@@ -648,7 +650,7 @@ export function Navbar() {
         data-mobile-bottom-nav="true"
         className="md:hidden fixed bottom-0 inset-x-0 z-50 px-2.5 pb-[calc(0.55rem+env(safe-area-inset-bottom))] pt-1.5 pointer-events-none"
       >
-        <div className="pointer-events-auto relative rounded-2xl bg-[#0B0D16]/90 backdrop-blur-2xl border border-white/[0.11] shadow-[0_18px_46px_rgba(0,0,0,0.82),inset_0_1px_0_rgba(255,255,255,0.1)] p-1">
+        <div className="pointer-events-auto relative rounded-2xl bg-[#0B0D16]/94 backdrop-blur-md border border-white/[0.11] shadow-[0_14px_34px_rgba(0,0,0,0.78),inset_0_1px_0_rgba(255,255,255,0.1)] p-1">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-accent/65 to-transparent"

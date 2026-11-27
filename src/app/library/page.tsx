@@ -600,7 +600,7 @@ function LibraryPageInner() {
   const isCompactDensity = displayPrefs.libraryDensity === "compact";
 
   return (
-    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
+    <div className="w-full min-w-0 pt-[calc(4.75rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 space-y-6 sm:space-y-8">
       {/* Header — 1 clear goal: manage your library & add titles */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>

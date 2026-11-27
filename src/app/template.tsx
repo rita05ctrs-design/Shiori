@@ -7,5 +7,5 @@ import React from "react";
  * without ever remounting LayoutRouter, providers, or breaking position: sticky.
  */
 export default function Template({ children }: { children: React.ReactNode }) {
-  return <div className="shiori-route-enter flex-1 flex flex-col min-w-0">{children}</div>;
+  return <div className="shiori-route-enter w-full min-w-0">{children}</div>;
 }

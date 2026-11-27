@@ -151,7 +151,7 @@ export default function RootLayout({
         <ShioriProvider>
           <MotionRoot>
             <Navbar />
-            <main className="flex-1 min-w-0 flex flex-col">{children}</main>
+            <main className="flex-1 w-full min-w-0">{children}</main>
             <Footer />
             <GlobalModals />
             <ScrollToTopButton />

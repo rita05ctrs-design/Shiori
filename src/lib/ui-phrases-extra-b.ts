@@ -3583,4 +3583,20 @@ export const UI_PHRASES_EXTRA_B: Record<string, PhraseMap> = {
     pt: "Membro de honra distinguido pelo criador do Shiori.",
     ja: "Shioriのクリエイターから認定された名誉メンバー。",
   },
+  "Sélectionner": {
+    en: "Select",
+    es: "Seleccionar",
+    de: "Auswählen",
+    it: "Seleziona",
+    pt: "Selecionar",
+    ja: "選択",
+  },
+  "Voir les résultats": {
+    en: "View results",
+    es: "Ver resultados",
+    de: "Ergebnisse anzeigen",
+    it: "Vedi risultati",
+    pt: "Ver resultados",
+    ja: "結果を見る",
+  },
 };

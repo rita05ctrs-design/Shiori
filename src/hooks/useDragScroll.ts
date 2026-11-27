@@ -3,20 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface DragScrollOptions {
-  /** Multiplier for drag responsiveness (default 1.15) */
+  /** Multiplier for drag responsiveness (default 1.12) */
   dragSpeed?: number;
-  /** Friction factor per frame for inertia glide (0.90–0.96, default 0.935) */
+  /** Friction factor per 60fps frame for inertia glide (0.90–0.96, default 0.935) */
   friction?: number;
 }
 
 /**
- * Zero-re-render left-click-and-drag horizontal scrolling with smooth physics inertia.
- * Updates the optional glide track DOM transform directly via ref (0 React renders per frame).
+ * Locked-120fps zero-re-render horizontal scrolling with cached scroll metrics,
+ * rAF-batched drag/scroll updates (zero layout thrashing even on 1000Hz mice),
+ * and frame-rate-independent inertia glide.
  */
 export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
   options: DragScrollOptions = {}
 ) {
-  const { dragSpeed = 1.15, friction = 0.935 } = options;
+  const { dragSpeed = 1.12, friction = 0.935 } = options;
 
   const ref = useRef<T | null>(null);
   const trackThumbRef = useRef<HTMLDivElement | null>(null);
@@ -25,6 +26,11 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
   const [canScrollRight, setCanScrollRight] = useState(true);
 
   const boundsRef = useRef({ left: false, right: true });
+  const maxScrollRef = useRef(0);
+  const scrollRafRef = useRef(0);
+  const dragRafRef = useRef(0);
+  const pendingScrollLeftRef = useRef<number | null>(null);
+
   const stateRef = useRef({
     pointerDown: false,
     hasDragged: false,
@@ -38,14 +44,14 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
     lastTouchAt: 0,
   });
 
-  const updateScrollBounds = useCallback(() => {
+  const syncThumbAndBounds = useCallback(() => {
     const el = ref.current;
     if (!el) return;
-    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
-    const nextLeft = el.scrollLeft > 4;
-    const nextRight = maxScroll - el.scrollLeft > 4;
+    const maxScroll = maxScrollRef.current;
+    const scrollLeft = el.scrollLeft;
+    const nextLeft = scrollLeft > 4;
+    const nextRight = maxScroll - scrollLeft > 4;
 
-    // Only trigger React state updates when boundary booleans actually change
     if (boundsRef.current.left !== nextLeft) {
       boundsRef.current.left = nextLeft;
       setCanScrollLeft(nextLeft);
@@ -55,44 +61,72 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
       setCanScrollRight(nextRight);
     }
 
-    // Update progress track directly on GPU without causing React re-renders
     if (trackThumbRef.current) {
-      const progress = maxScroll > 0 ? Math.min(1, Math.max(0, el.scrollLeft / maxScroll)) : 0;
+      const progress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollLeft / maxScroll)) : 0;
       trackThumbRef.current.style.transform = `translate3d(${progress * 257}%, 0, 0)`;
     }
   }, []);
+
+  const measureMaxScroll = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    maxScrollRef.current = Math.max(0, el.scrollWidth - el.clientWidth);
+    syncThumbAndBounds();
+  }, [syncThumbAndBounds]);
+
+  const scheduleScrollSync = useCallback(() => {
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0;
+      syncThumbAndBounds();
+    });
+  }, [syncThumbAndBounds]);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    updateScrollBounds();
-    el.addEventListener("scroll", updateScrollBounds, { passive: true });
-    window.addEventListener("resize", updateScrollBounds, { passive: true });
+    measureMaxScroll();
+    el.addEventListener("scroll", scheduleScrollSync, { passive: true });
+    window.addEventListener("resize", measureMaxScroll, { passive: true });
 
-    const ro = new ResizeObserver(() => updateScrollBounds());
+    const ro = new ResizeObserver(() => measureMaxScroll());
     ro.observe(el);
 
     const state = stateRef.current;
     return () => {
-      el.removeEventListener("scroll", updateScrollBounds);
-      window.removeEventListener("resize", updateScrollBounds);
+      el.removeEventListener("scroll", scheduleScrollSync);
+      window.removeEventListener("resize", measureMaxScroll);
       ro.disconnect();
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
+      }
+      if (dragRafRef.current) {
+        cancelAnimationFrame(dragRafRef.current);
+        dragRafRef.current = 0;
+      }
       if (state.rafId) {
         cancelAnimationFrame(state.rafId);
+        state.rafId = 0;
       }
     };
-  }, [updateScrollBounds]);
+  }, [measureMaxScroll, scheduleScrollSync]);
 
   const stopInertia = useCallback(() => {
     if (stateRef.current.rafId) {
       cancelAnimationFrame(stateRef.current.rafId);
       stateRef.current.rafId = 0;
     }
+    if (dragRafRef.current) {
+      cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = 0;
+    }
+    pendingScrollLeftRef.current = null;
   }, []);
 
   const onTouchStart = useCallback(() => {
-    // Let mobile browsers handle horizontal swipe natively at 120fps without mouse-drag interference
+    // Mobile touch uses native 120fps compositor scrolling with zero JS interception
     stateRef.current.lastTouchAt = performance.now();
     stateRef.current.pointerDown = false;
     stateRef.current.hasDragged = false;
@@ -101,7 +135,6 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent<T>) => {
-      // Ignore simulated mouse events emitted right after touch gestures
       if (performance.now() - stateRef.current.lastTouchAt < 750) return;
       if (e.button !== 0) return;
       const el = ref.current;
@@ -109,6 +142,8 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
       if ((e.target as HTMLElement | null)?.closest("button")) return;
 
       stopInertia();
+      // Refresh cached scroll range once at drag start (never inside mousemove/scroll)
+      maxScrollRef.current = Math.max(0, el.scrollWidth - el.clientWidth);
 
       const st = stateRef.current;
       st.pointerDown = true;
@@ -118,6 +153,15 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
       st.lastX = e.clientX;
       st.lastTime = performance.now();
       st.velocity = 0;
+
+      const flushDragScroll = () => {
+        dragRafRef.current = 0;
+        const target = pendingScrollLeftRef.current;
+        if (target !== null && ref.current) {
+          ref.current.scrollLeft = target;
+          pendingScrollLeftRef.current = null;
+        }
+      };
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!st.pointerDown || !ref.current) return;
@@ -130,12 +174,19 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
 
         if (st.hasDragged) {
           moveEvent.preventDefault();
-          ref.current.scrollLeft = st.startScrollLeft - dx * dragSpeed;
+          const clamped = Math.max(
+            0,
+            Math.min(maxScrollRef.current, st.startScrollLeft - dx * dragSpeed)
+          );
+          pendingScrollLeftRef.current = clamped;
+          if (!dragRafRef.current) {
+            dragRafRef.current = requestAnimationFrame(flushDragScroll);
+          }
 
           const now = performance.now();
           const dt = Math.max(1, now - st.lastTime);
           const instantVel = (moveEvent.clientX - st.lastX) / dt;
-          st.velocity = st.velocity * 0.4 + instantVel * 0.6;
+          st.velocity = st.velocity * 0.45 + instantVel * 0.55;
           st.lastX = moveEvent.clientX;
           st.lastTime = now;
         }
@@ -145,6 +196,15 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
         window.removeEventListener("mousemove", handleMouseMove);
         window.removeEventListener("mouseup", handleMouseUp);
         window.removeEventListener("blur", handleMouseUp);
+
+        if (dragRafRef.current) {
+          cancelAnimationFrame(dragRafRef.current);
+          dragRafRef.current = 0;
+        }
+        if (pendingScrollLeftRef.current !== null && ref.current) {
+          ref.current.scrollLeft = pendingScrollLeftRef.current;
+          pendingScrollLeftRef.current = null;
+        }
 
         if (!st.pointerDown) return;
         st.pointerDown = false;
@@ -156,11 +216,16 @@ export function useDragScroll<T extends HTMLElement = HTMLDivElement>(
           const timeSinceLastMove = performance.now() - st.lastTime;
           if (timeSinceLastMove < 90 && Math.abs(st.velocity) > 0.08) {
             let v = Math.max(-52, Math.min(52, st.velocity * 16 * dragSpeed));
-            const step = () => {
+            let prevTime = performance.now();
+            const step = (now: number) => {
               if (!ref.current) return;
-              ref.current.scrollLeft -= v;
-              v *= friction;
-              if (Math.abs(v) > 0.35) {
+              const dtFrames = Math.min(2.5, Math.max(0.25, (now - prevTime) / 16.6667));
+              prevTime = now;
+              const nextLeft = ref.current.scrollLeft - v * dtFrames;
+              ref.current.scrollLeft = nextLeft;
+              v *= Math.pow(friction, dtFrames);
+              const hitEdge = nextLeft <= 0 || nextLeft >= maxScrollRef.current;
+              if (!hitEdge && Math.abs(v) > 0.35) {
                 st.rafId = requestAnimationFrame(step);
               } else {
                 st.rafId = 0;

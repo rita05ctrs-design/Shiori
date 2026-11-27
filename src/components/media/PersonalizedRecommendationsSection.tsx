@@ -214,8 +214,8 @@ export function PersonalizedRecommendationsSection() {
             ref={scrollRef}
             {...dragHandlers}
             className={cn(
-              "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-4 -my-3 -mx-1 px-1 select-none",
-              isDragging ? "cursor-grabbing" : "cursor-grab"
+              "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-5 -my-4 -mx-1 px-1 select-none",
+              isDragging ? "cursor-grabbing shiori-rail-dragging" : "cursor-grab"
             )}
           >
             {items.map((rec) => {
@@ -226,67 +226,81 @@ export function PersonalizedRecommendationsSection() {
               return (
                 <div
                   key={m.id}
-                  className="w-[152px] sm:w-[176px] lg:w-[188px] shrink-0 group flex flex-col"
+                  className="shiori-rail-slot w-[148px] sm:w-[176px] lg:w-[188px] shrink-0 group flex flex-col"
                 >
-                  {/* 2:3 Vertical Poster */}
-                  <Link
-                    href={`/media/${m.id}`}
-                    draggable={false}
-                    className="relative aspect-[2/3] block rounded-xl overflow-hidden isolate [transform:translateZ(0)] border border-white/[0.08] group-hover:border-white/[0.22] bg-[#121521] shadow-[0_14px_34px_rgba(0,0,0,0.45)] transition-all duration-300 group-hover:-translate-y-1"
-                  >
-                    <img
-                      src={m.coverImage.extraLarge || m.coverImage.large}
-                      alt={title}
-                      loading="lazy"
-                      decoding="async"
-                      draggable={false}
-                      className="w-full h-full object-cover transform-gpu transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+                  {/* 2:3 Vertical Poster — 120fps Cinema Hover */}
+                  <div className="shiori-poster-shell relative z-0 aspect-[2/3] rounded-xl border border-white/[0.08] bg-[#121521] shadow-[0_10px_24px_rgba(0,0,0,0.45)]">
+                    <span
+                      aria-hidden="true"
+                      className="shiori-poster-glow pointer-events-none absolute inset-0 rounded-xl z-0"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/20 to-transparent pointer-events-none" />
+                    <Link
+                      href={`/media/${m.id}`}
+                      draggable={false}
+                      className="relative z-[1] block w-full h-full rounded-[11px] overflow-hidden bg-[#121521] select-none"
+                    >
+                      <img
+                        src={m.coverImage.extraLarge || m.coverImage.large}
+                        alt={title}
+                        loading="lazy"
+                        decoding="async"
+                        draggable={false}
+                        className="shiori-poster-img w-full h-full object-cover pointer-events-none select-none"
+                      />
+                      <div className="shiori-poster-vignette absolute inset-0 z-[1] bg-gradient-to-t from-obsidian via-obsidian/20 to-transparent pointer-events-none" />
+                      <span
+                        aria-hidden="true"
+                        className="shiori-poster-sheen pointer-events-none absolute inset-0 z-[2] bg-gradient-to-r from-transparent via-white/[0.18] to-transparent"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="shiori-poster-rim pointer-events-none absolute inset-0 z-[3] rounded-[11px]"
+                      />
 
-                    {/* Type Pill */}
-                    <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-obsidian/85 border border-white/12 text-[9.5px] font-mono uppercase text-[#D8DBE6]">
-                      {m.type === "MANGA" ? (
-                        <BookOpen className="w-2.5 h-2.5 text-violet-400" />
-                      ) : (
-                        <Tv className="w-2.5 h-2.5 text-sky-400" />
-                      )}
-                      {m.type === "MANGA" ? "Manga" : "Anime"}
-                    </span>
-
-                    {/* Score Pill */}
-                    {m.averageScore && (
-                      <span className="absolute top-2 right-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-obsidian/85 border border-white/12 font-mono text-[10.5px] font-bold text-kinpaku">
-                        <Star className="w-2.5 h-2.5 fill-current" />
-                        {formatScore(m.averageScore)}
-                      </span>
-                    )}
-
-                    {/* Quick Add Overlay Button */}
-                    <div className="absolute bottom-2 right-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (!entry) quickAdd(m, "PLAN_TO_WATCH");
-                        }}
-                        title={entry ? tr("Déjà dans votre liste") : tr("Ajouter en À voir")}
-                        className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center border transition-all cursor-pointer shadow-lg",
-                          entry
-                            ? "bg-emerald-500 border-emerald-400 text-[#07080C]"
-                            : "bg-obsidian/90 hover:bg-accent border-white/20 hover:border-accent text-white hover:text-accent-fg"
-                        )}
-                      >
-                        {entry ? (
-                          <Check className="w-4 h-4 stroke-[3]" />
+                      {/* Type Pill */}
+                      <span className="absolute top-2 left-2 z-10 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-obsidian/88 border border-white/12 text-[9.5px] font-mono uppercase text-[#D8DBE6]">
+                        {m.type === "MANGA" ? (
+                          <BookOpen className="w-2.5 h-2.5 text-violet-400" />
                         ) : (
-                          <Plus className="w-4 h-4" />
+                          <Tv className="w-2.5 h-2.5 text-sky-400" />
                         )}
-                      </button>
-                    </div>
-                  </Link>
+                        {m.type === "MANGA" ? "Manga" : "Anime"}
+                      </span>
+
+                      {/* Score Pill */}
+                      {m.averageScore && (
+                        <span className="absolute top-2 right-2 z-10 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-obsidian/88 border border-white/12 font-mono text-[10.5px] font-bold text-kinpaku">
+                          <Star className="w-2.5 h-2.5 fill-current" />
+                          {formatScore(m.averageScore)}
+                        </span>
+                      )}
+
+                      {/* Quick Add Overlay Button */}
+                      <div className="absolute bottom-2 right-2 z-10">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!entry) quickAdd(m, "PLAN_TO_WATCH");
+                          }}
+                          title={entry ? tr("Déjà dans votre liste") : tr("Ajouter en À voir")}
+                          className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center border transition-[transform,opacity,background-color,border-color] duration-250 ease-out cursor-pointer shadow-lg active:scale-90",
+                            entry
+                              ? "bg-emerald-500 border-emerald-400 text-[#07080C]"
+                              : "bg-obsidian/92 hover:bg-accent border-white/22 hover:border-accent text-white hover:text-accent-fg sm:opacity-0 sm:translate-y-1.5 sm:scale-90 sm:group-hover:opacity-100 sm:group-hover:translate-y-0 sm:group-hover:scale-100"
+                          )}
+                        >
+                          {entry ? (
+                            <Check className="w-4 h-4 stroke-[3]" />
+                          ) : (
+                            <Plus className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </Link>
+                  </div>
 
                   {/* Title & Compact Reason Tag */}
                   <div className="pt-2.5 space-y-1.5">

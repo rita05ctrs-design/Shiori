@@ -279,12 +279,12 @@ export function CommunityClient() {
       {/* Primary 3-Tab Switch + Contextual Right Control */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="w-full sm:w-auto max-w-full overflow-x-auto no-scrollbar pb-0.5">
-          <div className="inline-flex flex-nowrap items-center p-1 rounded-full bg-surface border border-white/[0.09] gap-0.5">
+          <div className="inline-flex flex-nowrap items-center p-1 rounded-full bg-surface border border-white/[0.09] gap-0.5 max-w-full">
             <button
               type="button"
               onClick={() => setTab("feed")}
               className={cn(
-                "relative px-4 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                "relative px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0",
                 tab === "feed" ? "text-accent-fg" : "text-[#9A9EAE] hover:text-white"
               )}
             >
@@ -302,7 +302,7 @@ export function CommunityClient() {
               type="button"
               onClick={() => setTab("friends")}
               className={cn(
-                "relative px-4 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                "relative px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0",
                 tab === "friends" ? "text-[#061810]" : "text-[#9A9EAE] hover:text-white"
               )}
             >
@@ -327,7 +327,7 @@ export function CommunityClient() {
               type="button"
               onClick={() => setTab("members")}
               className={cn(
-                "relative px-4 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0",
+                "relative px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-xs font-semibold transition-colors cursor-pointer inline-flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0",
                 tab === "members" ? "text-accent-fg" : "text-[#9A9EAE] hover:text-white"
               )}
             >

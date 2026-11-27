@@ -229,7 +229,7 @@ export function SeasonChronologySection({
             "flex gap-2.5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar pb-1.5 -mx-1 px-1 select-none",
             hasOverflow
               ? isDragging
-                ? "cursor-grabbing"
+                ? "cursor-grabbing shiori-rail-dragging"
                 : "cursor-grab"
               : ""
           )}

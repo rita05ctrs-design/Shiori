@@ -119,19 +119,19 @@ export function MediaRail({
           )}
         />
 
-        {/* Native 120fps Touch Swipe on Mobile + Physics Click-and-Drag on Desktop */}
+        {/* Native 120fps Touch Swipe on Mobile + rAF-Batched Click-and-Drag on Desktop */}
         <div
           ref={scrollRef}
           {...dragHandlers}
           className={cn(
-            "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-4 -my-3 -mx-1 px-1 select-none",
-            isDragging ? "cursor-grabbing" : "cursor-grab"
+            "flex gap-3.5 sm:gap-5 overflow-x-auto overflow-y-hidden touch-rail no-scrollbar py-5 -my-4 -mx-1 px-1 select-none",
+            isDragging ? "cursor-grabbing shiori-rail-dragging" : "cursor-grab"
           )}
         >
           {items.map((item, idx) => (
             <div
               key={item.id}
-              className="w-[152px] sm:w-[176px] lg:w-[188px] shrink-0"
+              className="shiori-rail-slot w-[148px] sm:w-[176px] lg:w-[188px] shrink-0"
             >
               <MediaCard media={item} rank={showRank ? idx + 1 : undefined} />
             </div>

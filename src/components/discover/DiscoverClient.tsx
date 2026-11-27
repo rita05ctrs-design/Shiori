@@ -1378,20 +1378,20 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
   ];
 
   return (
-    <div className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
+    <div className="w-full min-w-0 pt-[calc(4.5rem+env(safe-area-inset-top))] sm:pt-24 pb-24 md:pb-16 max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 space-y-4 sm:space-y-5">
       {/* Compact Header — immediate focus on search & posters */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gradient-editorial">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2.5 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-gradient-editorial leading-tight">
             {type === "ANIME" ? t("discover.titleAnime") : t("discover.titleManga")}
           </h1>
-          <p className="text-sm text-[#8A8FA4] mt-1">
+          <p className="text-xs sm:text-sm text-[#8A8FA4] mt-0.5 sm:mt-1 line-clamp-2 sm:line-clamp-none">
             {t("discover.subtitle")}
           </p>
         </div>
 
         {/* Anime / Manga Switcher */}
-        <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08] self-start md:self-auto">
+        <div className="inline-flex items-center p-1 rounded-full bg-white/[0.04] border border-white/[0.08] self-start sm:self-auto shrink-0">
           {(["ANIME", "MANGA"] as MediaType[]).map((mt) => {
             const active = type === mt;
             const Icon = mt === "ANIME" ? Tv : BookOpen;
@@ -1401,7 +1401,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 type="button"
                 onClick={() => handleTypeSwitch(mt)}
                 className={cn(
-                  "relative inline-flex items-center gap-2 px-5 py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer",
+                  "relative inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs font-semibold transition-colors cursor-pointer",
                   active ? "text-white" : "text-[#9A9EAE] hover:text-white"
                 )}
               >
@@ -1423,10 +1423,10 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
       </div>
 
       {/* Primary Search & Controls Strip — puts posters right above the fold */}
-      <div className="rounded-2xl card-surface border-white/[0.09] p-3.5 sm:p-4 space-y-3.5">
-        {/* Top Row: Search + Sort + Envies + Filtres avancés */}
-        <div className="flex flex-col sm:flex-row gap-2.5">
-          <div className="relative flex-1 group">
+      <div className="w-full min-w-0 rounded-2xl card-surface border-white/[0.09] p-3 sm:p-4 space-y-3 sm:space-y-3.5">
+        {/* Top Row: Search + Sort + Envies + Filtres avancés (fits 1 clean row on 360px/390px!) */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+          <div className="relative flex-1 min-w-0 group">
             <Search className="w-4 h-4 text-accent absolute left-3.5 top-1/2 -translate-y-1/2 transition-transform group-focus-within:scale-110" />
             <input
               type="text"
@@ -1448,27 +1448,28 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <LuxurySelect
+              label={undefined}
               value={sort}
               onChange={setSort}
               options={sortOptions}
               defaultValue="TRENDING_DESC"
               align="right"
-              className="flex-1 sm:flex-none min-w-[155px] sm:w-44"
+              className="flex-1 min-w-0 sm:flex-none sm:w-44"
             />
 
             <button
               type="button"
               onClick={() => setShowMoods((v) => !v)}
               className={cn(
-                "inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
+                "inline-flex items-center gap-1.5 h-10 px-2.5 sm:px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
                 showMoods || activeMoodId
                   ? "bg-accent/18 border-accent/45 text-accent-soft"
                   : "bg-[#090B12] border-white/[0.09] text-[#A2A6B8] hover:text-white"
               )}
             >
-              <Sparkles className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5 shrink-0" />
               <span>{tr("Envies")}</span>
             </button>
 
@@ -1486,13 +1487,13 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 });
               }}
               className={cn(
-                "inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
+                "inline-flex items-center gap-1.5 sm:gap-2 h-10 px-2.5 sm:px-3.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shrink-0",
                 showFilters || activeFilterCount > 0
                   ? "bg-white/[0.1] border-white/[0.2] text-white"
                   : "bg-[#090B12] border-white/[0.09] text-[#A2A6B8] hover:text-white"
               )}
             >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-accent-soft" />
+              <SlidersHorizontal className="w-3.5 h-3.5 text-accent-soft shrink-0" />
               <span>{t("discover.filters")}</span>
               {activeFilterCount > 0 && (
                 <motion.span
@@ -1689,11 +1690,11 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
               transition={{ duration: 0.32, ease: CINEMA_EASE }}
               className="overflow-visible"
             >
-              <div className="pt-4 border-t border-white/[0.07] space-y-5">
-                {/* 5 Custom Animated Glass Dropdowns (ZERO native <select>) */}
+              <div className="pt-3.5 sm:pt-4 border-t border-white/[0.07] space-y-3.5 sm:space-y-5">
+                {/* 5 Custom Animated Glass Dropdowns (Mobile Bottom Sheet <640px, Popover >=640px) */}
                 <div
                   className={cn(
-                    "grid grid-cols-2 sm:grid-cols-3 gap-3",
+                    "grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3",
                     type === "ANIME" ? "lg:grid-cols-5" : "lg:grid-cols-4"
                   )}
                 >
@@ -1735,11 +1736,12 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                     options={minScoreOptions}
                     icon={Star}
                     align="right"
+                    className={type === "ANIME" ? "col-span-2 sm:col-span-1" : undefined}
                   />
                 </div>
 
                 {/* Era & Year Range Category Pills (2020-2026, 2010-2019, 2000-2010, 90s, 80s, <1980 + custom range) */}
-                <div className="rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3.5 space-y-2.5">
+                <div className="rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3 sm:p-3.5 space-y-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-accent" />
@@ -1755,7 +1757,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                         onChange={(e) => handleCustomYearInput(e.target.value, customYearTo)}
                         placeholder={yearCopy.fromPlaceholder}
                         aria-label={yearCopy.fromPlaceholder}
-                        className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                        className="w-20 sm:w-16 h-9 sm:h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                       />
                       <span className="text-[#656A7E]">{yearCopy.toConnector}</span>
                       <input
@@ -1766,7 +1768,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                         onChange={(e) => handleCustomYearInput(customYearFrom, e.target.value)}
                         placeholder={yearCopy.toPlaceholder}
                         aria-label={yearCopy.toPlaceholder}
-                        className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                        className="w-20 sm:w-16 h-9 sm:h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                       />
                     </div>
                   </div>
@@ -1809,7 +1811,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 {/* Quick Tactile Bar: Episode/Chapter Length + Score Filter */}
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
                   {/* Episode / Chapter Count Filter */}
-                  <div className="xl:col-span-7 rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3.5 space-y-2.5">
+                  <div className="xl:col-span-7 rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3 sm:p-3.5 space-y-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
                         <Tv className="w-3.5 h-3.5 text-accent" />
@@ -1828,7 +1830,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                           onChange={(e) => setMinUnits(e.target.value)}
                           placeholder="Min"
                           aria-label="Min"
-                          className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                          className="w-20 sm:w-16 h-9 sm:h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                         />
                         <span className="text-[#656A7E]">–</span>
                         <input
@@ -1839,13 +1841,13 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                           onChange={(e) => setMaxUnits(e.target.value)}
                           placeholder="Max"
                           aria-label="Max"
-                          className="w-16 h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
+                          className="w-20 sm:w-16 h-9 sm:h-7 px-2 rounded-lg bg-surface border border-white/[0.09] font-mono text-base sm:text-xs text-white placeholder:text-[#656A7E] focus:outline-none focus:border-accent"
                         />
                         <span className="font-mono text-[#7D8296]">{unitShortLabel}</span>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5 sm:flex-wrap sm:overflow-visible sm:pb-0">
                       {lengthPresets.map((preset) => {
                         const active = activeLengthPresetId === preset.id;
                         return (
@@ -1858,7 +1860,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                               setMaxUnits(preset.max);
                             }}
                             className={cn(
-                              "px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer",
+                              "px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 transition-all cursor-pointer",
                               active
                                 ? "bg-accent border-accent text-accent-fg shadow-accent"
                                 : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
@@ -1872,7 +1874,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                   </div>
 
                   {/* Score / Rating Quick Filter */}
-                  <div className="xl:col-span-5 rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3.5 space-y-2.5">
+                  <div className="xl:col-span-5 rounded-2xl bg-obsidian/75 border border-white/[0.07] p-3 sm:p-3.5 space-y-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[11px] font-mono uppercase tracking-wider text-[#9A9EAE] flex items-center gap-1.5">
                         <Star className="w-3.5 h-3.5 text-kinpaku fill-current" />
@@ -1899,7 +1901,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 overflow-x-auto touch-rail no-scrollbar pb-0.5 sm:flex-wrap sm:overflow-visible sm:pb-0">
                       {QUICK_SCORE_PILLS.map((pill) => {
                         const active = minScore === pill.id;
                         return (
@@ -1908,7 +1910,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                             type="button"
                             onClick={() => setMinScore(pill.id)}
                             className={cn(
-                              "px-3 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer inline-flex items-center gap-1",
+                              "px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap shrink-0 transition-all cursor-pointer inline-flex items-center gap-1",
                               active
                                 ? "bg-kinpaku text-[#090A0F] border-kinpaku shadow-[0_6px_18px_rgba(240,185,91,0.35)]"
                                 : "bg-white/[0.03] border-white/[0.08] text-[#B8BCCB] hover:text-white hover:border-white/[0.18]"
@@ -1924,7 +1926,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                 </div>
 
                 {/* Multi-Genre & Situations Explorer */}
-                <div className="rounded-2xl bg-[#090B12]/90 border border-white/[0.07] p-4 space-y-4">
+                <div className="rounded-2xl bg-[#090B12]/90 border border-white/[0.07] p-3 sm:p-4 space-y-3 sm:space-y-4">
                   {/* Category Tabs + Quick Tag Search */}
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                     <div className="flex items-center gap-1 overflow-x-auto touch-rail no-scrollbar p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
@@ -2050,7 +2052,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.18, ease: CINEMA_EASE }}
-                      className="flex flex-wrap gap-2"
+                      className="flex flex-wrap gap-1.5 sm:gap-2 max-h-[36dvh] sm:max-h-none overflow-y-auto overscroll-contain pr-0.5"
                     >
                       {searchedAllItems ? (
                         searchedAllItems.length === 0 ? (
@@ -2154,6 +2156,31 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
                       )}
                     </motion.div>
                   </AnimatePresence>
+                </div>
+
+                {/* Mobile 1-Tap Apply & Close Filters Bar */}
+                <div className="flex sm:hidden items-center gap-2 pt-1">
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={resetAll}
+                      className="h-10 px-3.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] text-xs font-semibold text-[#C8CCE0] inline-flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>{tr("Effacer")}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowFilters(false)}
+                    className="flex-1 h-10 px-4 rounded-xl bg-accent hover:bg-accent-hover text-accent-fg text-xs font-bold shadow-accent inline-flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-transform"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>
+                      {tr("Voir les résultats")}
+                      {!loading && total > 0 ? ` (${total.toLocaleString(locale)})` : ""}
+                    </span>
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -2361,7 +2388,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
 
       {/* Results Grid */}
       {loading && items.length === 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-5">
           {Array.from({ length: 12 }).map((_, i) => (
             <div key={i} className="space-y-2.5 animate-pulse">
               <div className="aspect-[2/3] rounded-xl bg-white/[0.05]" />
@@ -2402,7 +2429,7 @@ export function DiscoverClient({ initialItems, initialTotal }: DiscoverClientPro
         <>
           <div
             onClickCapture={handleCardNavigationCapture}
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5"
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-5"
           >
             {visibleItems.map((item) => (
               <MediaCard key={`${item.id}-${item.type}`} media={item} />

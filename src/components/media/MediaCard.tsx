@@ -32,91 +32,105 @@ export const MediaCard = React.memo(function MediaCard({
   const statusCfg = entry ? STATUS_CONFIG[entry.status] : null;
 
   return (
-    /* Non-moving outer hit-area wrapper eliminates hover edge jitter while preserving native horizontal touch swiping */
+    /* Non-moving outer hit-area wrapper eliminates hover edge jitter while preserving native 120fps horizontal touch swiping */
     <div className={cn("group relative flex flex-col", className)}>
-      {/* GPU-composited elevating Poster Container (zero per-card backdrop-blur/springs) */}
-      <div className="relative aspect-[2/3] w-full rounded-xl overflow-hidden isolate [transform:translateZ(0)] bg-[#121520] border border-white/[0.09] group-hover:border-accent/45 shadow-[0_12px_28px_rgba(0,0,0,0.48)] group-hover:shadow-[0_22px_46px_rgba(0,0,0,0.75),0_0_24px_rgb(var(--shiori-accent-rgb)/0.16)] group-hover:-translate-y-1.5 active:scale-[0.985] transition-[transform,border-color,box-shadow] duration-250 ease-out will-change-transform">
-        <Link
-          href={`/media/${media.id}`}
-          draggable={false}
-          className="block w-full h-full select-none"
-        >
-          <img
-            src={media.coverImage.extraLarge}
-            alt={title}
-            loading="lazy"
-            decoding="async"
+      {/* Zero-repaint 120fps Cinema Poster Container (glow & rim fade via opacity only — no animated box-shadow!) */}
+      <div className="shiori-poster-shell relative z-0 aspect-[2/3] w-full rounded-xl bg-[#121520] border border-white/[0.09] shadow-[0_10px_24px_rgba(0,0,0,0.45)]">
+        {/* Pre-rendered ambient glow halo (pure GPU opacity 0 -> 1 on desktop hover) */}
+        <span
+          aria-hidden="true"
+          className="shiori-poster-glow pointer-events-none absolute inset-0 rounded-xl z-0"
+        />
+
+        {/* Clipped artwork & cinema overlays */}
+        <div className="relative z-[1] w-full h-full rounded-[11px] overflow-hidden bg-[#121520]">
+          <Link
+            href={`/media/${media.id}`}
             draggable={false}
-            className="w-full h-full object-cover transform-gpu transition-transform duration-500 ease-out group-hover:scale-[1.06] pointer-events-none select-none"
-          />
-          {/* Subtle bottom vignette */}
-          <div className="absolute inset-0 z-[1] bg-gradient-to-t from-obsidian/92 via-transparent to-black/20 pointer-events-none" />
-          {/* Pure GPU diagonal specular sheen sweep on hover */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-[2] -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/[0.14] to-transparent skew-x-[-20deg]"
-          />
-        </Link>
-
-        {/* Top Left: Rank or Tracked Status Dot */}
-        <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1.5 pointer-events-none">
-          {rank !== undefined && (
-            <span className="px-2 py-0.5 rounded-md bg-[#090B12]/90 border border-white/15 font-mono text-[11px] font-semibold text-white">
-              #{String(rank).padStart(2, "0")}
-            </span>
-          )}
-          {entry && statusCfg && (
+            className="block w-full h-full select-none"
+          >
+            <img
+              src={media.coverImage.extraLarge}
+              alt={title}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              className="shiori-poster-img w-full h-full object-cover pointer-events-none select-none"
+            />
+            {/* Cinematic bottom vignette */}
+            <div className="shiori-poster-vignette absolute inset-0 z-[1] bg-gradient-to-t from-obsidian/94 via-obsidian/10 to-black/22 pointer-events-none" />
+            {/* Pure GPU diagonal glass specular sheen sweep on hover */}
             <span
-              className={cn(
-                "px-2 py-0.5 rounded-md bg-[#090B12]/90 border text-[10px] font-semibold flex items-center gap-1",
-                statusCfg.border,
-                statusCfg.color
-              )}
-            >
-              <span className={cn("w-1.5 h-1.5 rounded-full", statusCfg.dot)} />
-              <span>
-                {entry.progress > 0
-                  ? `${entry.type === "MANGA" ? t("common.chShort") : t("common.epShort")} ${entry.progress}`
-                  : tStatus(entry.status, entry.type)}
-              </span>
-            </span>
-          )}
-        </div>
+              aria-hidden="true"
+              className="shiori-poster-sheen pointer-events-none absolute inset-0 z-[2] bg-gradient-to-r from-transparent via-white/[0.18] to-transparent"
+            />
+            {/* Crisp luminous inner highlight rim */}
+            <span
+              aria-hidden="true"
+              className="shiori-poster-rim pointer-events-none absolute inset-0 z-[3] rounded-[11px]"
+            />
+          </Link>
 
-        {/* Top Right: Score Pill */}
-        {media.averageScore && (
-          <div className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-md bg-[#090B12]/90 border border-white/12 flex items-center gap-1 pointer-events-none">
-            <Star className="w-3 h-3 text-[#F0B95B] fill-[#F0B95B]" />
-            <span className="font-mono text-[11px] font-semibold text-[#F4F3EE]">
-              {formatScore(media.averageScore)}
+          {/* Top Left: Rank or Tracked Status Dot */}
+          <div className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 z-10 flex items-center gap-1 sm:gap-1.5 pointer-events-none max-w-[65%]">
+            {rank !== undefined && (
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-md bg-[#090B12]/90 border border-white/15 font-mono text-[10px] sm:text-[11px] font-semibold text-white shrink-0">
+                #{String(rank).padStart(2, "0")}
+              </span>
+            )}
+            {entry && statusCfg && (
+              <span
+                className={cn(
+                  "px-1.5 sm:px-2 py-0.5 rounded-md bg-[#090B12]/90 border text-[9.5px] sm:text-[10px] font-semibold flex items-center gap-1 truncate",
+                  statusCfg.border,
+                  statusCfg.color
+                )}
+              >
+                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusCfg.dot)} />
+                <span className="truncate">
+                  {entry.progress > 0
+                    ? `${entry.type === "MANGA" ? t("common.chShort") : t("common.epShort")} ${entry.progress}`
+                    : tStatus(entry.status, entry.type)}
+                </span>
+              </span>
+            )}
+          </div>
+
+          {/* Top Right: Score Pill */}
+          {media.averageScore && (
+            <div className="absolute top-2 right-2 sm:top-2.5 sm:right-2.5 z-10 px-1.5 sm:px-2 py-0.5 rounded-md bg-[#090B12]/90 border border-white/12 flex items-center gap-1 pointer-events-none">
+              <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#F0B95B] fill-[#F0B95B]" />
+              <span className="font-mono text-[10px] sm:text-[11px] font-semibold text-[#F4F3EE]">
+                {formatScore(media.averageScore)}
+              </span>
+            </div>
+          )}
+
+          {/* Quick Action Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openQuickEdit(media);
+            }}
+            title={entry ? tr("Modifier dans ma bibliothèque") : tr("Ajouter à ma bibliothèque")}
+            className={cn(
+              "absolute bottom-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center border transition-[transform,opacity,background-color,border-color] duration-250 ease-out cursor-pointer active:scale-90",
+              entry
+                ? "bg-[#0B1E18]/92 border-emerald-400/50 text-emerald-300 opacity-95 hover:bg-emerald-500/35 hover:scale-105"
+                : "bg-[#090B12]/92 border-white/22 text-white opacity-95 sm:opacity-0 sm:translate-y-2 sm:scale-90 sm:group-hover:opacity-100 sm:group-hover:translate-y-0 sm:group-hover:scale-100 hover:bg-accent hover:border-accent"
+            )}
+          >
+            {entry ? <Edit3 className="w-3.5 h-3.5" /> : <Plus className="w-4 h-4" />}
+          </button>
+
+          {/* Bottom Left Format Tag */}
+          <div className="absolute bottom-2.5 left-2.5 z-10 pointer-events-none">
+            <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#090B12]/88 text-[#D2D5E0] border border-white/[0.1]">
+              {tFormat(media.format)}
             </span>
           </div>
-        )}
-
-        {/* Quick Action Button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openQuickEdit(media);
-          }}
-          title={entry ? tr("Modifier dans ma bibliothèque") : tr("Ajouter à ma bibliothèque")}
-          className={cn(
-            "absolute bottom-2.5 right-2.5 z-10 w-8 h-8 rounded-full flex items-center justify-center border transition-all duration-200 cursor-pointer active:scale-90",
-            entry
-              ? "bg-[#0B1E18]/92 border-emerald-400/50 text-emerald-300 opacity-95 hover:bg-emerald-500/35"
-              : "bg-[#090B12]/90 border-white/20 text-white opacity-90 sm:opacity-0 sm:translate-y-1 sm:group-hover:opacity-100 sm:group-hover:translate-y-0 hover:bg-accent hover:border-accent"
-          )}
-        >
-          {entry ? <Edit3 className="w-3.5 h-3.5" /> : <Plus className="w-4 h-4" />}
-        </button>
-
-        {/* Bottom Left Format Tag */}
-        <div className="absolute bottom-2.5 left-2.5 z-10 pointer-events-none">
-          <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#090B12]/88 text-[#D2D5E0] border border-white/[0.1]">
-            {tFormat(media.format)}
-          </span>
         </div>
       </div>
 

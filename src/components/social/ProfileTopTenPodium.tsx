@@ -180,15 +180,15 @@ export function ProfileTopTenPodium({
                     <div className="absolute inset-0 bg-gradient-to-t from-obsidian via-obsidian/20 to-transparent" />
                     <span
                       className={cn(
-                        "absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full font-mono text-[11px] font-extrabold inline-flex items-center gap-1 shadow-md",
+                        "absolute top-1.5 left-1.5 sm:top-2.5 sm:left-2.5 px-1.5 sm:px-2 py-0.5 rounded-full font-mono text-[10px] sm:text-[11px] font-extrabold inline-flex items-center gap-0.5 sm:gap-1 shadow-md",
                         style.pill
                       )}
                     >
-                      {idx === 0 && <Crown className="w-3 h-3" />}
+                      {idx === 0 && <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3" />}
                       {style.label}
                     </span>
                     {item.score !== null && (
-                      <span className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md border border-white/15 font-mono text-[11px] font-bold text-[#F0B95B] inline-flex items-center gap-1">
+                      <span className="absolute bottom-1.5 right-1.5 sm:top-2.5 sm:bottom-auto sm:right-2.5 px-1.5 sm:px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md border border-white/15 font-mono text-[10px] sm:text-[11px] font-bold text-[#F0B95B] inline-flex items-center gap-0.5 sm:gap-1">
                         <Star className="w-2.5 h-2.5 fill-current" />
                         {item.score.toFixed(1)}
                       </span>

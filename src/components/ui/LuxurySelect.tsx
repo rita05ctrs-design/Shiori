@@ -165,47 +165,75 @@ export function LuxurySelect({
         </span>
       </motion.button>
 
-      {/* Frosted Animated Popover Menu */}
+      {/* Frosted Animated Popover Menu (Mobile Bottom Sheet <640px, Anchored Popover >=640px) */}
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 440, damping: 30 }}
-            className={cn(
-              "absolute mt-2 z-50 rounded-2xl bg-surface-solid/98 backdrop-blur-2xl border border-white/[0.14] ring-1 ring-inset ring-white/[0.05] shadow-[0_24px_64px_rgba(0,0,0,0.9)] overflow-hidden max-w-[calc(100vw-2rem)]",
-              columns > 1 ? "w-[260px] sm:w-[290px]" : "min-w-full w-max max-w-[270px]",
-              align === "right" ? "right-0" : "left-0"
-            )}
-          >
-            {/* Optional Quick Search inside Long Dropdowns */}
-            {showSearch && (
-              <div className="p-2 border-b border-white/[0.07] bg-obsidian/55">
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-[#7D8296] absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={resolvedSearchPlaceholder}
-                    className="w-full h-8 pl-8 pr-7 rounded-lg bg-white/[0.04] border border-white/[0.08] text-base sm:text-xs text-white placeholder:text-[#686D82] focus:outline-none focus:border-accent/60"
-                  />
-                  {query && (
-                    <button
-                      type="button"
-                      onClick={() => setQuery("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[#7D8296] hover:text-white cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              onClick={() => setOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-[89] sm:hidden"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 440, damping: 32 }}
+              className={cn(
+                "fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[90] max-h-[62dvh] flex flex-col",
+                "sm:absolute sm:inset-x-auto sm:bottom-auto sm:mt-2 sm:z-50 sm:max-h-none",
+                "rounded-2xl bg-surface-solid/98 backdrop-blur-2xl border border-white/[0.14] ring-1 ring-inset ring-white/[0.05] shadow-[0_24px_64px_rgba(0,0,0,0.92)] overflow-hidden",
+                columns > 1
+                  ? "sm:w-[290px]"
+                  : "sm:min-w-full sm:w-max sm:max-w-[270px]",
+                align === "right" ? "sm:right-0" : "sm:left-0"
+              )}
+            >
+              {/* Mobile Sheet Header */}
+              <div className="flex sm:hidden items-center justify-between gap-2 px-3.5 py-2.5 border-b border-white/[0.08] bg-obsidian/65 shrink-0">
+                <span className="text-xs font-semibold text-white truncate">
+                  {label ?? selected?.label ?? tr("Sélectionner")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label={tr("Fermer")}
+                  className="w-7 h-7 rounded-full bg-white/[0.07] hover:bg-white/[0.14] flex items-center justify-center text-[#C8CCE0] hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
-            )}
 
-            <div className="p-1.5 max-h-[290px] overflow-y-auto overscroll-contain">
+              {/* Optional Quick Search inside Long Dropdowns */}
+              {showSearch && (
+                <div className="p-2 border-b border-white/[0.07] bg-obsidian/55 shrink-0">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-[#7D8296] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder={resolvedSearchPlaceholder}
+                      className="w-full h-9 sm:h-8 pl-8 pr-7 rounded-lg bg-white/[0.04] border border-white/[0.08] text-base sm:text-xs text-white placeholder:text-[#686D82] focus:outline-none focus:border-accent/60"
+                    />
+                    {query && (
+                      <button
+                        type="button"
+                        onClick={() => setQuery("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[#7D8296] hover:text-white cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="p-2 sm:p-1.5 max-h-[50dvh] sm:max-h-[290px] overflow-y-auto overscroll-contain">
               {visibleOptions.length === 0 ? (
                 <p className="py-5 px-3 text-center text-xs text-[#7D8296]">
                   {tr("Aucune option trouvée")}
@@ -335,7 +363,8 @@ export function LuxurySelect({
                 </div>
               )}
             </div>
-          </motion.div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>

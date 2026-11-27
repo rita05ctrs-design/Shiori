@@ -455,9 +455,9 @@ export function ProfileAffinityCard({ targetProfile }: ProfileAffinityCardProps)
                       >
                         {rec.title}
                       </Link>
-                      <p className="text-[11px] text-kinpaku/90 mt-0.5 flex items-center gap-1 truncate">
-                        <Star className="w-3 h-3 fill-current shrink-0" />
-                        <span className="truncate">{rec.reason}</span>
+                      <p className="text-[11px] text-kinpaku/90 mt-0.5 flex items-start gap-1 leading-snug">
+                        <Star className="w-3 h-3 fill-current shrink-0 mt-0.5" />
+                        <span className="line-clamp-2">{rec.reason}</span>
                       </p>
                       {rec.genres.length > 0 && (
                         <p className="text-[10px] font-mono text-[#7E8398] truncate mt-0.5">

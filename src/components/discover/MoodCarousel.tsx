@@ -98,8 +98,8 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
         </motion.button>
       </div>
 
-      {/* Visual Cinema Bento Grid — 8 flagship moods visible immediately without sliding */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Visual Cinema Bento Grid — 2 columns on mobile, 4 on desktop */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
         {visibleMoods.map((mood) => {
           const Icon = ICON_MAP[mood.icon];
           const isActive = activeMoodId === mood.id;
@@ -116,10 +116,10 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
                   : undefined,
               }}
               className={cn(
-                "group relative h-[108px] sm:h-[114px] rounded-2xl overflow-hidden isolate [transform:translateZ(0)] border text-left transition-[transform,border-color,box-shadow] duration-200 ease-out hover:-translate-y-1 active:scale-[0.98] cursor-pointer bg-[#0D1018] will-change-transform",
+                "group relative h-[94px] sm:h-[114px] rounded-2xl overflow-hidden border text-left transition-[transform,border-color] duration-200 ease-out hover:-translate-y-1 active:scale-[0.98] cursor-pointer bg-[#0D1018]",
                 isActive
                   ? "border-transparent"
-                  : "border-white/[0.09] hover:border-white/[0.24] hover:shadow-[0_18px_36px_rgba(0,0,0,0.62)]"
+                  : "border-white/[0.09] hover:border-white/[0.24]"
               )}
             >
               {/* Full-Bleed Real Anime Cinema Artwork Backdrop */}
@@ -157,30 +157,30 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
               />
 
               {/* Card Foreground */}
-              <div className="relative z-10 h-full p-3.5 flex flex-col justify-between">
+              <div className="relative z-10 h-full p-2.5 sm:p-3.5 flex flex-col justify-between">
                 {/* Top Row: Icon Badge + Active Check / Hover Arrow */}
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-1.5 sm:gap-2">
                   <div
-                    className="w-8 h-8 rounded-xl bg-[#0A0C14]/80 flex items-center justify-center border shadow-md transition-transform duration-200 group-hover:scale-105"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-[#0A0C14]/80 flex items-center justify-center border shadow-md transition-transform duration-200 group-hover:scale-105"
                     style={{
                       backgroundColor: `${mood.accentHex}30`,
                       borderColor: `${mood.accentHex}65`,
                       color: "#FFFFFF",
                     }}
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </div>
 
                   {isActive ? (
                     <span
                       style={{ backgroundColor: mood.accentHex }}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white shadow-lg"
+                      className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[9.5px] sm:text-[10px] font-bold text-white shadow-lg"
                     >
-                      <Check className="w-3 h-3 stroke-[3]" />
+                      <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3 stroke-[3]" />
                       <span>{tr("Actif")}</span>
                     </span>
                   ) : (
-                    <span className="w-7 h-7 rounded-full bg-[#090B12]/80 border border-white/15 flex items-center justify-center text-white/70 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-white transition-all duration-200">
+                    <span className="hidden sm:flex w-7 h-7 rounded-full bg-[#090B12]/80 border border-white/15 items-center justify-center text-white/70 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-white transition-all duration-200">
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </span>
                   )}
@@ -188,10 +188,10 @@ export function MoodCarousel({ activeMoodId, onSelectMood }: MoodCarouselProps) 
 
                 {/* Bottom Title + Hook */}
                 <div>
-                  <h3 className="text-[14px] font-bold text-white tracking-tight leading-tight drop-shadow-sm">
+                  <h3 className="text-[12.5px] sm:text-[14px] font-bold text-white tracking-tight leading-tight drop-shadow-sm line-clamp-1">
                     {tr(mood.label)}
                   </h3>
-                  <p className="text-[11px] text-[#C6CAD8]/90 mt-0.5 line-clamp-1">
+                  <p className="text-[10.5px] sm:text-[11px] text-[#C6CAD8]/90 mt-0.5 line-clamp-1">
                     {tr(mood.subtitle)}
                   </p>
                 </div>
