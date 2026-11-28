@@ -4151,4 +4151,20 @@ export const UI_PHRASES_EXTRA_B: Record<string, PhraseMap> = {
     pt: "Sincronização auto",
     ja: "自動同期",
   },
+  "{n} sortis": {
+    en: "{n} out",
+    es: "{n} emitidos",
+    de: "{n} raus",
+    it: "{n} usciti",
+    pt: "{n} lançados",
+    ja: "{n}話配信済",
+  },
+  "{shows} en retard · {eps} à voir": {
+    en: "{shows} behind · {eps} to watch",
+    es: "{shows} pendientes · {eps} por ver",
+    de: "{shows} offen · {eps} anzusehen",
+    it: "{shows} indietro · {eps} da vedere",
+    pt: "{shows} pendentes · {eps} para ver",
+    ja: "{shows}作品未視聴 · 残り{eps}話",
+  },
 };

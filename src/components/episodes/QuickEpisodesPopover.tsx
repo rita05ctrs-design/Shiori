@@ -65,7 +65,7 @@ function formatShortBroadcastDay(
  */
 export function QuickEpisodesPopover() {
   const { library, hydrated, incrementProgress, contentLanguage } = useShiori();
-  const { t, locale } = useTranslation();
+  const { t, tr, locale } = useTranslation();
   const copy = getSettingsCopy(contentLanguage).quickEp;
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"week" | "today">("week");
@@ -161,24 +161,35 @@ export function QuickEpisodesPopover() {
       .map((entry) => {
         const live = airingById.get(entry.mediaId);
         const latestAiredEpisode = live?.latestAiredEpisode ?? 0;
-        const behindCount =
-          latestAiredEpisode > 0 ? Math.max(0, latestAiredEpisode - entry.progress) : 0;
-        const hasNewAired = behindCount > 0;
+        const isOngoingAiring = Boolean(live && latestAiredEpisode > 0);
+        const availableEpisodes = isOngoingAiring
+          ? latestAiredEpisode
+          : (entry.totalUnits ?? 0);
+        const remainingToCatchUp =
+          availableEpisodes > 0 ? Math.max(0, availableEpisodes - entry.progress) : 0;
+        const hasNewAired = isOngoingAiring && remainingToCatchUp > 0;
+        const isUpToDate = availableEpisodes > 0 && remainingToCatchUp === 0;
         const isToday =
           isSameLocalDay(live?.latestAiredAt ?? null) ||
           isSameLocalDay(live?.nextAiringEpisode?.airingAt ?? null);
 
         return {
           entry,
+          isOngoingAiring,
           latestAiredEpisode,
+          availableEpisodes,
           latestAiredAt: live?.latestAiredAt ?? null,
-          behindCount,
+          remainingToCatchUp,
           hasNewAired,
+          isUpToDate,
           isToday,
         };
       })
       .sort((a, b) => {
         if (a.hasNewAired !== b.hasNewAired) return a.hasNewAired ? -1 : 1;
+        const aBehind = a.remainingToCatchUp > 0;
+        const bBehind = b.remainingToCatchUp > 0;
+        if (aBehind !== bBehind) return aBehind ? -1 : 1;
         if (a.isToday !== b.isToday) return a.isToday ? -1 : 1;
         if (a.hasNewAired && b.hasNewAired) {
           return (b.latestAiredAt ?? 0) - (a.latestAiredAt ?? 0);
@@ -196,6 +207,18 @@ export function QuickEpisodesPopover() {
     () => quickRows.filter((r) => r.hasNewAired).length,
     [quickRows]
   );
+
+  const behindSummary = useMemo(() => {
+    let shows = 0;
+    let eps = 0;
+    for (const r of quickRows) {
+      if (r.remainingToCatchUp > 0) {
+        shows += 1;
+        eps += r.remainingToCatchUp;
+      }
+    }
+    return { shows, eps };
+  }, [quickRows]);
 
   const handleStep = (mediaId: number, delta: 1 | -1) => {
     incrementProgress(mediaId, delta);
@@ -253,9 +276,14 @@ export function QuickEpisodesPopover() {
                     <span>{t("episodes.quickHeader")}</span>
                   </p>
                   <p className="text-[11px] text-[#8A8FA4] mt-0.5">
-                    {unwatchedAiredCount > 0
-                      ? `${unwatchedAiredCount} ${copy.newToCheck}`
-                      : `${watchingAnime.length} ${copy.inProgressUnit}`}
+                    {behindSummary.shows > 0
+                      ? tr("{shows} en retard · {eps} à voir", {
+                          shows: behindSummary.shows,
+                          eps: behindSummary.eps,
+                        })
+                      : watchingAnime.length > 0
+                        ? `${tr("Tout est à jour")} · ${watchingAnime.length} ${copy.inProgressUnit}`
+                        : `0 ${copy.inProgressUnit}`}
                   </p>
                 </div>
                 {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent shrink-0" />}
@@ -318,6 +346,14 @@ export function QuickEpisodesPopover() {
                   const canInc = !e.totalUnits || e.progress < e.totalUnits;
                   const canDec = e.progress > 0;
                   const isFlashing = flashId === e.mediaId;
+                  const airHint = row.latestAiredAt
+                    ? formatShortBroadcastDay(
+                        row.latestAiredAt,
+                        locale,
+                        copy.today,
+                        t("home.inProgress")
+                      )
+                    : undefined;
 
                   return (
                     <div
@@ -352,24 +388,48 @@ export function QuickEpisodesPopover() {
                         >
                           {e.title}
                         </Link>
-                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                          {row.hasNewAired ? (
-                            <span className="px-1.5 py-0.2 rounded bg-accent/20 border border-accent/40 font-mono text-[10px] font-bold text-accent-soft">
-                              {t("common.epShort")} {row.latestAiredEpisode} {copy.epOut}
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                          {row.remainingToCatchUp > 0 ? (
+                            <span
+                              title={airHint}
+                              className={cn(
+                                "px-1.5 py-0.5 rounded font-mono text-[10px] font-bold leading-none border",
+                                row.isOngoingAiring
+                                  ? "bg-accent/20 border-accent/40 text-accent-soft"
+                                  : "bg-amber-500/14 border-amber-400/35 text-amber-200"
+                              )}
+                            >
+                              {tr("{n} à voir", { n: row.remainingToCatchUp })}
+                            </span>
+                          ) : row.isUpToDate ? (
+                            <span
+                              title={airHint}
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/35 font-mono text-[10px] font-bold leading-none text-emerald-300"
+                            >
+                              <Check className="w-2.5 h-2.5 stroke-[2.8]" />
+                              <span>{tr("À jour")}</span>
                             </span>
                           ) : (
                             <span className="font-mono text-[10px] text-[#8E93A6]">
-                              {formatShortBroadcastDay(
-                                row.latestAiredAt,
-                                locale,
-                                copy.today,
-                                t("home.inProgress")
-                              )}
+                              {t("home.inProgress")}
                             </span>
                           )}
-                          <span className="font-mono text-[10.5px] text-white/85">
-                            {t("common.epShort")} {e.progress}
-                            {e.totalUnits ? `/${e.totalUnits}` : ""}
+
+                          <span className="font-mono text-[10.5px] text-white/85 whitespace-nowrap">
+                            {row.isOngoingAiring ? (
+                              <>
+                                {t("common.epShort")} {e.progress}
+                                <span className="text-[#7E8398]"> · </span>
+                                <span className="text-[#B8BCCB]">
+                                  {tr("{n} sortis", { n: row.latestAiredEpisode })}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                {t("common.epShort")} {e.progress}
+                                {e.totalUnits ? `/${e.totalUnits}` : ""}
+                              </>
+                            )}
                           </span>
                         </div>
                       </div>
