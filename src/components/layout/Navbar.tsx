@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Compass,
@@ -37,6 +37,7 @@ import { LanguageQuickPopover } from "@/components/layout/LanguageQuickPopover";
 import { QuickEpisodesPopover } from "@/components/episodes/QuickEpisodesPopover";
 import { GlobalAnnouncementBanner } from "@/components/layout/GlobalAnnouncementBanner";
 import { CreatorSuggestionsWatcher } from "@/components/admin/CreatorSuggestionsWatcher";
+import { MobileLiquidDock } from "@/components/layout/MobileLiquidDock";
 import { RoleBadge } from "@/components/ui/RoleBadge";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { useCreatorSuggestionsState } from "@/lib/suggestions-live-bus";
@@ -132,7 +133,6 @@ const MOBILE_BOTTOM_NAV: {
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { t, tr } = useTranslation();
   const {
     profile,
@@ -152,34 +152,11 @@ export function Navbar() {
 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [pendingMobileHref, setPendingMobileHref] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setProfileMenuOpen(false);
-    setPendingMobileHref(null);
   }, [pathname]);
-
-  // Safety fallback: clear optimistic mobile tab state if navigation is cancelled or identical
-  useEffect(() => {
-    if (!pendingMobileHref) return;
-    const timer = window.setTimeout(() => setPendingMobileHref(null), 2500);
-    return () => window.clearTimeout(timer);
-  }, [pendingMobileHref]);
-
-  // Eagerly warm Next.js Router Cache for all 6 mobile bottom tabs so tapping is immediate
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!window.matchMedia("(max-width: 767px)").matches) return;
-    const timer = window.setTimeout(() => {
-      for (const item of MOBILE_BOTTOM_NAV) {
-        if (!item.match(pathname)) {
-          router.prefetch(item.href);
-        }
-      }
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [pathname, router]);
 
   // Keep browser tab <title> synced with the active UI language across every route
   useEffect(() => {
@@ -714,86 +691,12 @@ export function Navbar() {
         <GlobalAnnouncementBanner />
       </header>
 
-      {/* Mobile Floating Frosted-Glass Dock — 6 crisp tabs with zero-latency tap feedback */}
-      <nav
-        aria-label="Mobile navigation"
-        data-mobile-bottom-nav="true"
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-1 pointer-events-none select-none touch-manipulation"
-      >
-        <div className="pointer-events-auto relative rounded-2xl bg-[#0B0D16]/94 backdrop-blur-md border border-white/[0.11] shadow-[0_14px_34px_rgba(0,0,0,0.78),inset_0_1px_0_rgba(255,255,255,0.1)] p-1">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-accent/65 to-transparent"
-          />
-          <div className="grid grid-cols-6 items-center gap-0">
-            {MOBILE_BOTTOM_NAV.map((item) => {
-              const matchedNow = item.match(pathname);
-              const isActive =
-                pendingMobileHref !== null
-                  ? pendingMobileHref === item.href
-                  : matchedNow;
-              const Icon = item.icon;
-              const label = t(item.labelKey);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  prefetch={true}
-                  onPointerDown={() => {
-                    if (!matchedNow) {
-                      router.prefetch(item.href);
-                    }
-                  }}
-                  onClick={() => {
-                    if (!matchedNow) {
-                      setPendingMobileHref(item.href);
-                    }
-                  }}
-                  className={cn(
-                    "relative flex flex-col items-center justify-center gap-0.5 min-h-[48px] py-1 px-0 rounded-xl touch-manipulation select-none [-webkit-tap-highlight-color:transparent] transition-[transform,color,background-color] duration-100 active:scale-[0.92] active:bg-white/[0.08] min-w-0",
-                    isActive ? "text-white" : "text-[#8A8FA3] hover:text-[#CFD3E2]"
-                  )}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "pointer-events-none absolute inset-0.5 rounded-xl bg-gradient-to-b from-accent/25 to-accent/10 border border-accent/40 shadow-[0_4px_16px_rgb(var(--shiori-accent-rgb)/0.28)] transition-[opacity,transform] duration-120 ease-out",
-                      isActive ? "opacity-100 scale-100" : "opacity-0 scale-95"
-                    )}
-                  />
-                  <div
-                    className={cn(
-                      "relative z-10 transition-transform duration-120 ease-out",
-                      isActive ? "-translate-y-0.5 scale-[1.08]" : "translate-y-0 scale-100"
-                    )}
-                  >
-                    <Icon
-                      className={cn(
-                        "w-[17px] h-[17px] shrink-0 transition-colors duration-100",
-                        isActive &&
-                          "text-accent-soft drop-shadow-[0_0_8px_rgb(var(--shiori-accent-rgb)/0.65)]"
-                      )}
-                    />
-                    {item.href === "/library" && watchingCount > 0 && (
-                      <span className="absolute -top-1.5 -right-2.5 min-w-[15px] h-[15px] px-1 rounded-full bg-accent text-[9px] font-mono font-bold text-accent-fg flex items-center justify-center shadow-sm">
-                        {watchingCount > 9 ? "9+" : watchingCount}
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className={cn(
-                      "relative z-10 text-[8px] min-[390px]:text-[8.5px] font-semibold tracking-[-0.025em] whitespace-nowrap truncate max-w-full leading-tight",
-                      isActive ? "text-white" : "text-[#8A8FA3]"
-                    )}
-                  >
-                    {label}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
+      {/* Apple iOS-Inspired Liquid Glass Interactive Draggable Mobile Dock */}
+      <MobileLiquidDock
+        items={MOBILE_BOTTOM_NAV}
+        pathname={pathname}
+        watchingCount={watchingCount}
+      />
     </>
   );
 }
