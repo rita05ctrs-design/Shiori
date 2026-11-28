@@ -1499,11 +1499,20 @@ function LibraryPageInner() {
                         <div className="flex items-center justify-between gap-2 text-xs font-mono">
                           <span className="text-[#B6BAC9] truncate">
                             {unit} <strong className="text-white">{entry.progress}</strong>
-                            {displayTotalUnits
-                              ? ` / ${displayTotalUnits}`
-                              : liveAiring && liveAiring.latestAiredEpisode > 0
-                                ? ` / ${liveAiring.latestAiredEpisode} ${tr("sortis")}`
-                                : " / ?"}
+                            {liveAiring && liveAiring.latestAiredEpisode > 0 ? (
+                              <>
+                                {`/${liveAiring.latestAiredEpisode}`}
+                                {displayTotalUnits && displayTotalUnits > liveAiring.latestAiredEpisode && (
+                                  <span className="ml-1 text-[10.5px] text-[#7D8296]">
+                                    ({tr("{n} total", { n: displayTotalUnits })})
+                                  </span>
+                                )}
+                              </>
+                            ) : displayTotalUnits ? (
+                              `/${displayTotalUnits}`
+                            ) : (
+                              "/?"
+                            )}
                             {entry.type === "MANGA" &&
                               ((entry.progressVolumes ?? 0) > 0 || entry.totalVolumes) && (
                                 <span className="ml-1.5 text-violet-300">
@@ -1674,9 +1683,22 @@ function LibraryPageInner() {
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-20 sm:w-24 text-center font-mono text-xs text-[#D8DBE6]">
+                    <span className="min-w-[88px] sm:min-w-[108px] text-center font-mono text-xs text-[#D8DBE6] whitespace-nowrap">
                       {unit} <strong className="text-white">{entry.progress}</strong>
-                      {displayTotalUnits ? `/${displayTotalUnits}` : "/?"}
+                      {liveAiring && liveAiring.latestAiredEpisode > 0 ? (
+                        <>
+                          {`/${liveAiring.latestAiredEpisode}`}
+                          {displayTotalUnits && displayTotalUnits > liveAiring.latestAiredEpisode && (
+                            <span className="ml-1 text-[10px] text-[#7D8296]">
+                              ({tr("{n} total", { n: displayTotalUnits })})
+                            </span>
+                          )}
+                        </>
+                      ) : displayTotalUnits ? (
+                        `/${displayTotalUnits}`
+                      ) : (
+                        "/?"
+                      )}
                     </span>
                     <button
                       type="button"
@@ -1801,9 +1823,23 @@ function LibraryPageInner() {
                             >
                               <Minus className="w-3 h-3" />
                             </button>
-                            <span className="min-w-[68px] text-center text-[#D8DBE6]">
+                            <span className="min-w-[76px] text-center text-[#D8DBE6] whitespace-nowrap">
                               {unit} <strong className="text-white">{entry.progress}</strong>
-                              {displayTotalUnits ? `/${displayTotalUnits}` : "/?"}
+                              {liveAiring && liveAiring.latestAiredEpisode > 0 ? (
+                                <>
+                                  {`/${liveAiring.latestAiredEpisode}`}
+                                  {displayTotalUnits &&
+                                    displayTotalUnits > liveAiring.latestAiredEpisode && (
+                                      <span className="ml-1 text-[10px] text-[#7D8296]">
+                                        ({tr("{n} total", { n: displayTotalUnits })})
+                                      </span>
+                                    )}
+                                </>
+                              ) : displayTotalUnits ? (
+                                `/${displayTotalUnits}`
+                              ) : (
+                                "/?"
+                              )}
                             </span>
                             <button
                               type="button"

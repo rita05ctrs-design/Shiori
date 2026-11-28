@@ -162,9 +162,10 @@ export function QuickEpisodesPopover() {
         const live = airingById.get(entry.mediaId);
         const latestAiredEpisode = live?.latestAiredEpisode ?? 0;
         const isOngoingAiring = Boolean(live && latestAiredEpisode > 0);
+        const plannedTotal = live?.episodes ?? entry.totalUnits ?? null;
         const availableEpisodes = isOngoingAiring
           ? latestAiredEpisode
-          : (entry.totalUnits ?? 0);
+          : (plannedTotal ?? 0);
         const remainingToCatchUp =
           availableEpisodes > 0 ? Math.max(0, availableEpisodes - entry.progress) : 0;
         const hasNewAired = isOngoingAiring && remainingToCatchUp > 0;
@@ -177,6 +178,7 @@ export function QuickEpisodesPopover() {
           entry,
           isOngoingAiring,
           latestAiredEpisode,
+          plannedTotal,
           availableEpisodes,
           latestAiredAt: live?.latestAiredAt ?? null,
           remainingToCatchUp,
@@ -418,16 +420,20 @@ export function QuickEpisodesPopover() {
                           <span className="font-mono text-[10.5px] text-white/85 whitespace-nowrap">
                             {row.isOngoingAiring ? (
                               <>
-                                {t("common.epShort")} {e.progress}
-                                <span className="text-[#7E8398]"> · </span>
-                                <span className="text-[#B8BCCB]">
-                                  {tr("{n} sortis", { n: row.latestAiredEpisode })}
-                                </span>
+                                {t("common.epShort")}{" "}
+                                <strong className="text-white">{e.progress}</strong>
+                                {`/${row.latestAiredEpisode}`}
+                                {row.plannedTotal && row.plannedTotal > row.latestAiredEpisode && (
+                                  <span className="ml-1 text-[10px] text-[#7E8398]">
+                                    ({tr("{n} total", { n: row.plannedTotal })})
+                                  </span>
+                                )}
                               </>
                             ) : (
                               <>
-                                {t("common.epShort")} {e.progress}
-                                {e.totalUnits ? `/${e.totalUnits}` : ""}
+                                {t("common.epShort")}{" "}
+                                <strong className="text-white">{e.progress}</strong>
+                                {row.plannedTotal ? `/${row.plannedTotal}` : ""}
                               </>
                             )}
                           </span>

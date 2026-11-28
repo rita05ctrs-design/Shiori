@@ -4167,4 +4167,12 @@ export const UI_PHRASES_EXTRA_B: Record<string, PhraseMap> = {
     pt: "{shows} pendentes · {eps} para ver",
     ja: "{shows}作品未視聴 · 残り{eps}話",
   },
+  "{n} total": {
+    en: "{n} total",
+    es: "{n} en total",
+    de: "{n} gesamt",
+    it: "{n} totali",
+    pt: "{n} no total",
+    ja: "全{n}話",
+  },
 };
